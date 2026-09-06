@@ -225,9 +225,12 @@
         }
       });
 
-      // Handler Logout
+      // Handler Logout dengan Dialog Konfirmasi
       document.getElementById("btn-logout").addEventListener("click", async () => {
-        await AuthModule.logoutGuru();
+        const yakin = confirm("Apakah kamu yakin ingin keluar?");
+        if (yakin) {
+          await AuthModule.logoutGuru();
+        }
       });
     });
   </script>
