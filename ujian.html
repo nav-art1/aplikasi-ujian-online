@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lembar Pengerjaan Ujian</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="exam-body">
+  <header class="exam-header">
+    <div class="exam-info">
+      <h3 id="exam-title-display">Memuat Ujian...</h3>
+      <span id="student-name-display">-</span> | <span id="student-class-display">-</span>
+    </div>
+    <div class="exam-timer-box">
+      <span class="timer-label">Sisa Waktu:</span>
+      <span id="timer-display">00:00:00</span>
+    </div>
+  </header>
+
+  <main class="container exam-main-container">
+    <div id="exam-content-area">
+      <!-- Wadah Soal & Stimulus dirender oleh js/ujian.js -->
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/ujian.js"></script>
+  <script src="js/hasil.js"></script>
+</body>
+</html>
