@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Guru - Aplikasi Ujian Online</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="auth-section" class="container form-container">
+    <h2 class="text-center">Login Guru</h2>
+    <form id="guru-login-form">
+      <div class="form-group">
+        <label for="login-email">Email Guru</label>
+        <input type="email" id="login-email" required placeholder="nama@guru.sch.id">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="btn-login">Masuk</button>
+    </form>
+    <div id="login-alert" class="alert d-none"></div>
+  </div>
+
+  <div id="dashboard-section" class="d-none">
+    <!-- Diisi pada Checkpoint 12 -->
+  </div>
+
+  <!-- Supabase CDN Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/guru.js"></script>
+  <script src="js/soal.js"></script>
+</body>
+</html>
