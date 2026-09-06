@@ -145,17 +145,87 @@
           </div>
         </section>
 
-        <!-- SEKSI 6: DATA SISWA -->
+        <!-- SEKSI 6: DATA SISWA (CHECKPOINT 13) -->
         <section id="panel-siswa" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Pengelolaan Data Siswa</span>
+              <span class="card-title">Tambah Siswa Baru</span>
             </div>
-            <div id="siswa-manager-container">
-              <p class="text-muted">Daftar siswa dan form tambah siswa disiapkan pada Checkpoint 13.</p>
+            <form id="form-add-student" class="form-grid-3">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="student-class-id">Pilih Kelas</label>
+                <select id="student-class-id" required>
+                  <option value="">-- Memuat Kelas --</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="student-full-name">Nama Lengkap Siswa</label>
+                <input type="text" id="student-full-name" required placeholder="Contoh: Ahmad Maulana">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="student-number">Nomor Siswa (NIS/NISN)</label>
+                <input type="text" id="student-number" required placeholder="Contoh: 10293">
+              </div>
+              <div>
+                <button type="submit" class="btn btn-primary" id="btn-save-student">+ Tambah</button>
+              </div>
+            </form>
+            <div id="student-form-alert" class="alert d-none"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Daftar Seluruh Siswa</span>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-students">Segarkan Data</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="students-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Kelas</th>
+                    <th>Nomor Siswa</th>
+                    <th>Nama Lengkap</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="students-table-body">
+                  <tr><td colspan="6" class="text-center text-muted">Memuat data siswa...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
+
+        <!-- MODAL POPUP EDIT SISWA -->
+        <div id="modal-edit-student" class="modal-overlay d-none">
+          <div class="modal-content">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Edit Data Siswa</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit">X</button>
+            </div>
+            <form id="form-edit-student">
+              <input type="hidden" id="edit-student-id">
+              <div class="form-group">
+                <label for="edit-student-class-id">Kelas</label>
+                <select id="edit-student-class-id" required></select>
+              </div>
+              <div class="form-group">
+                <label for="edit-student-full-name">Nama Lengkap</label>
+                <input type="text" id="edit-student-full-name" required>
+              </div>
+              <div class="form-group">
+                <label for="edit-student-number">Nomor Siswa (NIS/NISN)</label>
+                <input type="text" id="edit-student-number" required>
+              </div>
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-student">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-update-student">Simpan Perubahan</button>
+              </div>
+            </form>
+          </div>
+        </div>
 
         <!-- SEKSI 7: DATA KELAS -->
         <section id="panel-kelas" class="menu-panel d-none">
