@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- BAGIAN 1: FORM LOGIN GURU -->
+  <!-- 1. TAMPILAN JIKA BELUM LOGIN -->
   <div id="auth-section" class="container form-container">
     <header class="text-center mb-4">
       <h2>Login Guru</h2>
@@ -32,42 +32,177 @@
     </div>
   </div>
 
-  <!-- BAGIAN 2: STATUS LOGIN SUKSES (PREVIEW DASHBOARD) -->
-  <div id="dashboard-section" class="container form-container d-none text-center">
-    <h2>Selamat Datang</h2>
-    <h3 id="teacher-name-display" style="color: var(--primary-color); margin: 10px 0;">Guru</h3>
-    <p id="teacher-email-display" class="text-muted" style="margin-bottom: 25px;">email@sekolah.id</p>
-    
-    <div class="alert alert-success" style="margin-bottom: 25px;">
-      Status: <strong>Autentikasi Berhasil</strong> (Sesi Aktif)
-    </div>
+  <!-- 2. TAMPILAN DASHBOARD UTAMA GURU SETELAH LOGIN -->
+  <div id="dashboard-section" class="dashboard-wrapper d-none">
+    <!-- SIDEBAR NAVIGASI -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        UJIAN ONLINE GURU
+      </div>
+      <ul class="sidebar-menu">
+        <li><a href="#" class="nav-link active" data-target="panel-dashboard">Dashboard</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-ujian">Ujian</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-bank-soal">Bank Soal</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-tambah-soal">Tambah Soal</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-import-excel">Import Excel</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-siswa">Siswa</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-kelas">Kelas</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-hasil">Hasil Ujian</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <button type="button" id="btn-logout" class="btn btn-danger btn-block">Logout</button>
+      </div>
+    </aside>
 
-    <button type="button" id="btn-logout" class="btn btn-secondary btn-block">Keluar (Logout)</button>
+    <!-- AREA KONTEN -->
+    <main class="main-content">
+      <header class="topbar">
+        <div class="page-title"><h3 id="current-menu-title">Dashboard</h3></div>
+        <div class="user-profile">
+          <span id="teacher-name-display">Memuat nama...</span>
+        </div>
+      </header>
+
+      <div class="content-body">
+        <!-- SEKSI 1: DASHBOARD RINGKASAN -->
+        <section id="panel-dashboard" class="menu-panel">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h4>Total Kelas</h4>
+              <div class="stat-number" id="stat-classes">0</div>
+            </div>
+            <div class="stat-card">
+              <h4>Total Siswa</h4>
+              <div class="stat-number" id="stat-students">0</div>
+            </div>
+            <div class="stat-card">
+              <h4>Total Ujian</h4>
+              <div class="stat-number" id="stat-exams">0</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Petunjuk Penggunaan Panel Guru</span>
+            </div>
+            <p style="margin-bottom: 10px;">Selamat datang di Sistem Ujian Online. Langkah umum persiapan ujian:</p>
+            <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
+              <li>Buka menu <strong>Kelas</strong> untuk membuat rombel (contoh: VII A).</li>
+              <li>Buka menu <strong>Siswa</strong> untuk memasukkan daftar murid.</li>
+              <li>Buka menu <strong>Ujian</strong> untuk membuat jadwal dan token ujian.</li>
+              <li>Buka menu <strong>Tambah Soal</strong> atau <strong>Import Excel</strong> untuk mengunggah soal PG dan PGK.</li>
+              <li>Bagikan Token Ujian kepada siswa untuk mulai mengerjakan.</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- SEKSI 2: UJIAN -->
+        <section id="panel-ujian" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Daftar Ujian</span>
+              <button class="btn btn-primary" id="btn-open-modal-exam">+ Buat Ujian Baru</button>
+            </div>
+            <div id="exam-list-container">
+              <p class="text-muted">Modul pembuatan ujian disiapkan pada Checkpoint 15.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 3: BANK SOAL -->
+        <section id="panel-bank-soal" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Bank Soal & Stimulus</span>
+            </div>
+            <div id="bank-soal-container">
+              <p class="text-muted">Daftar butir soal dan grup stimulus disiapkan pada Checkpoint 16.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 4: TAMBAH SOAL -->
+        <section id="panel-tambah-soal" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Formulir Tambah Soal Manual (PG / PGK)</span>
+            </div>
+            <div id="tambah-soal-form-container">
+              <p class="text-muted">Editor butir soal manual disiapkan pada Checkpoint 16 - 23.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 5: IMPORT EXCEL -->
+        <section id="panel-import-excel" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Import Soal dari File Excel (.xlsx)</span>
+            </div>
+            <div id="import-excel-container">
+              <p class="text-muted">Template dan modul pembaca Excel disiapkan pada Checkpoint 24 - 25.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 6: DATA SISWA -->
+        <section id="panel-siswa" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Pengelolaan Data Siswa</span>
+            </div>
+            <div id="siswa-manager-container">
+              <p class="text-muted">Daftar siswa dan form tambah siswa disiapkan pada Checkpoint 13.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 7: DATA KELAS -->
+        <section id="panel-kelas" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Pengelolaan Data Kelas</span>
+            </div>
+            <div id="kelas-manager-container">
+              <p class="text-muted">Daftar kelas dan form tambah kelas disiapkan pada Checkpoint 14.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- SEKSI 8: HASIL UJIAN -->
+        <section id="panel-hasil" class="menu-panel d-none">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Rekapitulasi Nilai & Analisis Butir Soal</span>
+            </div>
+            <div id="hasil-manager-container">
+              <p class="text-muted">Rekap nilai siswa dan status sinkronisasi Spreadsheet disiapkan pada Checkpoint 45.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>
 
-  <!-- CDN Supabase & Script Modular -->
+  <!-- Script Ekosistem -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/auth.js"></script>
+  <script src="js/guru.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
-      const authSection = document.getElementById("auth-section");
-      const dashboardSection = document.getElementById("dashboard-section");
+      // Periksa status login otomatis
+      const currentTeacher = await AuthModule.getCurrentTeacher();
+      if (currentTeacher) {
+        GuruModule.initDashboard(currentTeacher);
+      }
+
+      // Handler Login Form
       const loginForm = document.getElementById("guru-login-form");
       const loginAlert = document.getElementById("login-alert");
       const btnLogin = document.getElementById("btn-login");
-      const btnLogout = document.getElementById("btn-logout");
-      const teacherNameDisplay = document.getElementById("teacher-name-display");
-      const teacherEmailDisplay = document.getElementById("teacher-email-display");
 
-      // Cek apakah guru sudah punya sesi aktif sebelumnya
-      const teacher = await AuthModule.getCurrentTeacher();
-      if (teacher) {
-        showDashboard(teacher);
-      }
-
-      // Handler Submit Form Login
       loginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         loginAlert.classList.add("d-none");
@@ -77,14 +212,13 @@
         const email = document.getElementById("login-email").value;
         const password = document.getElementById("login-password").value;
 
-        const result = await AuthModule.loginGuru(email, password);
-
-        if (result.success) {
-          const profile = await AuthModule.getCurrentTeacher();
-          showDashboard(profile || { full_name: email, email: email });
+        const res = await AuthModule.loginGuru(email, password);
+        if (res.success) {
+          const teacher = await AuthModule.getCurrentTeacher();
+          GuruModule.initDashboard(teacher || { full_name: email, id: res.user.id });
         } else {
           loginAlert.className = "alert alert-error";
-          loginAlert.innerText = "Login gagal: " + result.message;
+          loginAlert.innerText = "Login gagal: " + res.message;
           loginAlert.classList.remove("d-none");
           btnLogin.disabled = false;
           btnLogin.innerText = "Masuk ke Sistem";
@@ -92,17 +226,9 @@
       });
 
       // Handler Logout
-      btnLogout.addEventListener("click", async () => {
-        btnLogout.innerText = "Keluar...";
+      document.getElementById("btn-logout").addEventListener("click", async () => {
         await AuthModule.logoutGuru();
       });
-
-      function showDashboard(profile) {
-        authSection.classList.add("d-none");
-        dashboardSection.classList.remove("d-none");
-        teacherNameDisplay.innerText = profile.full_name || "Guru";
-        teacherEmailDisplay.innerText = profile.email || "";
-      }
     });
   </script>
 </body>
