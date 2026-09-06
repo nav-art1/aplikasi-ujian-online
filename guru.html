@@ -7,8 +7,13 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <!-- BAGIAN 1: FORM LOGIN GURU -->
   <div id="auth-section" class="container form-container">
-    <h2 class="text-center">Login Guru</h2>
+    <header class="text-center mb-4">
+      <h2>Login Guru</h2>
+      <p class="text-muted">Gunakan akun guru Anda untuk masuk</p>
+    </header>
+
     <form id="guru-login-form">
       <div class="form-group">
         <label for="login-email">Email Guru</label>
@@ -18,21 +23,87 @@
         <label for="login-password">Password</label>
         <input type="password" id="login-password" required placeholder="••••••••">
       </div>
-      <button type="submit" class="btn btn-primary btn-block" id="btn-login">Masuk</button>
+      <button type="submit" class="btn btn-primary btn-block" id="btn-login">Masuk ke Sistem</button>
     </form>
+    
     <div id="login-alert" class="alert d-none"></div>
+    <div class="text-center" style="margin-top: 20px;">
+      <a href="index.html" class="text-muted" style="text-decoration: none; font-size: 0.9rem;">&larr; Kembali ke Beranda</a>
+    </div>
   </div>
 
-  <div id="dashboard-section" class="d-none">
-    <!-- Diisi pada Checkpoint 12 -->
+  <!-- BAGIAN 2: STATUS LOGIN SUKSES (PREVIEW DASHBOARD) -->
+  <div id="dashboard-section" class="container form-container d-none text-center">
+    <h2>Selamat Datang</h2>
+    <h3 id="teacher-name-display" style="color: var(--primary-color); margin: 10px 0;">Guru</h3>
+    <p id="teacher-email-display" class="text-muted" style="margin-bottom: 25px;">email@sekolah.id</p>
+    
+    <div class="alert alert-success" style="margin-bottom: 25px;">
+      Status: <strong>Autentikasi Berhasil</strong> (Sesi Aktif)
+    </div>
+
+    <button type="button" id="btn-logout" class="btn btn-secondary btn-block">Keluar (Logout)</button>
   </div>
 
-  <!-- Supabase CDN Client -->
+  <!-- CDN Supabase & Script Modular -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/auth.js"></script>
-  <script src="js/guru.js"></script>
-  <script src="js/soal.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async () => {
+      const authSection = document.getElementById("auth-section");
+      const dashboardSection = document.getElementById("dashboard-section");
+      const loginForm = document.getElementById("guru-login-form");
+      const loginAlert = document.getElementById("login-alert");
+      const btnLogin = document.getElementById("btn-login");
+      const btnLogout = document.getElementById("btn-logout");
+      const teacherNameDisplay = document.getElementById("teacher-name-display");
+      const teacherEmailDisplay = document.getElementById("teacher-email-display");
+
+      // Cek apakah guru sudah punya sesi aktif sebelumnya
+      const teacher = await AuthModule.getCurrentTeacher();
+      if (teacher) {
+        showDashboard(teacher);
+      }
+
+      // Handler Submit Form Login
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        loginAlert.classList.add("d-none");
+        btnLogin.disabled = true;
+        btnLogin.innerText = "Memverifikasi...";
+
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+
+        const result = await AuthModule.loginGuru(email, password);
+
+        if (result.success) {
+          const profile = await AuthModule.getCurrentTeacher();
+          showDashboard(profile || { full_name: email, email: email });
+        } else {
+          loginAlert.className = "alert alert-error";
+          loginAlert.innerText = "Login gagal: " + result.message;
+          loginAlert.classList.remove("d-none");
+          btnLogin.disabled = false;
+          btnLogin.innerText = "Masuk ke Sistem";
+        }
+      });
+
+      // Handler Logout
+      btnLogout.addEventListener("click", async () => {
+        btnLogout.innerText = "Keluar...";
+        await AuthModule.logoutGuru();
+      });
+
+      function showDashboard(profile) {
+        authSection.classList.add("d-none");
+        dashboardSection.classList.remove("d-none");
+        teacherNameDisplay.innerText = profile.full_name || "Guru";
+        teacherEmailDisplay.innerText = profile.email || "";
+      }
+    });
+  </script>
 </body>
 </html>
