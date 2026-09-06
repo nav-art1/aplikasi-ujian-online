@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerbang Ujian Siswa</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container form-container">
+    <header class="text-center mb-4">
+      <h2>Masuk Ruang Ujian</h2>
+      <p>Pilih identitas Anda dan masukkan token yang valid</p>
+    </header>
+
+    <form id="student-login-form">
+      <div class="form-group">
+        <label for="student-class-select">Pilih Kelas:</label>
+        <select id="student-class-select" required>
+          <option value="">-- Pilih Kelas Terlebih Dahulu --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="student-name-select">Pilih Nama Siswa:</label>
+        <select id="student-name-select" required disabled>
+          <option value="">-- Pilih Nama Anda --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="exam-token-input">Token Ujian:</label>
+        <div class="password-wrapper">
+          <input type="password" id="exam-token-input" required placeholder="Contoh: IPA7A2026">
+          <button type="button" id="btn-toggle-token" class="btn-toggle">Lihat</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="btn-start-exam">MULAI UJIAN</button>
+    </form>
+    <div id="student-alert" class="alert d-none"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/siswa.js"></script>
+</body>
+</html>
