@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, & BANK SOAL
+// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, & SOAL
 // ==========================================================================
 
 const GuruModule = {
@@ -28,11 +28,13 @@ const GuruModule = {
     await this.loadExamsTable();
     await this.loadQuickStats();
     await this.loadBankSoalExamFilter();
+    await this.loadQuestionFormExamDropdown();
 
     this.setupStudentEventListeners();
     this.setupClassEventListeners();
     this.setupExamEventListeners();
     this.setupBankSoalEventListeners();
+    this.setupQuestionFormEventListeners();
   },
 
   setupNavigation() {
@@ -65,6 +67,8 @@ const GuruModule = {
           this.loadExamsTable();
         } else if (targetId === "panel-bank-soal") {
           this.loadBankSoalExamFilter();
+        } else if (targetId === "panel-tambah-soal") {
+          this.loadQuestionFormExamDropdown();
         }
       });
     });
@@ -709,6 +713,7 @@ const GuruModule = {
           closeModal();
           await this.loadExamsTable();
           await this.loadBankSoalExamFilter();
+          await this.loadQuestionFormExamDropdown();
         } catch (err) {
           formAlert.className = "alert alert-error";
           formAlert.innerText = `Gagal menyimpan: ${err.message}`;
@@ -761,13 +766,14 @@ const GuruModule = {
       if (error) throw error;
       await this.loadExamsTable();
       await this.loadBankSoalExamFilter();
+      await this.loadQuestionFormExamDropdown();
     } catch (err) {
       alert(`Gagal menghapus ujian: ${err.message}`);
     }
   },
 
   // ==========================================
-  // BANK SOAL & STIMULUS (CHECKPOINT 16)
+  // BANK SOAL & STIMULUS
   // ==========================================
 
   async loadBankSoalExamFilter() {
@@ -835,7 +841,6 @@ const GuruModule = {
 
     const client = getSupabaseClient();
     try {
-      // 1. Ambil grup stimulus ujian ini
       const { data: stimulusGroups, error: stimErr } = await client
         .from('stimulus_groups')
         .select('*')
@@ -844,7 +849,6 @@ const GuruModule = {
 
       if (stimErr) throw stimErr;
 
-      // 2. Ambil seluruh butir soal ujian ini beserta opsinya
       const { data: questions, error: qErr } = await client
         .from('questions')
         .select(`
@@ -881,7 +885,6 @@ const GuruModule = {
 
       let contentHtml = '';
 
-      // Tampilkan Grup Stimulus jika ada
       if (stimulusGroups && stimulusGroups.length > 0) {
         stimulusGroups.forEach((stim, sIdx) => {
           const stimQuestions = questions.filter(q => q.stimulus_group_id === stim.id);
@@ -908,7 +911,6 @@ const GuruModule = {
         });
       }
 
-      // Tampilkan Soal Mandiri (tanpa stimulus)
       const standaloneQuestions = questions.filter(q => !q.stimulus_group_id);
       if (standaloneQuestions.length > 0) {
         contentHtml += `
@@ -1005,6 +1007,183 @@ const GuruModule = {
       await this.loadBankSoalContent(examId);
     } catch (err) {
       alert(`Gagal menghapus grup stimulus: ${err.message}`);
+    }
+  },
+
+  // ==========================================
+  // FORMULIR TAMBAH SOAL (CHECKPOINT 17)
+  // ==========================================
+
+  async loadQuestionFormExamDropdown() {
+    const client = getSupabaseClient();
+    const examSelect = document.getElementById("question-exam-id");
+    if (!client || !this.currentTeacher || !examSelect) return;
+
+    try {
+      const { data: exams, error } = await client
+        .from('exams')
+        .select('id, title, subject')
+        .eq('teacher_id', this.currentTeacher.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      let optionsHtml = '<option value="">-- Pilih Ujian --</option>';
+      (exams || []).forEach(e => {
+        optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
+      });
+
+      examSelect.innerHTML = optionsHtml;
+    } catch (err) {
+      console.warn("Gagal memuat dropdown ujian di form tambah soal:", err);
+    }
+  },
+
+  setupQuestionFormEventListeners() {
+    const form = document.getElementById("form-create-question");
+    const typeSelect = document.getElementById("question-type");
+    const keyInstruction = document.getElementById("key-instruction");
+    const formAlert = document.getElementById("question-form-alert");
+    const btnSave = document.getElementById("btn-save-question");
+
+    // Toggle tipe input antara Radio (PG) dan Checkbox (PGK)
+    if (typeSelect) {
+      typeSelect.addEventListener("change", (e) => {
+        const isPgk = e.target.value === 'pgk';
+        const keyInputs = document.querySelectorAll(".option-key-input");
+
+        keyInputs.forEach(input => {
+          input.type = isPgk ? 'checkbox' : 'radio';
+          if (!isPgk) {
+            input.name = "correct_key";
+          } else {
+            input.removeAttribute("name");
+          }
+        });
+
+        if (keyInstruction) {
+          keyInstruction.innerText = isPgk 
+            ? "Centang satu atau lebih kotak untuk kunci jawaban benar (PG Kompleks)."
+            : "Pilih 1 radio button untuk kunci jawaban benar.";
+        }
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        formAlert.classList.add("d-none");
+
+        const examId = document.getElementById("question-exam-id").value;
+        const originalNumber = parseInt(document.getElementById("question-number").value, 10);
+        const questionType = document.getElementById("question-type").value;
+        const points = parseFloat(document.getElementById("question-points").value) || 1.0;
+        const imageUrl = document.getElementById("question-image-url").value.trim() || null;
+        const content = document.getElementById("question-content").value.trim();
+
+        if (!examId) {
+          alert("Silakan pilih sesi ujian tujuan.");
+          return;
+        }
+
+        // Kumpulkan pilihan jawaban
+        const textInputs = document.querySelectorAll(".option-text-input");
+        const keyInputs = document.querySelectorAll(".option-key-input");
+
+        const optionsData = [];
+        let hasCorrectKey = false;
+
+        textInputs.forEach((textInput, idx) => {
+          const label = textInput.getAttribute("data-label");
+          const val = textInput.value.trim();
+          const isCorrect = keyInputs[idx].checked;
+
+          if (val) {
+            if (isCorrect) hasCorrectKey = true;
+            optionsData.push({
+              option_label: label,
+              content: val,
+              is_correct: isCorrect
+            });
+          }
+        });
+
+        if (optionsData.length < 2) {
+          formAlert.className = "alert alert-error";
+          formAlert.innerText = "Soal harus memiliki minimal 2 pilihan jawaban (misal A dan B).";
+          formAlert.classList.remove("d-none");
+          return;
+        }
+
+        if (!hasCorrectKey) {
+          formAlert.className = "alert alert-error";
+          formAlert.innerText = "Tentukan minimal satu kunci jawaban yang benar.";
+          formAlert.classList.remove("d-none");
+          return;
+        }
+
+        btnSave.disabled = true;
+        btnSave.innerText = "Menyimpan Soal...";
+
+        const client = getSupabaseClient();
+        try {
+          // 1. Simpan butir soal ke tabel questions
+          const { data: newQuestion, error: qErr } = await client
+            .from('questions')
+            .insert({
+              exam_id: examId,
+              original_number: originalNumber,
+              question_type: questionType,
+              points: points,
+              image_url: imageUrl,
+              content: content
+            })
+            .select()
+            .single();
+
+          if (qErr) throw qErr;
+
+          // 2. Simpan opsi-opsi jawaban dengan question_id baru
+          const optionsPayload = optionsData.map(opt => ({
+            question_id: newQuestion.id,
+            option_label: opt.option_label,
+            content: opt.content,
+            is_correct: opt.is_correct
+          }));
+
+          const { error: optErr } = await client
+            .from('options')
+            .insert(optionsPayload);
+
+          if (optErr) throw optErr;
+
+          // Berhasil: Kosongkan teks soal dan opsi, naikkan nomor urut otomatis
+          formAlert.className = "alert alert-success";
+          formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan ke ujian!`;
+          formAlert.classList.remove("d-none");
+
+          document.getElementById("question-content").value = "";
+          document.getElementById("question-image-url").value = "";
+          textInputs.forEach(input => input.value = "");
+          keyInputs.forEach((input, idx) => input.checked = (idx === 0)); // reset default opsi A
+
+          document.getElementById("question-number").value = originalNumber + 1;
+
+          // Sinkronkan ke Bank Soal
+          const bankExamFilter = document.getElementById("bank-exam-filter");
+          if (bankExamFilter) {
+            bankExamFilter.value = examId;
+            await this.loadBankSoalContent(examId);
+          }
+        } catch (err) {
+          formAlert.className = "alert alert-error";
+          formAlert.innerText = `Gagal menyimpan butir soal: ${err.message}`;
+          formAlert.classList.remove("d-none");
+        } finally {
+          btnSave.disabled = false;
+          btnSave.innerText = "Simpan Butir Soal";
+        }
+      });
     }
   },
 
