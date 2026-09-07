@@ -55,7 +55,6 @@ const GuruModule = {
           pageTitle.innerText = link.innerText;
         }
 
-        // Segarkan data spesifik saat tab diklik
         if (targetId === "panel-siswa") {
           this.loadStudentsTable();
         } else if (targetId === "panel-kelas") {
@@ -67,7 +66,7 @@ const GuruModule = {
     });
   },
 
-  // Memastikan guru memiliki minimal 1 kelas agar relasi siswa tidak error
+  // Memastikan guru memiliki minimal 1 kelas
   async ensureDefaultClass() {
     const client = getSupabaseClient();
     if (!client || !this.currentTeacher) return;
@@ -516,7 +515,6 @@ const GuruModule = {
   // MANAJEMEN UJIAN (CHECKPOINT 15)
   // ==========================================
 
-  // Generator Token Acak 6 Karakter (Tanpa karakter ambigu O/0/I/1)
   generateExamToken() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let token = "";
@@ -526,7 +524,6 @@ const GuruModule = {
     return token;
   },
 
-  // Menampilkan tabel daftar ujian
   async loadExamsTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("exams-table-body");
@@ -540,6 +537,7 @@ const GuruModule = {
         .select(`
           id,
           title,
+          subject,
           token,
           duration_minutes,
           randomize_questions,
@@ -573,10 +571,12 @@ const GuruModule = {
           ex.randomize_options ? 'Opsi' : ''
         ].filter(Boolean).join(' & ') || 'Urut';
 
+        const subjectBadge = ex.subject ? `<small style="display:block; color:var(--text-muted);">${ex.subject}</small>` : '';
+
         rowsHtml += `
           <tr>
             <td>${idx + 1}</td>
-            <td><strong>${ex.title}</strong></td>
+            <td><strong>${ex.title}</strong>${subjectBadge}</td>
             <td>${className}</td>
             <td>
               <span style="font-family: monospace; font-size: 1.1rem; font-weight: bold; color: var(--primary-color); background: #e0e7ff; padding: 2px 6px; border-radius: 4px;">
@@ -604,7 +604,6 @@ const GuruModule = {
     }
   },
 
-  // Setup Event Listeners Modal Pembuatan Ujian (dengan Tombol Darurat & ESC)
   setupExamEventListeners() {
     const modalExam = document.getElementById("modal-create-exam");
     const btnOpenModal = document.getElementById("btn-open-modal-exam");
@@ -639,16 +638,12 @@ const GuruModule = {
     if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
     if (btnCancelModal) btnCancelModal.addEventListener("click", closeModal);
 
-    // Tombol Darurat 1: Klik di area abu-abu luar kotak untuk menutup modal
     if (modalExam) {
       modalExam.addEventListener("click", (e) => {
-        if (e.target === modalExam) {
-          closeModal();
-        }
+        if (e.target === modalExam) closeModal();
       });
     }
 
-    // Tombol Darurat 2: Tekan tombol ESC keyboard untuk menutup modal
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && modalExam && !modalExam.classList.contains("d-none")) {
         closeModal();
@@ -667,6 +662,8 @@ const GuruModule = {
         formAlert.classList.add("d-none");
 
         const title = document.getElementById("exam-title").value.trim();
+        const subjectInput = document.getElementById("exam-subject");
+        const subject = subjectInput ? subjectInput.value.trim() : title;
         const description = document.getElementById("exam-description").value.trim();
         const classId = document.getElementById("exam-class-id").value;
         const duration = parseInt(document.getElementById("exam-duration").value, 10);
@@ -688,6 +685,7 @@ const GuruModule = {
             teacher_id: this.currentTeacher.id,
             class_id: classId,
             title: title,
+            subject: subject,
             description: description,
             duration_minutes: duration,
             token: token,
@@ -711,7 +709,6 @@ const GuruModule = {
     }
   },
 
-  // Salin token ke clipboard browser
   copyTokenToClipboard(token) {
     navigator.clipboard.writeText(token).then(() => {
       alert(`Token ujian "${token}" berhasil disalin ke clipboard!`);
@@ -720,7 +717,6 @@ const GuruModule = {
     });
   },
 
-  // Toggle buka / tutup akses ujian dengan konfirmasi
   async toggleExamStatus(examId, currentStatus) {
     const aksi = currentStatus ? "menutup akses" : "membuka kembali";
     const yakin = confirm(`Apakah Anda yakin ingin ${aksi} sesi ujian ini?`);
@@ -740,7 +736,6 @@ const GuruModule = {
     }
   },
 
-  // Hapus ujian dengan konfirmasi
   async deleteExam(examId, examTitle) {
     const yakin = confirm(`Apakah Anda yakin ingin menghapus ujian "${examTitle}"? Seluruh butir soal dan jawaban siswa di ujian ini akan terhapus.`);
     if (!yakin) return;
@@ -759,7 +754,6 @@ const GuruModule = {
     }
   },
 
-  // Ambil ringkasan statistik
   async loadQuickStats() {
     const client = getSupabaseClient();
     if (!client || !this.currentTeacher) return;
