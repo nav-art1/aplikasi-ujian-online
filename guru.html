@@ -193,14 +193,25 @@
           </div>
         </div>
 
-        <!-- SEKSI 3: BANK SOAL -->
+        <!-- SEKSI 3: BANK SOAL (CHECKPOINT 16) -->
         <section id="panel-bank-soal" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Bank Soal & Stimulus</span>
+              <span class="card-title">Filter Bank Soal</span>
+              <button class="btn btn-primary btn-sm" id="btn-goto-tambah-soal">+ Buat Soal Baru</button>
             </div>
-            <div id="bank-soal-container">
-              <p class="text-muted">Daftar butir soal dan grup stimulus disiapkan pada Checkpoint 16.</p>
+            <div style="display: flex; gap: 15px; align-items: center; max-width: 500px;">
+              <label for="bank-exam-filter" style="font-weight: 600; white-space: nowrap;">Pilih Ujian:</label>
+              <select id="bank-exam-filter" style="flex-grow: 1;">
+                <option value="">-- Pilih Sesi Ujian --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Wadah Daftar Stimulus & Soal -->
+          <div id="bank-soal-list-container">
+            <div class="card text-center" style="padding: 40px 20px;">
+              <p class="text-muted">Silakan pilih salah satu ujian di atas untuk melihat butir soal dan grup stimulus.</p>
             </div>
           </div>
         </section>
@@ -212,7 +223,7 @@
               <span class="card-title">Formulir Tambah Soal Manual (PG / PGK)</span>
             </div>
             <div id="tambah-soal-form-container">
-              <p class="text-muted">Editor butir soal manual disiapkan pada Checkpoint 16 - 23.</p>
+              <p class="text-muted">Editor butir soal manual disiapkan pada Checkpoint 17.</p>
             </div>
           </div>
         </section>
