@@ -1,12 +1,12 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, & UJIAN
+// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, & BANK SOAL
 // ==========================================================================
 
 const GuruModule = {
   currentTeacher: null,
   classesList: [],
+  examsList: [],
 
-  // Inisialisasi tampilan utama dashboard
   async initDashboard(teacherProfile) {
     this.currentTeacher = teacherProfile;
 
@@ -27,12 +27,14 @@ const GuruModule = {
     await this.loadClassesTable();
     await this.loadExamsTable();
     await this.loadQuickStats();
+    await this.loadBankSoalExamFilter();
+
     this.setupStudentEventListeners();
     this.setupClassEventListeners();
     this.setupExamEventListeners();
+    this.setupBankSoalEventListeners();
   },
 
-  // Setup tab switcher menu navigasi
   setupNavigation() {
     const navLinks = document.querySelectorAll(".sidebar-menu .nav-link");
     const panels = document.querySelectorAll(".menu-panel");
@@ -61,12 +63,13 @@ const GuruModule = {
           this.loadClassesTable();
         } else if (targetId === "panel-ujian") {
           this.loadExamsTable();
+        } else if (targetId === "panel-bank-soal") {
+          this.loadBankSoalExamFilter();
         }
       });
     });
   },
 
-  // Memastikan guru memiliki minimal 1 kelas
   async ensureDefaultClass() {
     const client = getSupabaseClient();
     if (!client || !this.currentTeacher) return;
@@ -90,7 +93,6 @@ const GuruModule = {
     }
   },
 
-  // Mengambil daftar kelas untuk dropdown pilihan
   async loadClassesDropdown() {
     const client = getSupabaseClient();
     if (!client || !this.currentTeacher) return;
@@ -123,7 +125,7 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN SISWA (CHECKPOINT 13)
+  // MANAJEMEN SISWA
   // ==========================================
 
   async loadStudentsTable() {
@@ -334,7 +336,7 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN KELAS (CHECKPOINT 14)
+  // MANAJEMEN KELAS
   // ==========================================
 
   async loadClassesTable() {
@@ -512,7 +514,7 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN UJIAN (CHECKPOINT 15)
+  // MANAJEMEN UJIAN
   // ==========================================
 
   generateExamToken() {
@@ -550,6 +552,8 @@ const GuruModule = {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      this.examsList = exams || [];
 
       if (!exams || exams.length === 0) {
         tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Belum ada sesi ujian yang dibuat. Silakan klik "+ Buat Ujian Baru".</td></tr>';
@@ -683,7 +687,6 @@ const GuruModule = {
         try {
           const now = new Date();
           const startTime = now.toISOString();
-          // Default end time: 7 hari ke depan (fleksibel)
           const endTime = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString();
 
           const { error } = await client.from('exams').insert({
@@ -705,6 +708,7 @@ const GuruModule = {
 
           closeModal();
           await this.loadExamsTable();
+          await this.loadBankSoalExamFilter();
         } catch (err) {
           formAlert.className = "alert alert-error";
           formAlert.innerText = `Gagal menyimpan: ${err.message}`;
@@ -744,7 +748,7 @@ const GuruModule = {
   },
 
   async deleteExam(examId, examTitle) {
-    const yakin = confirm(`Apakah Anda yakin ingin menghapus ujian "${examTitle}"? Seluruh butir soal dan jawaban siswa di ujian ini akan terhapus.`);
+    const yakin = confirm(`Apakah Anda yakin ingin menghapus ujian "${examTitle}"? Seluruh butir soal dan stimulus di ujian ini akan terhapus.`);
     if (!yakin) return;
 
     const client = getSupabaseClient();
@@ -756,8 +760,251 @@ const GuruModule = {
 
       if (error) throw error;
       await this.loadExamsTable();
+      await this.loadBankSoalExamFilter();
     } catch (err) {
       alert(`Gagal menghapus ujian: ${err.message}`);
+    }
+  },
+
+  // ==========================================
+  // BANK SOAL & STIMULUS (CHECKPOINT 16)
+  // ==========================================
+
+  async loadBankSoalExamFilter() {
+    const client = getSupabaseClient();
+    const filterSelect = document.getElementById("bank-exam-filter");
+    if (!client || !this.currentTeacher || !filterSelect) return;
+
+    try {
+      const { data: exams, error } = await client
+        .from('exams')
+        .select('id, title, subject')
+        .eq('teacher_id', this.currentTeacher.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      let optionsHtml = '<option value="">-- Pilih Sesi Ujian --</option>';
+      (exams || []).forEach(e => {
+        optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
+      });
+
+      filterSelect.innerHTML = optionsHtml;
+    } catch (err) {
+      console.warn("Gagal memuat filter ujian Bank Soal:", err);
+    }
+  },
+
+  setupBankSoalEventListeners() {
+    const filterSelect = document.getElementById("bank-exam-filter");
+    const btnGotoTambah = document.getElementById("btn-goto-tambah-soal");
+
+    if (filterSelect) {
+      filterSelect.addEventListener("change", (e) => {
+        const examId = e.target.value;
+        this.loadBankSoalContent(examId);
+      });
+    }
+
+    if (btnGotoTambah) {
+      btnGotoTambah.addEventListener("click", () => {
+        const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
+        if (navTambah) navTambah.click();
+      });
+    }
+  },
+
+  async loadBankSoalContent(examId) {
+    const container = document.getElementById("bank-soal-list-container");
+    if (!container) return;
+
+    if (!examId) {
+      container.innerHTML = `
+        <div class="card text-center" style="padding: 40px 20px;">
+          <p class="text-muted">Silakan pilih salah satu ujian di atas untuk melihat butir soal dan grup stimulus.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="card text-center" style="padding: 30px;">
+        <p class="text-muted">Memuat butir soal dan stimulus...</p>
+      </div>
+    `;
+
+    const client = getSupabaseClient();
+    try {
+      // 1. Ambil grup stimulus ujian ini
+      const { data: stimulusGroups, error: stimErr } = await client
+        .from('stimulus_groups')
+        .select('*')
+        .eq('exam_id', examId)
+        .order('created_at', { ascending: true });
+
+      if (stimErr) throw stimErr;
+
+      // 2. Ambil seluruh butir soal ujian ini beserta opsinya
+      const { data: questions, error: qErr } = await client
+        .from('questions')
+        .select(`
+          id,
+          original_number,
+          question_type,
+          content,
+          image_url,
+          points,
+          stimulus_group_id,
+          options (
+            id,
+            option_label,
+            content,
+            is_correct
+          )
+        `)
+        .eq('exam_id', examId)
+        .order('original_number', { ascending: true });
+
+      if (qErr) throw qErr;
+
+      if (!questions || questions.length === 0) {
+        container.innerHTML = `
+          <div class="card text-center" style="padding: 40px 20px;">
+            <p class="text-muted">Belum ada butir soal pada ujian ini.</p>
+            <button class="btn btn-primary" style="margin-top: 15px;" onclick="document.querySelector('.sidebar-menu .nav-link[data-target=\\'panel-tambah-soal\\']').click();">
+              + Mulai Tambah Soal
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      let contentHtml = '';
+
+      // Tampilkan Grup Stimulus jika ada
+      if (stimulusGroups && stimulusGroups.length > 0) {
+        stimulusGroups.forEach((stim, sIdx) => {
+          const stimQuestions = questions.filter(q => q.stimulus_group_id === stim.id);
+
+          contentHtml += `
+            <div class="card" style="border-left: 4px solid var(--primary-color); background: #fdfdfd; margin-bottom: 20px;">
+              <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0;">
+                <span style="font-weight: bold; color: var(--primary-color);">Grup Stimulus ${sIdx + 1}: ${stim.title || 'Tanpa Judul'}</span>
+                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus Grup Stimulus</button>
+              </div>
+              <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6;">
+                ${stim.content || ''}
+              </div>
+              ${stim.image_url ? `<div style="margin-bottom: 15px;"><img src="${stim.image_url}" style="max-width: 100%; max-height: 250px; border-radius: 6px; border: 1px solid var(--border-color);"></div>` : ''}
+              
+              <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
+                Butir Soal Terkait (${stimQuestions.length} Soal):
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${stimQuestions.map(q => this.renderQuestionItem(q, examId)).join('')}
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      // Tampilkan Soal Mandiri (tanpa stimulus)
+      const standaloneQuestions = questions.filter(q => !q.stimulus_group_id);
+      if (standaloneQuestions.length > 0) {
+        contentHtml += `
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Soal Mandiri (Tanpa Stimulus) — ${standaloneQuestions.length} Soal</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+              ${standaloneQuestions.map(q => this.renderQuestionItem(q, examId)).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = contentHtml;
+    } catch (err) {
+      container.innerHTML = `
+        <div class="card" style="border: 1px solid var(--danger-color); color: var(--danger-color);">
+          Gagal memuat bank soal: ${err.message}
+        </div>
+      `;
+    }
+  },
+
+  renderQuestionItem(q, examId) {
+    const typeLabel = q.question_type === 'pg' 
+      ? '<span class="badge badge-success">Pilihan Ganda</span>' 
+      : '<span class="badge badge-warning">PG Kompleks</span>';
+
+    const sortedOptions = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
+
+    let optionsListHtml = '';
+    sortedOptions.forEach(opt => {
+      const isKey = opt.is_correct ? 'style="color: var(--success-color); font-weight: bold;"' : 'style="color: var(--text-muted);"';
+      const checkIcon = opt.is_correct ? '✓ ' : '';
+      optionsListHtml += `
+        <div ${isKey} style="font-size: 0.9rem; margin-bottom: 4px;">
+          ${checkIcon}<strong>${opt.option_label}.</strong> ${opt.content}
+        </div>
+      `;
+    });
+
+    return `
+      <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 14px; background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <strong style="font-size: 1rem; color: var(--primary-color);">No. ${q.original_number || '-'}</strong>
+            ${typeLabel}
+            <small class="text-muted">(${q.points || 1} Poin)</small>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus Soal</button>
+        </div>
+        <div style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5;">
+          ${q.content}
+        </div>
+        ${q.image_url ? `<div style="margin-bottom: 10px;"><img src="${q.image_url}" style="max-height: 180px; border-radius: 4px; border: 1px solid var(--border-color);"></div>` : ''}
+        <div style="background: #f8fafc; padding: 10px; border-radius: 6px; border-left: 3px solid var(--border-color);">
+          ${optionsListHtml || '<em class="text-muted" style="font-size: 0.85rem;">Belum ada pilihan jawaban.</em>'}
+        </div>
+      </div>
+    `;
+  },
+
+  async deleteQuestion(questionId, examId) {
+    const yakin = confirm("Apakah Anda yakin ingin menghapus butir soal ini?");
+    if (!yakin) return;
+
+    const client = getSupabaseClient();
+    try {
+      const { error } = await client
+        .from('questions')
+        .delete()
+        .eq('id', questionId);
+
+      if (error) throw error;
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert(`Gagal menghapus butir soal: ${err.message}`);
+    }
+  },
+
+  async deleteStimulusGroup(stimulusId, examId) {
+    const yakin = confirm("PERINGATAN: Menghapus grup stimulus akan melepaskan keterikatan stimulus pada soal-soal di dalamnya (soal akan tetap ada sebagai soal mandiri).\n\nLanjutkan penghapusan?");
+    if (!yakin) return;
+
+    const client = getSupabaseClient();
+    try {
+      const { error } = await client
+        .from('stimulus_groups')
+        .delete()
+        .eq('id', stimulusId);
+
+      if (error) throw error;
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert(`Gagal menghapus grup stimulus: ${err.message}`);
     }
   },
 
