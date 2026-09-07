@@ -32,7 +32,7 @@ const GuruModule = {
     this.setupExamEventListeners();
   },
 
-  // Setup tab switcher menu
+  // Setup tab switcher menu navigasi
   setupNavigation() {
     const navLinks = document.querySelectorAll(".sidebar-menu .nav-link");
     const panels = document.querySelectorAll(".menu-panel");
@@ -67,7 +67,7 @@ const GuruModule = {
     });
   },
 
-  // Memastikan guru memiliki minimal 1 kelas
+  // Memastikan guru memiliki minimal 1 kelas agar relasi siswa tidak error
   async ensureDefaultClass() {
     const client = getSupabaseClient();
     if (!client || !this.currentTeacher) return;
@@ -604,7 +604,7 @@ const GuruModule = {
     }
   },
 
-  // Setup Event Listeners Modal Pembuatan Ujian
+  // Setup Event Listeners Modal Pembuatan Ujian (dengan Tombol Darurat & ESC)
   setupExamEventListeners() {
     const modalExam = document.getElementById("modal-create-exam");
     const btnOpenModal = document.getElementById("btn-open-modal-exam");
@@ -614,19 +614,46 @@ const GuruModule = {
     const tokenInput = document.getElementById("exam-token");
     const formCreateExam = document.getElementById("form-create-exam");
     const formAlert = document.getElementById("exam-form-alert");
+    const btnSave = document.getElementById("btn-save-exam");
 
     const openModal = () => {
-      formCreateExam.reset();
-      formAlert.classList.add("d-none");
+      if (formCreateExam) formCreateExam.reset();
+      if (formAlert) formAlert.classList.add("d-none");
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.innerText = "Simpan & Terbitkan Ujian";
+      }
       if (tokenInput) tokenInput.value = this.generateExamToken();
-      modalExam.classList.remove("d-none");
+      if (modalExam) modalExam.classList.remove("d-none");
     };
 
-    const closeModal = () => modalExam.classList.add("d-none");
+    const closeModal = () => {
+      if (modalExam) modalExam.classList.add("d-none");
+      if (btnSave) {
+        btnSave.disabled = false;
+        btnSave.innerText = "Simpan & Terbitkan Ujian";
+      }
+    };
 
     if (btnOpenModal) btnOpenModal.addEventListener("click", openModal);
     if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
     if (btnCancelModal) btnCancelModal.addEventListener("click", closeModal);
+
+    // Tombol Darurat 1: Klik di area abu-abu luar kotak untuk menutup modal
+    if (modalExam) {
+      modalExam.addEventListener("click", (e) => {
+        if (e.target === modalExam) {
+          closeModal();
+        }
+      });
+    }
+
+    // Tombol Darurat 2: Tekan tombol ESC keyboard untuk menutup modal
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modalExam && !modalExam.classList.contains("d-none")) {
+        closeModal();
+      }
+    });
 
     if (btnGenToken && tokenInput) {
       btnGenToken.addEventListener("click", () => {
@@ -646,7 +673,6 @@ const GuruModule = {
         const token = tokenInput.value.trim().toUpperCase();
         const randomizeQuestions = document.getElementById("exam-randomize-questions").checked;
         const randomizeOptions = document.getElementById("exam-randomize-options").checked;
-        const btnSave = document.getElementById("btn-save-exam");
 
         if (!classId) {
           alert("Silakan pilih kelas target ujian.");
@@ -678,9 +704,8 @@ const GuruModule = {
           formAlert.className = "alert alert-error";
           formAlert.innerText = `Gagal menyimpan: ${err.message}`;
           formAlert.classList.remove("d-none");
-        } finally {
           btnSave.disabled = false;
-          btnSave.innerText = "Simpan & Terbitkan Ujian";
+          btnSave.innerText = "Coba Simpan Lagi";
         }
       });
     }
