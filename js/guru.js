@@ -48,9 +48,7 @@ const GuruModule = {
         e.preventDefault();
         const targetId = link.getAttribute("data-target");
 
-        // Validasi jika masuk menu Tambah Soal
         if (targetId === "panel-tambah-soal") {
-          // Jika belum ada ujian terpilih, coba ambil dari dropdown Bank Soal
           const filterSelect = document.getElementById("bank-exam-filter");
           if (!this.selectedExamId && filterSelect && filterSelect.value) {
             this.setExamActive(filterSelect.value, filterSelect.options[filterSelect.selectedIndex].text);
@@ -798,7 +796,6 @@ const GuruModule = {
   // BANK SOAL & STIMULUS
   // ==========================================
 
-  // Set ujian aktif dan sinkronkan variabel global
   setExamActive(examId, examTitle) {
     this.selectedExamId = examId;
     this.selectedExamTitle = examTitle;
@@ -828,7 +825,6 @@ const GuruModule = {
 
       filterSelect.innerHTML = optionsHtml;
 
-      // Jika ada ujian, otomatis pilih yang pertama jika belum ada yang terpilih
       if (this.examsList.length > 0) {
         if (!this.selectedExamId || !this.examsList.find(e => e.id === this.selectedExamId)) {
           const firstExam = this.examsList[0];
@@ -1077,7 +1073,6 @@ const GuruModule = {
     if (examIdInput) examIdInput.value = this.selectedExamId || "";
     if (displayEl) displayEl.innerText = this.selectedExamTitle || "-";
 
-    // Hitung nomor soal berikutnya otomatis
     if (this.selectedExamId && numberInput) {
       const client = getSupabaseClient();
       try {
@@ -1151,7 +1146,7 @@ const GuruModule = {
         const keyInputs = document.querySelectorAll(".option-key-input");
 
         const optionsData = [];
-        let hasCorrectKey = false;
+        const correctKeys = [];
 
         textInputs.forEach((textInput, idx) => {
           const label = textInput.getAttribute("data-label");
@@ -1159,7 +1154,7 @@ const GuruModule = {
           const isCorrect = keyInputs[idx].checked;
 
           if (val) {
-            if (isCorrect) hasCorrectKey = true;
+            if (isCorrect) correctKeys.push(label);
             optionsData.push({
               option_label: label,
               content: val,
@@ -1175,7 +1170,7 @@ const GuruModule = {
           return;
         }
 
-        if (!hasCorrectKey) {
+        if (correctKeys.length === 0) {
           formAlert.className = "alert alert-error";
           formAlert.innerText = "Tentukan minimal satu kunci jawaban yang benar.";
           formAlert.classList.remove("d-none");
@@ -1187,6 +1182,7 @@ const GuruModule = {
 
         const client = getSupabaseClient();
         try {
+          // Simpan butir soal ke tabel questions (lengkap dengan array correct_keys)
           const { data: newQuestion, error: qErr } = await client
             .from('questions')
             .insert({
@@ -1196,6 +1192,7 @@ const GuruModule = {
               points: points,
               image_url: imageUrl,
               content: content,
+              correct_keys: correctKeys,
               group_id: null
             })
             .select()
@@ -1203,6 +1200,7 @@ const GuruModule = {
 
           if (qErr) throw qErr;
 
+          // Simpan opsi jawaban ke tabel options
           const optionsPayload = optionsData.map(opt => ({
             question_id: newQuestion.id,
             option_label: opt.option_label,
@@ -1220,7 +1218,7 @@ const GuruModule = {
           formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan!`;
           formAlert.classList.remove("d-none");
 
-          // Reset teks pertanyaan dan opsi
+          // Reset teks soal dan opsi
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
           textInputs.forEach(input => input.value = "");
@@ -1228,7 +1226,7 @@ const GuruModule = {
 
           document.getElementById("question-number").value = originalNumber + 1;
 
-          // Segarkan daftar Bank Soal di background
+          // Perbarui isi Bank Soal di background
           await this.loadBankSoalContent(examId);
         } catch (err) {
           formAlert.className = "alert alert-error";
