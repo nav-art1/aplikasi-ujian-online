@@ -193,7 +193,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 3: BANK SOAL (CHECKPOINT 16) -->
+        <!-- SEKSI 3: BANK SOAL -->
         <section id="panel-bank-soal" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
@@ -208,7 +208,6 @@
             </div>
           </div>
 
-          <!-- Wadah Daftar Stimulus & Soal -->
           <div id="bank-soal-list-container">
             <div class="card text-center" style="padding: 40px 20px;">
               <p class="text-muted">Silakan pilih salah satu ujian di atas untuk melihat butir soal dan grup stimulus.</p>
@@ -216,15 +215,101 @@
           </div>
         </section>
 
-        <!-- SEKSI 4: TAMBAH SOAL -->
+        <!-- SEKSI 4: TAMBAH SOAL (CHECKPOINT 17) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
-          <div class="card">
+          <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
-              <span class="card-title">Formulir Tambah Soal Manual (PG / PGK)</span>
+              <span class="card-title">Formulir Input Soal Manual</span>
             </div>
-            <div id="tambah-soal-form-container">
-              <p class="text-muted">Editor butir soal manual disiapkan pada Checkpoint 17.</p>
-            </div>
+
+            <form id="form-create-question">
+              <!-- Baris 1: Ujian Tujuan & Nomor Asli & Tipe Soal -->
+              <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr; gap: 15px;">
+                <div class="form-group">
+                  <label for="question-exam-id">Sesi Ujian Tujuan</label>
+                  <select id="question-exam-id" required>
+                    <option value="">-- Pilih Ujian --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="question-number">No. Soal Asli</label>
+                  <input type="number" id="question-number" min="1" max="500" value="1" required>
+                </div>
+                <div class="form-group">
+                  <label for="question-type">Tipe Soal</label>
+                  <select id="question-type" required>
+                    <option value="pg">Pilihan Ganda (1 Kunci)</option>
+                    <option value="pgk">PG Kompleks (Multi Kunci)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Baris 2: Bobot Poin & URL Gambar Soal (Opsional) -->
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px;">
+                <div class="form-group">
+                  <label for="question-points">Bobot Poin</label>
+                  <input type="number" id="question-points" min="0.1" step="0.1" value="1.0" required>
+                </div>
+                <div class="form-group">
+                  <label for="question-image-url">URL Gambar Soal (Opsional)</label>
+                  <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
+                </div>
+              </div>
+
+              <!-- Baris 3: Teks Isi Soal -->
+              <div class="form-group">
+                <label for="question-content">Teks Soal / Pertanyaan</label>
+                <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini..."></textarea>
+              </div>
+
+              <!-- Baris 4: Pilihan Jawaban (A, B, C, D, E) -->
+              <div style="margin-top: 25px; margin-bottom: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <label style="font-weight: bold; font-size: 1rem; color: var(--text-main);">Pilihan Jawaban & Kunci Benar</label>
+                  <small id="key-instruction" class="text-muted">Pilih 1 radio button untuk kunci jawaban benar.</small>
+                </div>
+
+                <div id="options-inputs-container" style="display: flex; flex-direction: column; gap: 12px;">
+                  <!-- Opsi A -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="A" checked title="Tandai Benar">
+                    <strong style="width: 25px;">A.</strong>
+                    <input type="text" class="option-text-input" data-label="A" required placeholder="Teks pilihan A..." style="flex-grow: 1;">
+                  </div>
+                  <!-- Opsi B -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="B" title="Tandai Benar">
+                    <strong style="width: 25px;">B.</strong>
+                    <input type="text" class="option-text-input" data-label="B" required placeholder="Teks pilihan B..." style="flex-grow: 1;">
+                  </div>
+                  <!-- Opsi C -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="C" title="Tandai Benar">
+                    <strong style="width: 25px;">C.</strong>
+                    <input type="text" class="option-text-input" data-label="C" required placeholder="Teks pilihan C..." style="flex-grow: 1;">
+                  </div>
+                  <!-- Opsi D -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="D" title="Tandai Benar">
+                    <strong style="width: 25px;">D.</strong>
+                    <input type="text" class="option-text-input" data-label="D" required placeholder="Teks pilihan D..." style="flex-grow: 1;">
+                  </div>
+                  <!-- Opsi E (Opsional) -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="E" title="Tandai Benar">
+                    <strong style="width: 25px;">E.</strong>
+                    <input type="text" class="option-text-input" data-label="E" placeholder="Teks pilihan E (opsional)..." style="flex-grow: 1;">
+                  </div>
+                </div>
+              </div>
+
+              <div id="question-form-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 25px;">
+                <button type="reset" class="btn btn-secondary">Reset Formulir</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-question">Simpan Butir Soal</button>
+              </div>
+            </form>
           </div>
         </section>
 
