@@ -90,7 +90,7 @@
               <li>Buka menu <strong>Kelas</strong> untuk membuat rombel (contoh: VII A).</li>
               <li>Buka menu <strong>Siswa</strong> untuk memasukkan daftar murid.</li>
               <li>Buka menu <strong>Ujian</strong> untuk membuat jadwal dan token ujian.</li>
-              <li>Buka menu <strong>Tambah Soal</strong> atau <strong>Import Excel</strong> untuk mengunggah soal PG dan PGK.</li>
+              <li>Buka menu <strong>Bank Soal</strong>, pilih ujian, lalu klik <strong>+ Buat Soal Baru</strong>.</li>
               <li>Bagikan Token Ujian kepada siswa untuk mulai mengerjakan.</li>
             </ol>
           </div>
@@ -215,22 +215,28 @@
           </div>
         </section>
 
-        <!-- SEKSI 4: TAMBAH SOAL (CHECKPOINT 17) -->
+        <!-- SEKSI 4: TAMBAH SOAL (UJIAN OTOMATIS DARI BANK SOAL) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
               <span class="card-title">Formulir Input Soal Manual</span>
+              <button class="btn btn-secondary btn-sm" id="btn-back-to-bank">&larr; Kembali ke Bank Soal</button>
+            </div>
+
+            <!-- Banner info ujian aktif -->
+            <div id="active-exam-banner" style="background: #e0e7ff; border: 1px solid #c7d2fe; padding: 10px 14px; border-radius: 6px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
+              <div>
+                <small style="color: #3730a3; font-weight: 600; text-transform: uppercase;">Menambahkan Soal untuk Ujian:</small>
+                <div id="active-exam-title-display" style="font-weight: bold; color: var(--primary-color); font-size: 1.05rem;">-</div>
+              </div>
             </div>
 
             <form id="form-create-question">
-              <!-- Baris 1: Ujian Tujuan & Nomor Asli & Tipe Soal -->
-              <div style="display: grid; grid-template-columns: 2fr 1fr 1.5fr; gap: 15px;">
-                <div class="form-group">
-                  <label for="question-exam-id">Sesi Ujian Tujuan</label>
-                  <select id="question-exam-id" required>
-                    <option value="">-- Pilih Ujian --</option>
-                  </select>
-                </div>
+              <!-- ID Ujian tersembunyi (otomatis terisi) -->
+              <input type="hidden" id="question-exam-id">
+
+              <!-- Baris 1: Nomor Asli & Tipe Soal & Bobot Poin -->
+              <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 15px;">
                 <div class="form-group">
                   <label for="question-number">No. Soal Asli</label>
                   <input type="number" id="question-number" min="1" max="500" value="1" required>
@@ -242,18 +248,16 @@
                     <option value="pgk">PG Kompleks (Multi Kunci)</option>
                   </select>
                 </div>
-              </div>
-
-              <!-- Baris 2: Bobot Poin & URL Gambar Soal (Opsional) -->
-              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 15px;">
                 <div class="form-group">
                   <label for="question-points">Bobot Poin</label>
                   <input type="number" id="question-points" min="0.1" step="0.1" value="1.0" required>
                 </div>
-                <div class="form-group">
-                  <label for="question-image-url">URL Gambar Soal (Opsional)</label>
-                  <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
-                </div>
+              </div>
+
+              <!-- Baris 2: URL Gambar Soal (Opsional) -->
+              <div class="form-group">
+                <label for="question-image-url">URL Gambar Soal (Opsional)</label>
+                <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
               </div>
 
               <!-- Baris 3: Teks Isi Soal -->
@@ -493,13 +497,11 @@
   <script src="js/guru.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", async () => {
-      // Periksa status login otomatis
       const currentTeacher = await AuthModule.getCurrentTeacher();
       if (currentTeacher) {
         GuruModule.initDashboard(currentTeacher);
       }
 
-      // Handler Login Form
       const loginForm = document.getElementById("guru-login-form");
       const loginAlert = document.getElementById("login-alert");
       const btnLogin = document.getElementById("btn-login");
@@ -526,7 +528,6 @@
         }
       });
 
-      // Handler Logout dengan Dialog Konfirmasi
       document.getElementById("btn-logout").addEventListener("click", async () => {
         const yakin = confirm("Apakah kamu yakin ingin keluar?");
         if (yakin) {
