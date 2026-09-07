@@ -145,7 +145,7 @@
           </div>
         </section>
 
-        <!-- SEKSI 6: DATA SISWA (CHECKPOINT 13) -->
+        <!-- SEKSI 6: DATA SISWA -->
         <section id="panel-siswa" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
@@ -198,7 +198,7 @@
           </div>
         </section>
 
-        <!-- MODAL POPUP EDIT SISWA -->
+        <!-- MODAL EDIT SISWA -->
         <div id="modal-edit-student" class="modal-overlay d-none">
           <div class="modal-content">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -227,17 +227,68 @@
           </div>
         </div>
 
-        <!-- SEKSI 7: DATA KELAS -->
+        <!-- SEKSI 7: DATA KELAS (CHECKPOINT 14) -->
         <section id="panel-kelas" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Pengelolaan Data Kelas</span>
+              <span class="card-title">Tambah Rombel / Kelas Baru</span>
             </div>
-            <div id="kelas-manager-container">
-              <p class="text-muted">Daftar kelas dan form tambah kelas disiapkan pada Checkpoint 14.</p>
+            <form id="form-add-class" style="display: flex; gap: 12px; align-items: flex-end; max-width: 500px;">
+              <div class="form-group" style="margin-bottom: 0; flex-grow: 1;">
+                <label for="new-class-name">Nama Kelas / Rombel</label>
+                <input type="text" id="new-class-name" required placeholder="Contoh: VII B, VIII C, X IPA 1">
+              </div>
+              <div>
+                <button type="submit" class="btn btn-primary" id="btn-save-class">+ Tambah Kelas</button>
+              </div>
+            </form>
+            <div id="class-form-alert" class="alert d-none"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Daftar Seluruh Kelas</span>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-classes">Segarkan Data</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table" id="classes-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Nama Kelas</th>
+                    <th>Jumlah Siswa</th>
+                    <th>Tanggal Dibuat</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="classes-table-body">
+                  <tr><td colspan="5" class="text-center text-muted">Memuat data kelas...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
+
+        <!-- MODAL EDIT KELAS -->
+        <div id="modal-edit-class" class="modal-overlay d-none">
+          <div class="modal-content">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Edit Nama Kelas</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit-class">X</button>
+            </div>
+            <form id="form-edit-class">
+              <input type="hidden" id="edit-class-id">
+              <div class="form-group">
+                <label for="edit-class-name">Nama Kelas</label>
+                <input type="text" id="edit-class-name" required placeholder="Contoh: VII A">
+              </div>
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-class">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-update-class">Simpan Perubahan</button>
+              </div>
+            </form>
+          </div>
+        </div>
 
         <!-- SEKSI 8: HASIL UJIAN -->
         <section id="panel-hasil" class="menu-panel d-none">
