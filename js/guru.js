@@ -6,6 +6,8 @@ const GuruModule = {
   currentTeacher: null,
   classesList: [],
   examsList: [],
+  selectedExamId: null,
+  selectedExamTitle: '',
 
   async initDashboard(teacherProfile) {
     this.currentTeacher = teacherProfile;
@@ -28,7 +30,6 @@ const GuruModule = {
     await this.loadExamsTable();
     await this.loadQuickStats();
     await this.loadBankSoalExamFilter();
-    await this.loadQuestionFormExamDropdown();
 
     this.setupStudentEventListeners();
     this.setupClassEventListeners();
@@ -45,11 +46,30 @@ const GuruModule = {
     navLinks.forEach(link => {
       link.addEventListener("click", (e) => {
         e.preventDefault();
+        const targetId = link.getAttribute("data-target");
+
+        // Validasi jika masuk menu Tambah Soal
+        if (targetId === "panel-tambah-soal") {
+          // Jika belum ada ujian terpilih, coba ambil dari dropdown Bank Soal
+          const filterSelect = document.getElementById("bank-exam-filter");
+          if (!this.selectedExamId && filterSelect && filterSelect.value) {
+            this.setExamActive(filterSelect.value, filterSelect.options[filterSelect.selectedIndex].text);
+          }
+
+          if (!this.selectedExamId) {
+            alert("Belum ada sesi ujian yang dipilih atau dibuat. Silakan buat ujian di menu 'Ujian' atau pilih ujian di 'Bank Soal'.");
+            const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
+            if (bankTab) bankTab.click();
+            return;
+          }
+
+          this.syncActiveExamToQuestionForm();
+        }
+
         navLinks.forEach(l => l.classList.remove("active"));
         panels.forEach(p => p.classList.add("d-none"));
 
         link.classList.add("active");
-        const targetId = link.getAttribute("data-target");
         const activePanel = document.getElementById(targetId);
         if (activePanel) {
           activePanel.classList.remove("d-none");
@@ -67,8 +87,6 @@ const GuruModule = {
           this.loadExamsTable();
         } else if (targetId === "panel-bank-soal") {
           this.loadBankSoalExamFilter();
-        } else if (targetId === "panel-tambah-soal") {
-          this.loadQuestionFormExamDropdown();
         }
       });
     });
@@ -713,7 +731,6 @@ const GuruModule = {
           closeModal();
           await this.loadExamsTable();
           await this.loadBankSoalExamFilter();
-          await this.loadQuestionFormExamDropdown();
         } catch (err) {
           formAlert.className = "alert alert-error";
           formAlert.innerText = `Gagal menyimpan: ${err.message}`;
@@ -764,9 +781,14 @@ const GuruModule = {
         .eq('id', examId);
 
       if (error) throw error;
+
+      if (this.selectedExamId === examId) {
+        this.selectedExamId = null;
+        this.selectedExamTitle = '';
+      }
+
       await this.loadExamsTable();
       await this.loadBankSoalExamFilter();
-      await this.loadQuestionFormExamDropdown();
     } catch (err) {
       alert(`Gagal menghapus ujian: ${err.message}`);
     }
@@ -775,6 +797,13 @@ const GuruModule = {
   // ==========================================
   // BANK SOAL & STIMULUS
   // ==========================================
+
+  // Set ujian aktif dan sinkronkan variabel global
+  setExamActive(examId, examTitle) {
+    this.selectedExamId = examId;
+    this.selectedExamTitle = examTitle;
+    this.syncActiveExamToQuestionForm();
+  },
 
   async loadBankSoalExamFilter() {
     const client = getSupabaseClient();
@@ -790,12 +819,32 @@ const GuruModule = {
 
       if (error) throw error;
 
+      this.examsList = exams || [];
+
       let optionsHtml = '<option value="">-- Pilih Sesi Ujian --</option>';
-      (exams || []).forEach(e => {
+      this.examsList.forEach(e => {
         optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
       });
 
       filterSelect.innerHTML = optionsHtml;
+
+      // Jika ada ujian, otomatis pilih yang pertama jika belum ada yang terpilih
+      if (this.examsList.length > 0) {
+        if (!this.selectedExamId || !this.examsList.find(e => e.id === this.selectedExamId)) {
+          const firstExam = this.examsList[0];
+          const firstTitle = `${firstExam.title} (${firstExam.subject || '-'})`;
+          filterSelect.value = firstExam.id;
+          this.setExamActive(firstExam.id, firstTitle);
+          await this.loadBankSoalContent(firstExam.id);
+        } else {
+          filterSelect.value = this.selectedExamId;
+          await this.loadBankSoalContent(this.selectedExamId);
+        }
+      } else {
+        this.selectedExamId = null;
+        this.selectedExamTitle = '';
+        this.syncActiveExamToQuestionForm();
+      }
     } catch (err) {
       console.warn("Gagal memuat filter ujian Bank Soal:", err);
     }
@@ -807,13 +856,19 @@ const GuruModule = {
 
     if (filterSelect) {
       filterSelect.addEventListener("change", (e) => {
-        const examId = e.target.value;
-        this.loadBankSoalContent(examId);
+        const val = e.target.value;
+        const text = filterSelect.options[filterSelect.selectedIndex]?.text || '';
+        this.setExamActive(val, text);
+        this.loadBankSoalContent(val);
       });
     }
 
     if (btnGotoTambah) {
       btnGotoTambah.addEventListener("click", () => {
+        if (!this.selectedExamId) {
+          alert("Silakan pilih salah satu ujian di dropdown Bank Soal terlebih dahulu.");
+          return;
+        }
         const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
         if (navTambah) navTambah.click();
       });
@@ -1011,31 +1066,30 @@ const GuruModule = {
   },
 
   // ==========================================
-  // FORMULIR TAMBAH SOAL (CHECKPOINT 17)
+  // FORMULIR TAMBAH SOAL
   // ==========================================
 
-  async loadQuestionFormExamDropdown() {
-    const client = getSupabaseClient();
-    const examSelect = document.getElementById("question-exam-id");
-    if (!client || !this.currentTeacher || !examSelect) return;
+  async syncActiveExamToQuestionForm() {
+    const examIdInput = document.getElementById("question-exam-id");
+    const displayEl = document.getElementById("active-exam-title-display");
+    const numberInput = document.getElementById("question-number");
 
-    try {
-      const { data: exams, error } = await client
-        .from('exams')
-        .select('id, title, subject')
-        .eq('teacher_id', this.currentTeacher.id)
-        .order('created_at', { ascending: false });
+    if (examIdInput) examIdInput.value = this.selectedExamId || "";
+    if (displayEl) displayEl.innerText = this.selectedExamTitle || "-";
 
-      if (error) throw error;
-
-      let optionsHtml = '<option value="">-- Pilih Ujian --</option>';
-      (exams || []).forEach(e => {
-        optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
-      });
-
-      examSelect.innerHTML = optionsHtml;
-    } catch (err) {
-      console.warn("Gagal memuat dropdown ujian di form tambah soal:", err);
+    // Hitung nomor soal berikutnya otomatis
+    if (this.selectedExamId && numberInput) {
+      const client = getSupabaseClient();
+      try {
+        const { count } = await client
+          .from('questions')
+          .select('*', { count: 'exact', head: true })
+          .eq('exam_id', this.selectedExamId);
+        
+        numberInput.value = (count || 0) + 1;
+      } catch (err) {
+        console.warn("Gagal menghitung nomor urut otomatis:", err);
+      }
     }
   },
 
@@ -1045,8 +1099,15 @@ const GuruModule = {
     const keyInstruction = document.getElementById("key-instruction");
     const formAlert = document.getElementById("question-form-alert");
     const btnSave = document.getElementById("btn-save-question");
+    const btnBack = document.getElementById("btn-back-to-bank");
 
-    // Toggle tipe input antara Radio (PG) dan Checkbox (PGK)
+    if (btnBack) {
+      btnBack.addEventListener("click", () => {
+        const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
+        if (bankTab) bankTab.click();
+      });
+    }
+
     if (typeSelect) {
       typeSelect.addEventListener("change", (e) => {
         const isPgk = e.target.value === 'pgk';
@@ -1074,7 +1135,7 @@ const GuruModule = {
         e.preventDefault();
         formAlert.classList.add("d-none");
 
-        const examId = document.getElementById("question-exam-id").value;
+        const examId = this.selectedExamId || document.getElementById("question-exam-id")?.value;
         const originalNumber = parseInt(document.getElementById("question-number").value, 10);
         const questionType = document.getElementById("question-type").value;
         const points = parseFloat(document.getElementById("question-points").value) || 1.0;
@@ -1082,11 +1143,10 @@ const GuruModule = {
         const content = document.getElementById("question-content").value.trim();
 
         if (!examId) {
-          alert("Silakan pilih sesi ujian tujuan.");
+          alert("Sesi ujian belum aktif. Silakan buka menu Bank Soal dan pilih ujian terlebih dahulu.");
           return;
         }
 
-        // Kumpulkan pilihan jawaban
         const textInputs = document.querySelectorAll(".option-text-input");
         const keyInputs = document.querySelectorAll(".option-key-input");
 
@@ -1127,7 +1187,6 @@ const GuruModule = {
 
         const client = getSupabaseClient();
         try {
-          // 1. Simpan butir soal ke tabel questions
           const { data: newQuestion, error: qErr } = await client
             .from('questions')
             .insert({
@@ -1136,14 +1195,14 @@ const GuruModule = {
               question_type: questionType,
               points: points,
               image_url: imageUrl,
-              content: content
+              content: content,
+              group_id: null
             })
             .select()
             .single();
 
           if (qErr) throw qErr;
 
-          // 2. Simpan opsi-opsi jawaban dengan question_id baru
           const optionsPayload = optionsData.map(opt => ({
             question_id: newQuestion.id,
             option_label: opt.option_label,
@@ -1157,24 +1216,20 @@ const GuruModule = {
 
           if (optErr) throw optErr;
 
-          // Berhasil: Kosongkan teks soal dan opsi, naikkan nomor urut otomatis
           formAlert.className = "alert alert-success";
-          formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan ke ujian!`;
+          formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan!`;
           formAlert.classList.remove("d-none");
 
+          // Reset teks pertanyaan dan opsi
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
           textInputs.forEach(input => input.value = "");
-          keyInputs.forEach((input, idx) => input.checked = (idx === 0)); // reset default opsi A
+          keyInputs.forEach((input, idx) => input.checked = (idx === 0));
 
           document.getElementById("question-number").value = originalNumber + 1;
 
-          // Sinkronkan ke Bank Soal
-          const bankExamFilter = document.getElementById("bank-exam-filter");
-          if (bankExamFilter) {
-            bankExamFilter.value = examId;
-            await this.loadBankSoalContent(examId);
-          }
+          // Segarkan daftar Bank Soal di background
+          await this.loadBankSoalContent(examId);
         } catch (err) {
           formAlert.className = "alert alert-error";
           formAlert.innerText = `Gagal menyimpan butir soal: ${err.message}`;
