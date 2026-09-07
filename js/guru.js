@@ -24,8 +24,10 @@ const GuruModule = {
     await this.ensureDefaultClass();
     await this.loadClassesDropdown();
     await this.loadStudentsTable();
+    await this.loadClassesTable();
     await this.loadQuickStats();
     this.setupStudentEventListeners();
+    this.setupClassEventListeners();
   },
 
   // Setup tab switcher menu
@@ -51,9 +53,11 @@ const GuruModule = {
           pageTitle.innerText = link.innerText;
         }
 
-        // Segarkan data saat tab siswa diklik
+        // Segarkan data spesifik saat tab diklik
         if (targetId === "panel-siswa") {
           this.loadStudentsTable();
+        } else if (targetId === "panel-kelas") {
+          this.loadClassesTable();
         }
       });
     });
@@ -73,7 +77,6 @@ const GuruModule = {
       if (error) throw error;
 
       if (!existingClasses || existingClasses.length === 0) {
-        // Buatkan 1 kelas awal otomatis
         await client.from('classes').insert({
           teacher_id: this.currentTeacher.id,
           class_name: 'VII A'
@@ -114,7 +117,10 @@ const GuruModule = {
     }
   },
 
-  // Menampilkan tabel siswa
+  // ==========================================
+  // MANAJEMEN SISWA (CHECKPOINT 13)
+  // ==========================================
+
   async loadStudentsTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("students-table-body");
@@ -123,7 +129,6 @@ const GuruModule = {
     tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Memuat data siswa...</td></tr>';
 
     try {
-      // Ambil seluruh siswa yang terhubung dengan kelas milik guru ini
       const { data: students, error } = await client
         .from('students')
         .select(`
@@ -178,7 +183,6 @@ const GuruModule = {
     }
   },
 
-  // Menyiapkan listener form siswa
   setupStudentEventListeners() {
     const formAdd = document.getElementById("form-add-student");
     const formAlert = document.getElementById("student-form-alert");
@@ -212,7 +216,6 @@ const GuruModule = {
 
           if (error) throw error;
 
-          // Berhasil
           formAdd.reset();
           formAlert.className = "alert alert-success";
           formAlert.innerText = `Siswa "${fullName}" berhasil ditambahkan!`;
@@ -230,7 +233,6 @@ const GuruModule = {
       });
     }
 
-    // Modal Edit Handlers
     const modalEdit = document.getElementById("modal-edit-student");
     const formEdit = document.getElementById("form-edit-student");
     const btnCloseModal = document.getElementById("btn-close-modal-edit");
@@ -275,14 +277,12 @@ const GuruModule = {
       });
     }
 
-    // Tombol refresh manual
     const btnRefresh = document.getElementById("btn-refresh-students");
     if (btnRefresh) {
       btnRefresh.addEventListener("click", () => this.loadStudentsTable());
     }
   },
 
-  // Buka dialog edit siswa
   openEditStudent(id, classId, fullName, studentNumber) {
     document.getElementById("edit-student-id").value = id;
     document.getElementById("edit-student-class-id").value = classId;
@@ -291,7 +291,6 @@ const GuruModule = {
     document.getElementById("modal-edit-student").classList.remove("d-none");
   },
 
-  // Ubah status aktif / nonaktif siswa dengan konfirmasi
   async toggleStudentStatus(studentId, currentStatus) {
     const aksi = currentStatus ? "menonaktifkan" : "mengaktifkan";
     const yakin = confirm(`Apakah Anda yakin ingin ${aksi} siswa ini?`);
@@ -311,7 +310,6 @@ const GuruModule = {
     }
   },
 
-  // Hapus siswa dengan konfirmasi
   async deleteStudent(studentId, fullName) {
     const yakin = confirm(`Apakah Anda yakin ingin menghapus data siswa "${fullName}"? Tindakan ini tidak dapat dibatalkan.`);
     if (!yakin) return;
@@ -327,6 +325,192 @@ const GuruModule = {
       await this.loadStudentsTable();
     } catch (err) {
       alert(`Gagal menghapus siswa: ${err.message}`);
+    }
+  },
+
+  // ==========================================
+  // MANAJEMEN KELAS (CHECKPOINT 14)
+  // ==========================================
+
+  // Menampilkan tabel daftar kelas beserta hitungan jumlah siswa
+  async loadClassesTable() {
+    const client = getSupabaseClient();
+    const tableBody = document.getElementById("classes-table-body");
+    if (!client || !this.currentTeacher || !tableBody) return;
+
+    tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Memuat data kelas...</td></tr>';
+
+    try {
+      // Ambil daftar kelas milik guru ini
+      const { data: classes, error: classErr } = await client
+        .from('classes')
+        .select('*')
+        .eq('teacher_id', this.currentTeacher.id)
+        .order('class_name', { ascending: true });
+
+      if (classErr) throw classErr;
+
+      if (!classes || classes.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada kelas yang dibuat.</td></tr>';
+        return;
+      }
+
+      // Ambil hitungan siswa per kelas secara paralel
+      const rowsPromises = classes.map(async (cls, idx) => {
+        const { count: studentCount } = await client
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .eq('class_id', cls.id);
+
+        const dateStr = cls.created_at ? new Date(cls.created_at).toLocaleDateString('id-ID') : '-';
+
+        return `
+          <tr>
+            <td>${idx + 1}</td>
+            <td><strong>${cls.class_name}</strong></td>
+            <td>${studentCount || 0} Siswa</td>
+            <td>${dateStr}</td>
+            <td>
+              <div class="action-buttons">
+                <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditClass('${cls.id}', '${cls.class_name}')">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteClass('${cls.id}', '${cls.class_name}', ${studentCount || 0})">Hapus</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      const rowsArray = await Promise.all(rowsPromises);
+      tableBody.innerHTML = rowsArray.join('');
+      await this.loadQuickStats();
+    } catch (err) {
+      tableBody.innerHTML = `<tr><td colspan="5" class="text-center" style="color: var(--danger-color);">Gagal memuat: ${err.message}</td></tr>`;
+    }
+  },
+
+  // Menyiapkan listener form kelas
+  setupClassEventListeners() {
+    const formAdd = document.getElementById("form-add-class");
+    const formAlert = document.getElementById("class-form-alert");
+
+    if (formAdd) {
+      formAdd.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        formAlert.classList.add("d-none");
+
+        const className = document.getElementById("new-class-name").value.trim();
+        const btnSave = document.getElementById("btn-save-class");
+
+        if (!className) return;
+
+        btnSave.disabled = true;
+        btnSave.innerText = "Menyimpan...";
+
+        const client = getSupabaseClient();
+        try {
+          const { error } = await client.from('classes').insert({
+            teacher_id: this.currentTeacher.id,
+            class_name: className
+          });
+
+          if (error) throw error;
+
+          formAdd.reset();
+          formAlert.className = "alert alert-success";
+          formAlert.innerText = `Kelas "${className}" berhasil ditambahkan!`;
+          formAlert.classList.remove("d-none");
+
+          // Sinkronkan tabel kelas dan dropdown di menu siswa
+          await this.loadClassesTable();
+          await this.loadClassesDropdown();
+        } catch (err) {
+          formAlert.className = "alert alert-error";
+          formAlert.innerText = `Gagal menyimpan: ${err.message}`;
+          formAlert.classList.remove("d-none");
+        } finally {
+          btnSave.disabled = false;
+          btnSave.innerText = "+ Tambah Kelas";
+        }
+      });
+    }
+
+    // Modal Edit Kelas Handlers
+    const modalEditClass = document.getElementById("modal-edit-class");
+    const formEditClass = document.getElementById("form-edit-class");
+    const btnCloseModal = document.getElementById("btn-close-modal-edit-class");
+    const btnCancelModal = document.getElementById("btn-cancel-edit-class");
+
+    const closeModal = () => modalEditClass.classList.add("d-none");
+    if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
+    if (btnCancelModal) btnCancelModal.addEventListener("click", closeModal);
+
+    if (formEditClass) {
+      formEditClass.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const classId = document.getElementById("edit-class-id").value;
+        const className = document.getElementById("edit-class-name").value.trim();
+        const btnUpdate = document.getElementById("btn-update-class");
+
+        btnUpdate.disabled = true;
+        btnUpdate.innerText = "Memperbarui...";
+
+        const client = getSupabaseClient();
+        try {
+          const { error } = await client.from('classes')
+            .update({ class_name: className })
+            .eq('id', classId);
+
+          if (error) throw error;
+
+          closeModal();
+          await this.loadClassesTable();
+          await this.loadClassesDropdown();
+        } catch (err) {
+          alert(`Gagal memperbarui kelas: ${err.message}`);
+        } finally {
+          btnUpdate.disabled = false;
+          btnUpdate.innerText = "Simpan Perubahan";
+        }
+      });
+    }
+
+    const btnRefresh = document.getElementById("btn-refresh-classes");
+    if (btnRefresh) {
+      btnRefresh.addEventListener("click", () => this.loadClassesTable());
+    }
+  },
+
+  // Buka dialog edit kelas
+  openEditClass(id, className) {
+    document.getElementById("edit-class-id").value = id;
+    document.getElementById("edit-class-name").value = className;
+    document.getElementById("modal-edit-class").classList.remove("d-none");
+  },
+
+  // Hapus kelas dengan konfirmasi berlapis jika ada siswa
+  async deleteClass(classId, className, studentCount) {
+    let confirmMsg = `Apakah Anda yakin ingin menghapus kelas "${className}"?`;
+    if (studentCount > 0) {
+      confirmMsg = `PERINGATAN: Kelas "${className}" memiliki ${studentCount} siswa di dalamnya!\n\nJika kelas ini dihapus, data siswa di dalamnya juga akan terhapus.\n\nApakah Anda benar-benar yakin ingin melanjutkan?`;
+    }
+
+    const yakin = confirm(confirmMsg);
+    if (!yakin) return;
+
+    const client = getSupabaseClient();
+    try {
+      const { error } = await client
+        .from('classes')
+        .delete()
+        .eq('id', classId);
+
+      if (error) throw error;
+
+      await this.loadClassesTable();
+      await this.loadClassesDropdown();
+      await this.loadStudentsTable();
+    } catch (err) {
+      alert(`Gagal menghapus kelas: ${err.message}`);
     }
   },
 
