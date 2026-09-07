@@ -681,6 +681,11 @@ const GuruModule = {
 
         const client = getSupabaseClient();
         try {
+          const now = new Date();
+          const startTime = now.toISOString();
+          // Default end time: 7 hari ke depan (fleksibel)
+          const endTime = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+
           const { error } = await client.from('exams').insert({
             teacher_id: this.currentTeacher.id,
             class_id: classId,
@@ -689,6 +694,8 @@ const GuruModule = {
             description: description,
             duration_minutes: duration,
             token: token,
+            start_time: startTime,
+            end_time: endTime,
             randomize_questions: randomizeQuestions,
             randomize_options: randomizeOptions,
             is_active: true
