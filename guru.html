@@ -96,7 +96,7 @@
           </div>
         </section>
 
-        <!-- SEKSI 2: UJIAN (CHECKPOINT 15) -->
+        <!-- SEKSI 2: UJIAN -->
         <section id="panel-ujian" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
@@ -133,9 +133,15 @@
               <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-exam">X</button>
             </div>
             <form id="form-create-exam">
-              <div class="form-group">
-                <label for="exam-title">Judul Ujian / Mata Pelajaran</label>
-                <input type="text" id="exam-title" required placeholder="Contoh: Asesmen Sumatif IPA Bab 1">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                  <label for="exam-title">Judul Ujian</label>
+                  <input type="text" id="exam-title" required placeholder="Contoh: Asesmen Sumatif Bab 1">
+                </div>
+                <div class="form-group">
+                  <label for="exam-subject">Mata Pelajaran</label>
+                  <input type="text" id="exam-subject" required placeholder="Contoh: IPA, Matematika, B. Indo">
+                </div>
               </div>
 
               <div class="form-group">
