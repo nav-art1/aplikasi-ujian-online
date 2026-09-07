@@ -96,18 +96,96 @@
           </div>
         </section>
 
-        <!-- SEKSI 2: UJIAN -->
+        <!-- SEKSI 2: UJIAN (CHECKPOINT 15) -->
         <section id="panel-ujian" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Daftar Ujian</span>
+              <span class="card-title">Daftar Sesi Ujian</span>
               <button class="btn btn-primary" id="btn-open-modal-exam">+ Buat Ujian Baru</button>
             </div>
-            <div id="exam-list-container">
-              <p class="text-muted">Modul pembuatan ujian disiapkan pada Checkpoint 15.</p>
+            <div class="table-responsive">
+              <table class="data-table" id="exams-table">
+                <thead>
+                  <tr>
+                    <th>No</th>
+                    <th>Judul Ujian</th>
+                    <th>Kelas Target</th>
+                    <th>Token</th>
+                    <th>Durasi</th>
+                    <th>Acak Soal/Opsi</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="exams-table-body">
+                  <tr><td colspan="8" class="text-center text-muted">Memuat daftar ujian...</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
+
+        <!-- MODAL FORM BUAT UJIAN BARU -->
+        <div id="modal-create-exam" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 600px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Buat Sesi Ujian Baru</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-exam">X</button>
+            </div>
+            <form id="form-create-exam">
+              <div class="form-group">
+                <label for="exam-title">Judul Ujian / Mata Pelajaran</label>
+                <input type="text" id="exam-title" required placeholder="Contoh: Asesmen Sumatif IPA Bab 1">
+              </div>
+
+              <div class="form-group">
+                <label for="exam-description">Deskripsi / Petunjuk Singkat (Opsional)</label>
+                <textarea id="exam-description" rows="2" placeholder="Petunjuk khusus bagi siswa..."></textarea>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                  <label for="exam-class-id">Target Kelas</label>
+                  <select id="exam-class-id" required>
+                    <option value="">-- Pilih Kelas --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="exam-duration">Durasi Pengerjaan (Menit)</label>
+                  <input type="number" id="exam-duration" min="5" max="300" value="60" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="exam-token">Token Ujian (Akses Masuk Siswa)</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="exam-token" required maxlength="10" placeholder="Contoh: IPA7A26" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px;">
+                  <button type="button" class="btn btn-secondary" id="btn-generate-token" style="white-space: nowrap;">Acak Token</button>
+                </div>
+                <small class="text-muted">Gunakan 6-8 huruf kapital/angka yang mudah dibaca.</small>
+              </div>
+
+              <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Pengaturan Pengacakan:</div>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.9rem;">
+                  <input type="checkbox" id="exam-randomize-questions" checked>
+                  Acak urutan butir soal untuk setiap siswa
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
+                  <input type="checkbox" id="exam-randomize-options" checked>
+                  Acak pilihan jawaban (opsi A, B, C, D) pada setiap butir soal
+                </label>
+              </div>
+
+              <div id="exam-form-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-create-exam">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-exam">Simpan & Terbitkan Ujian</button>
+              </div>
+            </form>
+          </div>
+        </div>
 
         <!-- SEKSI 3: BANK SOAL -->
         <section id="panel-bank-soal" class="menu-panel d-none">
@@ -227,7 +305,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 7: DATA KELAS (CHECKPOINT 14) -->
+        <!-- SEKSI 7: DATA KELAS -->
         <section id="panel-kelas" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
