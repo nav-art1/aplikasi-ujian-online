@@ -90,7 +90,7 @@
               <li>Buka menu <strong>Kelas</strong> untuk membuat rombel (contoh: VII A).</li>
               <li>Buka menu <strong>Siswa</strong> untuk memasukkan daftar murid.</li>
               <li>Buka menu <strong>Ujian</strong> untuk membuat jadwal dan token ujian.</li>
-              <li>Buka menu <strong>Bank Soal</strong>, pilih ujian, lalu klik <strong>+ Buat Soal Baru</strong>.</li>
+              <li>Buka menu <strong>Bank Soal</strong>, buat stimulus bacaan jika diperlukan, lalu input soal di <strong>Tambah Soal</strong>.</li>
               <li>Bagikan Token Ujian kepada siswa untuk mulai mengerjakan.</li>
             </ol>
           </div>
@@ -193,12 +193,15 @@
           </div>
         </div>
 
-        <!-- SEKSI 3: BANK SOAL -->
+        <!-- SEKSI 3: BANK SOAL (CHECKPOINT 18: DILENGKAPI TOMBOL TAMBAH STIMULUS) -->
         <section id="panel-bank-soal" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
               <span class="card-title">Filter Bank Soal</span>
-              <button class="btn btn-primary btn-sm" id="btn-goto-tambah-soal">+ Buat Soal Baru</button>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" id="btn-open-modal-stimulus">+ Buat Stimulus (Wacana)</button>
+                <button class="btn btn-primary btn-sm" id="btn-goto-tambah-soal">+ Buat Soal Baru</button>
+              </div>
             </div>
             <div style="display: flex; gap: 15px; align-items: center; max-width: 500px;">
               <label for="bank-exam-filter" style="font-weight: 600; white-space: nowrap;">Pilih Ujian:</label>
@@ -215,7 +218,40 @@
           </div>
         </section>
 
-        <!-- SEKSI 4: TAMBAH SOAL (SUDAH DILENGKAPI OPSI F) -->
+        <!-- MODAL BUAT STIMULUS BARU -->
+        <div id="modal-create-stimulus" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 650px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Tambah Grup Stimulus / Wacana</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-stimulus">X</button>
+            </div>
+            <form id="form-create-stimulus">
+              <div class="form-group">
+                <label for="stimulus-title">Judul Stimulus / Tema Wacana</label>
+                <input type="text" id="stimulus-title" required placeholder="Contoh: Teks Bacaan Ekosistem Hutan Mangrove">
+              </div>
+
+              <div class="form-group">
+                <label for="stimulus-image-url">URL Gambar Stimulus (Opsional)</label>
+                <input type="url" id="stimulus-image-url" placeholder="https://contoh.com/gambar-infografis.jpg">
+              </div>
+
+              <div class="form-group">
+                <label for="stimulus-content">Isi Wacana / Narasi Teks</label>
+                <textarea id="stimulus-content" rows="6" required placeholder="Tuliskan wacana teks, artikel, dialog, atau deskripsi data di sini..."></textarea>
+              </div>
+
+              <div id="stimulus-form-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-create-stimulus">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-stimulus">Simpan Stimulus</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- SEKSI 4: TAMBAH SOAL (CHECKPOINT 18: RELASI KE STIMULUS) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
@@ -233,6 +269,16 @@
             <form id="form-create-question">
               <input type="hidden" id="question-exam-id">
 
+              <!-- Baris 1: Stimulus Group (Opsional) -->
+              <div class="form-group" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                <label for="question-stimulus-id" style="font-weight: 600; color: var(--text-main);">Kaitkan ke Grup Stimulus</label>
+                <select id="question-stimulus-id">
+                  <option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>
+                </select>
+                <small class="text-muted" style="display: block; margin-top: 4px;">Pilih grup stimulus jika butir pertanyaan ini mengacu pada teks wacana bersama.</small>
+              </div>
+
+              <!-- Baris 2: Nomor Asli & Tipe Soal & Bobot Poin -->
               <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 15px;">
                 <div class="form-group">
                   <label for="question-number">No. Soal Asli</label>
@@ -251,16 +297,19 @@
                 </div>
               </div>
 
+              <!-- Baris 3: URL Gambar Khusus Soal (Opsional) -->
               <div class="form-group">
-                <label for="question-image-url">URL Gambar Soal (Opsional)</label>
+                <label for="question-image-url">URL Gambar Butir Soal (Opsional)</label>
                 <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
               </div>
 
+              <!-- Baris 4: Teks Isi Soal -->
               <div class="form-group">
                 <label for="question-content">Teks Soal / Pertanyaan</label>
                 <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini..."></textarea>
               </div>
 
+              <!-- Baris 5: Pilihan Jawaban (A, B, C, D, E, F) -->
               <div style="margin-top: 25px; margin-bottom: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                   <label style="font-weight: bold; font-size: 1rem; color: var(--text-main);">Pilihan Jawaban & Kunci Benar</label>
@@ -298,7 +347,7 @@
                     <strong style="width: 25px;">E.</strong>
                     <input type="text" class="option-text-input" data-label="E" placeholder="Teks pilihan E (opsional)..." style="flex-grow: 1;">
                   </div>
-                  <!-- Opsi F (Opsional untuk PGK / 6 Opsi) -->
+                  <!-- Opsi F (Opsional) -->
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="radio" name="correct_key" class="option-key-input" value="F" title="Tandai Benar">
                     <strong style="width: 25px;">F.</strong>
