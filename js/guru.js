@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, & SOAL
+// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, & SOAL
 // ==========================================================================
 
 const GuruModule = {
@@ -35,6 +35,7 @@ const GuruModule = {
     this.setupClassEventListeners();
     this.setupExamEventListeners();
     this.setupBankSoalEventListeners();
+    this.setupStimulusEventListeners();
     this.setupQuestionFormEventListeners();
   },
 
@@ -922,13 +923,14 @@ const GuruModule = {
 
       if (qErr) throw qErr;
 
-      if (!questions || questions.length === 0) {
+      if ((!questions || questions.length === 0) && (!stimulusGroups || stimulusGroups.length === 0)) {
         container.innerHTML = `
           <div class="card text-center" style="padding: 40px 20px;">
-            <p class="text-muted">Belum ada butir soal pada ujian ini.</p>
-            <button class="btn btn-primary" style="margin-top: 15px;" onclick="document.querySelector('.sidebar-menu .nav-link[data-target=\\'panel-tambah-soal\\']').click();">
-              + Mulai Tambah Soal
-            </button>
+            <p class="text-muted">Belum ada butir soal atau stimulus pada ujian ini.</p>
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+              <button class="btn btn-secondary" onclick="document.getElementById('btn-open-modal-stimulus').click();">+ Buat Stimulus</button>
+              <button class="btn btn-primary" onclick="document.querySelector('.sidebar-menu .nav-link[data-target=\\'panel-tambah-soal\\']').click();">+ Mulai Tambah Soal</button>
+            </div>
           </div>
         `;
         return;
@@ -938,15 +940,18 @@ const GuruModule = {
 
       if (stimulusGroups && stimulusGroups.length > 0) {
         stimulusGroups.forEach((stim, sIdx) => {
-          const stimQuestions = questions.filter(q => q.stimulus_group_id === stim.id);
+          const stimQuestions = (questions || []).filter(q => q.stimulus_group_id === stim.id);
 
           contentHtml += `
             <div class="card" style="border-left: 4px solid var(--primary-color); background: #fdfdfd; margin-bottom: 20px;">
               <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0;">
                 <span style="font-weight: bold; color: var(--primary-color);">Grup Stimulus ${sIdx + 1}: ${stim.title || 'Tanpa Judul'}</span>
-                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus Grup Stimulus</button>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}')">+ Tambah Soal di Stimulus Ini</button>
+                  <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus Stimulus</button>
+                </div>
               </div>
-              <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6;">
+              <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6; white-space: pre-line;">
                 ${stim.content || ''}
               </div>
               ${stim.image_url ? `<div style="margin-bottom: 15px;"><img src="${stim.image_url}" style="max-width: 100%; max-height: 250px; border-radius: 6px; border: 1px solid var(--border-color);"></div>` : ''}
@@ -955,14 +960,14 @@ const GuruModule = {
                 Butir Soal Terkait (${stimQuestions.length} Soal):
               </div>
               <div style="display: flex; flex-direction: column; gap: 10px;">
-                ${stimQuestions.map(q => this.renderQuestionItem(q, examId)).join('')}
+                ${stimQuestions.length > 0 ? stimQuestions.map(q => this.renderQuestionItem(q, examId)).join('') : '<p class="text-muted" style="font-size: 0.85rem;">Belum ada butir soal yang dikaitkan dengan stimulus ini.</p>'}
               </div>
             </div>
           `;
         });
       }
 
-      const standaloneQuestions = questions.filter(q => !q.stimulus_group_id);
+      const standaloneQuestions = (questions || []).filter(q => !q.stimulus_group_id);
       if (standaloneQuestions.length > 0) {
         contentHtml += `
           <div class="card">
@@ -1061,6 +1066,120 @@ const GuruModule = {
     }
   },
 
+  // Navigasi cepat dari Bank Soal langsung ke Tambah Soal dengan stimulus terpilih
+  goToAddQuestionWithStimulus(stimulusId) {
+    const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
+    if (navTambah) {
+      navTambah.click();
+      setTimeout(() => {
+        const stimSelect = document.getElementById("question-stimulus-id");
+        if (stimSelect) stimSelect.value = stimulusId;
+      }, 150);
+    }
+  },
+
+  // ==========================================
+  // MANAJEMEN STIMULUS MODAL (CHECKPOINT 18)
+  // ==========================================
+
+  setupStimulusEventListeners() {
+    const modalStimulus = document.getElementById("modal-create-stimulus");
+    const btnOpen = document.getElementById("btn-open-modal-stimulus");
+    const btnClose = document.getElementById("btn-close-modal-stimulus");
+    const btnCancel = document.getElementById("btn-cancel-create-stimulus");
+    const form = document.getElementById("form-create-stimulus");
+    const alertEl = document.getElementById("stimulus-form-alert");
+    const btnSave = document.getElementById("btn-save-stimulus");
+
+    const openModal = () => {
+      if (!this.selectedExamId) {
+        alert("Silakan pilih sesi ujian terlebih dahulu sebelum membuat stimulus.");
+        return;
+      }
+      form.reset();
+      alertEl.classList.add("d-none");
+      btnSave.disabled = false;
+      btnSave.innerText = "Simpan Stimulus";
+      modalStimulus.classList.remove("d-none");
+    };
+
+    const closeModal = () => modalStimulus.classList.add("d-none");
+
+    if (btnOpen) btnOpen.addEventListener("click", openModal);
+    if (btnClose) btnClose.addEventListener("click", closeModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+
+    if (modalStimulus) {
+      modalStimulus.addEventListener("click", (e) => {
+        if (e.target === modalStimulus) closeModal();
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        alertEl.classList.add("d-none");
+
+        const title = document.getElementById("stimulus-title").value.trim();
+        const imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
+        const content = document.getElementById("stimulus-content").value.trim();
+
+        btnSave.disabled = true;
+        btnSave.innerText = "Menyimpan...";
+
+        const client = getSupabaseClient();
+        try {
+          const { error } = await client
+            .from('stimulus_groups')
+            .insert({
+              exam_id: this.selectedExamId,
+              title: title,
+              image_url: imageUrl,
+              content: content
+            });
+
+          if (error) throw error;
+
+          closeModal();
+          await this.loadBankSoalContent(this.selectedExamId);
+        } catch (err) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = `Gagal menyimpan stimulus: ${err.message}`;
+          alertEl.classList.remove("d-none");
+          btnSave.disabled = false;
+          btnSave.innerText = "Coba Simpan Lagi";
+        }
+      });
+    }
+  },
+
+  // Mengisi dropdown grup stimulus pada form Tambah Soal
+  async loadStimulusDropdown(examId) {
+    const selectEl = document.getElementById("question-stimulus-id");
+    if (!selectEl) return;
+
+    selectEl.innerHTML = '<option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>';
+
+    if (!examId) return;
+
+    const client = getSupabaseClient();
+    try {
+      const { data: groups, error } = await client
+        .from('stimulus_groups')
+        .select('id, title')
+        .eq('exam_id', examId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      (groups || []).forEach((g, idx) => {
+        selectEl.innerHTML += `<option value="${g.id}">Grup ${idx + 1}: ${g.title || 'Tanpa Judul'}</option>`;
+      });
+    } catch (err) {
+      console.warn("Gagal memuat dropdown stimulus:", err);
+    }
+  },
+
   // ==========================================
   // FORMULIR TAMBAH SOAL
   // ==========================================
@@ -1073,17 +1192,21 @@ const GuruModule = {
     if (examIdInput) examIdInput.value = this.selectedExamId || "";
     if (displayEl) displayEl.innerText = this.selectedExamTitle || "-";
 
-    if (this.selectedExamId && numberInput) {
-      const client = getSupabaseClient();
-      try {
-        const { count } = await client
-          .from('questions')
-          .select('*', { count: 'exact', head: true })
-          .eq('exam_id', this.selectedExamId);
-        
-        numberInput.value = (count || 0) + 1;
-      } catch (err) {
-        console.warn("Gagal menghitung nomor urut otomatis:", err);
+    if (this.selectedExamId) {
+      await this.loadStimulusDropdown(this.selectedExamId);
+
+      if (numberInput) {
+        const client = getSupabaseClient();
+        try {
+          const { count } = await client
+            .from('questions')
+            .select('*', { count: 'exact', head: true })
+            .eq('exam_id', this.selectedExamId);
+          
+          numberInput.value = (count || 0) + 1;
+        } catch (err) {
+          console.warn("Gagal menghitung nomor urut otomatis:", err);
+        }
       }
     }
   },
@@ -1131,6 +1254,7 @@ const GuruModule = {
         formAlert.classList.add("d-none");
 
         const examId = this.selectedExamId || document.getElementById("question-exam-id")?.value;
+        const stimulusId = document.getElementById("question-stimulus-id").value || null;
         const originalNumber = parseInt(document.getElementById("question-number").value, 10);
         const questionType = document.getElementById("question-type").value;
         const points = parseFloat(document.getElementById("question-points").value) || 1.0;
@@ -1182,11 +1306,11 @@ const GuruModule = {
 
         const client = getSupabaseClient();
         try {
-          // Simpan butir soal ke tabel questions (lengkap dengan array correct_keys)
           const { data: newQuestion, error: qErr } = await client
             .from('questions')
             .insert({
               exam_id: examId,
+              stimulus_group_id: stimulusId,
               original_number: originalNumber,
               question_type: questionType,
               points: points,
@@ -1200,7 +1324,6 @@ const GuruModule = {
 
           if (qErr) throw qErr;
 
-          // Simpan opsi jawaban ke tabel options
           const optionsPayload = optionsData.map(opt => ({
             question_id: newQuestion.id,
             option_label: opt.option_label,
@@ -1218,7 +1341,6 @@ const GuruModule = {
           formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan!`;
           formAlert.classList.remove("d-none");
 
-          // Reset teks soal dan opsi
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
           textInputs.forEach(input => input.value = "");
@@ -1226,7 +1348,6 @@ const GuruModule = {
 
           document.getElementById("question-number").value = originalNumber + 1;
 
-          // Perbarui isi Bank Soal di background
           await this.loadBankSoalContent(examId);
         } catch (err) {
           formAlert.className = "alert alert-error";
