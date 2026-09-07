@@ -215,7 +215,7 @@
           </div>
         </section>
 
-        <!-- SEKSI 4: TAMBAH SOAL (UJIAN OTOMATIS DARI BANK SOAL) -->
+        <!-- SEKSI 4: TAMBAH SOAL (SUDAH DILENGKAPI OPSI F) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
@@ -223,7 +223,6 @@
               <button class="btn btn-secondary btn-sm" id="btn-back-to-bank">&larr; Kembali ke Bank Soal</button>
             </div>
 
-            <!-- Banner info ujian aktif -->
             <div id="active-exam-banner" style="background: #e0e7ff; border: 1px solid #c7d2fe; padding: 10px 14px; border-radius: 6px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
               <div>
                 <small style="color: #3730a3; font-weight: 600; text-transform: uppercase;">Menambahkan Soal untuk Ujian:</small>
@@ -232,10 +231,8 @@
             </div>
 
             <form id="form-create-question">
-              <!-- ID Ujian tersembunyi (otomatis terisi) -->
               <input type="hidden" id="question-exam-id">
 
-              <!-- Baris 1: Nomor Asli & Tipe Soal & Bobot Poin -->
               <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 15px;">
                 <div class="form-group">
                   <label for="question-number">No. Soal Asli</label>
@@ -254,19 +251,16 @@
                 </div>
               </div>
 
-              <!-- Baris 2: URL Gambar Soal (Opsional) -->
               <div class="form-group">
                 <label for="question-image-url">URL Gambar Soal (Opsional)</label>
                 <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
               </div>
 
-              <!-- Baris 3: Teks Isi Soal -->
               <div class="form-group">
                 <label for="question-content">Teks Soal / Pertanyaan</label>
                 <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini..."></textarea>
               </div>
 
-              <!-- Baris 4: Pilihan Jawaban (A, B, C, D, E) -->
               <div style="margin-top: 25px; margin-bottom: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                   <label style="font-weight: bold; font-size: 1rem; color: var(--text-main);">Pilihan Jawaban & Kunci Benar</label>
@@ -303,6 +297,12 @@
                     <input type="radio" name="correct_key" class="option-key-input" value="E" title="Tandai Benar">
                     <strong style="width: 25px;">E.</strong>
                     <input type="text" class="option-text-input" data-label="E" placeholder="Teks pilihan E (opsional)..." style="flex-grow: 1;">
+                  </div>
+                  <!-- Opsi F (Opsional untuk PGK / 6 Opsi) -->
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="radio" name="correct_key" class="option-key-input" value="F" title="Tandai Benar">
+                    <strong style="width: 25px;">F.</strong>
+                    <input type="text" class="option-text-input" data-label="F" placeholder="Teks pilihan F (opsional)..." style="flex-grow: 1;">
                   </div>
                 </div>
               </div>
