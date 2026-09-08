@@ -9,6 +9,7 @@ const GuruModule = {
   examsList: [],
   selectedExamId: null,
   selectedExamTitle: '',
+  targetStimulusId: null, // Menyimpan ID stimulus tujuan saat diklik dari Bank Soal
 
   // Utilitas render formula matematika KaTeX otomatis
   renderMath(containerElement) {
@@ -135,6 +136,9 @@ const GuruModule = {
           }
 
           await this.syncActiveExamToQuestionForm();
+        } else {
+          // Jika berpindah ke menu lain, reset target stimulus
+          this.targetStimulusId = null;
         }
 
         navLinks.forEach(l => l.classList.remove("active"));
@@ -938,6 +942,7 @@ const GuruModule = {
           alert("Silakan pilih salah satu ujian di dropdown Bank Soal terlebih dahulu.");
           return;
         }
+        this.targetStimulusId = null; // Tambah biasa tanpa mengunci stimulus
         const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
         if (navTambah) navTambah.click();
       });
@@ -1148,14 +1153,12 @@ const GuruModule = {
     }
   },
 
+  // Kunci stimulus yang dipilih saat tombol '+ Tambah Soal di Stimulus Ini' diklik
   goToAddQuestionWithStimulus(stimulusId) {
+    this.targetStimulusId = stimulusId;
     const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
     if (navTambah) {
       navTambah.click();
-      setTimeout(() => {
-        const stimSelect = document.getElementById("question-stimulus-id");
-        if (stimSelect) stimSelect.value = stimulusId;
-      }, 150);
     }
   },
 
@@ -1357,6 +1360,11 @@ const GuruModule = {
       (groups || []).forEach((g, idx) => {
         selectEl.innerHTML += `<option value="${g.id}">Grup ${idx + 1}: ${g.title || 'Tanpa Judul'}</option>`;
       });
+
+      // Otomatis kunci ke stimulus yang dipilih jika berasal dari tombol '+ Tambah Soal di Stimulus Ini'
+      if (this.targetStimulusId && targetSelectId === "question-stimulus-id") {
+        selectEl.value = this.targetStimulusId;
+      }
     } catch (err) {
       console.warn("Gagal memuat dropdown stimulus:", err);
     }
@@ -1377,7 +1385,6 @@ const GuruModule = {
     if (this.selectedExamId) {
       await this.loadStimulusDropdown(this.selectedExamId, "question-stimulus-id");
 
-      // Gunakan nomor terbesar + 1 anti bentrok nomor kembar
       if (numberInput) {
         numberInput.value = await this.getNextQuestionNumber(this.selectedExamId);
       }
@@ -1411,6 +1418,7 @@ const GuruModule = {
 
     if (btnBack) {
       btnBack.addEventListener("click", () => {
+        this.targetStimulusId = null;
         const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
         if (bankTab) bankTab.click();
       });
@@ -1444,7 +1452,8 @@ const GuruModule = {
         formAlert.classList.add("d-none");
 
         const examId = this.selectedExamId || document.getElementById("question-exam-id")?.value;
-        const stimulusId = document.getElementById("question-stimulus-id").value || null;
+        const stimulusSelect = document.getElementById("question-stimulus-id");
+        const stimulusId = stimulusSelect?.value || this.targetStimulusId || null;
         const originalNumber = parseInt(document.getElementById("question-number").value, 10);
         const questionType = document.getElementById("question-type").value;
         const points = parseFloat(document.getElementById("question-points").value) || 1.0;
@@ -1546,6 +1555,11 @@ const GuruModule = {
 
           // Set nomor berikutnya yang aman secara real-time
           document.getElementById("question-number").value = await this.getNextQuestionNumber(examId);
+
+          // Jika masih dalam alur stimulus yang sama, pertahankan kuncian pilihan dropdown-nya
+          if (this.targetStimulusId && stimulusSelect) {
+            stimulusSelect.value = this.targetStimulusId;
+          }
 
           await this.loadBankSoalContent(examId);
         } catch (err) {
