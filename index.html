@@ -1,31 +1,53 @@
 <!DOCTYPE html>
-<html lang="id"> 
+<html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aplikasi Ujian Online</title>
+  <title>Portal Ujian Online Siswa</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-  <div class="container portal-container">
-    <header class="text-center">
-      <h1>Sistem Ujian Online</h1>
-      <p>Silakan pilih gerbang masuk sesuai peran Anda</p>
+<body style="background: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+
+  <div class="container form-container" style="margin: 20px auto; max-width: 440px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);">
+    <header class="text-center mb-4">
+      <h2 style="color: var(--primary-color); font-weight: 800; letter-spacing: -0.5px;">Portal Ujian Siswa</h2>
+      <p class="text-muted" style="font-size: 0.9rem; margin-top: 4px;">Masukkan Nomor Siswa (NIS/NISN) dan Token yang diberikan oleh guru pengawas</p>
     </header>
 
-    <div class="portal-grid">
-      <div class="portal-card">
-        <h2>Siswa</h2>
-        <p>Masuk menggunakan nama dan token yang diberikan oleh guru.</p>
-        <a href="siswa.html" class="btn btn-primary btn-block">Masuk Ujian Siswa</a>
+    <form id="form-student-login">
+      <div class="form-group">
+        <label for="student-nisn">Nomor Induk Siswa (NIS / NISN)</label>
+        <input type="text" id="student-nisn" required placeholder="Contoh: 10293" autocomplete="off">
       </div>
 
-      <div class="portal-card">
-        <h2>Guru</h2>
-        <p>Login ke dashboard manajemen ujian, bank soal, dan rekap nilai.</p>
-        <a href="guru.html" class="btn btn-secondary btn-block">Login Guru</a>
+      <div class="form-group">
+        <label for="exam-token-input">Token Ujian</label>
+        <input type="text" id="exam-token-input" required maxlength="10" placeholder="Contoh: IPA7A26" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px; font-size: 1.1rem; text-align: center;" autocomplete="off">
       </div>
+
+      <div id="student-login-alert" class="alert d-none"></div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="btn-submit-student-login" style="padding: 12px; font-size: 1rem; margin-top: 10px;">
+        Masuk Ruang Ujian &rarr;
+      </button>
+    </form>
+
+    <div class="text-center" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+      <a href="guru.html" class="text-muted" style="text-decoration: none; font-size: 0.85rem;">
+        Login sebagai Guru Pengawas &rarr;
+      </a>
     </div>
   </div>
+
+  <!-- Pustaka Ekosistem -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/siswa-auth.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      StudentAuthModule.init();
+    });
+  </script>
 </body>
 </html>
