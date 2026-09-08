@@ -193,7 +193,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 3: BANK SOAL (CHECKPOINT 18: DILENGKAPI TOMBOL TAMBAH STIMULUS) -->
+        <!-- SEKSI 3: BANK SOAL -->
         <section id="panel-bank-soal" class="menu-panel d-none">
           <div class="card">
             <div class="card-header">
@@ -251,7 +251,77 @@
           </div>
         </div>
 
-        <!-- SEKSI 4: TAMBAH SOAL (CHECKPOINT 18: RELASI KE STIMULUS) -->
+        <!-- MODAL EDIT SOAL (CHECKPOINT 19) -->
+        <div id="modal-edit-question" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 750px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Edit Butir Soal</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit-q">X</button>
+            </div>
+            <form id="form-edit-question">
+              <input type="hidden" id="edit-q-id">
+              <input type="hidden" id="edit-q-exam-id">
+
+              <!-- Baris 1: Stimulus Group -->
+              <div class="form-group" style="background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+                <label for="edit-q-stimulus-id" style="font-weight: 600;">Grup Stimulus</label>
+                <select id="edit-q-stimulus-id">
+                  <option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>
+                </select>
+              </div>
+
+              <!-- Baris 2: Nomor, Tipe, Poin -->
+              <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 12px;">
+                <div class="form-group">
+                  <label for="edit-q-number">No. Asli</label>
+                  <input type="number" id="edit-q-number" min="1" required>
+                </div>
+                <div class="form-group">
+                  <label for="edit-q-type">Tipe Soal</label>
+                  <select id="edit-q-type" required>
+                    <option value="pg">Pilihan Ganda (1 Kunci)</option>
+                    <option value="pgk">PG Kompleks (Multi Kunci)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="edit-q-points">Poin</label>
+                  <input type="number" id="edit-q-points" min="0.1" step="0.1" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="edit-q-image-url">URL Gambar (Opsional)</label>
+                <input type="url" id="edit-q-image-url" placeholder="https://contoh.com/gambar-soal.png">
+              </div>
+
+              <div class="form-group">
+                <label for="edit-q-content">Teks Soal / Pertanyaan</label>
+                <textarea id="edit-q-content" rows="4" required></textarea>
+              </div>
+
+              <!-- Baris Pilihan Jawaban Edit -->
+              <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <label style="font-weight: bold; font-size: 0.95rem;">Pilihan Jawaban & Kunci</label>
+                  <small id="edit-key-instruction" class="text-muted">Pilih 1 kunci benar.</small>
+                </div>
+
+                <div id="edit-options-container" style="display: flex; flex-direction: column; gap: 10px;">
+                  <!-- Opsi A s/d F akan di-generate secara dinamis sesuai data -->
+                </div>
+              </div>
+
+              <div id="edit-q-form-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-q">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-update-question">Simpan Perubahan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- SEKSI 4: TAMBAH SOAL -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
