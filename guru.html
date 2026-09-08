@@ -6,7 +6,7 @@
   <title>Panel Guru - Aplikasi Ujian Online</title>
   <link rel="stylesheet" href="css/style.css">
   
-  <!-- KaTeX CSS untuk Notasi Matematika & Sains (Checkpoint 21) -->
+  <!-- KaTeX CSS untuk Notasi Matematika & Sains -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 </head>
 <body>
@@ -94,7 +94,7 @@
               <li>Buka menu <strong>Siswa</strong> untuk memasukkan daftar murid.</li>
               <li>Buka menu <strong>Ujian</strong> untuk membuat jadwal dan token ujian.</li>
               <li>Buka menu <strong>Bank Soal</strong>, buat stimulus bacaan jika diperlukan, lalu input soal di <strong>Tambah Soal</strong>.</li>
-              <li>Gunakan notasi <code>$...$</code> untuk menulis rumus matematika (contoh: <code>$x^2 + \frac{1}{2}$</code>).</li>
+              <li>Gunakan notasi <code>$...$</code> untuk rumus matematika (contoh: <code>$2\frac{1}{3} + 1\frac{1}{3} = \dots$</code>).</li>
               <li>Bagikan Token Ujian kepada siswa untuk mulai mengerjakan.</li>
             </ol>
           </div>
@@ -291,7 +291,7 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT SOAL -->
+        <!-- MODAL EDIT SOAL (DILENGKAPI LIVE PREVIEW KATEX) -->
         <div id="modal-edit-question" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 780px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -335,6 +335,12 @@
               <div class="form-group">
                 <label for="edit-q-content">Teks Soal / Pertanyaan (Dukung Matematika <code>$...$</code>)</label>
                 <textarea id="edit-q-content" rows="4" required></textarea>
+
+                <!-- Kotak Live Preview KaTeX di Modal Edit -->
+                <div id="edit-math-preview-box" style="margin-top: 8px; padding: 10px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; min-height: 42px; display: none;">
+                  <small style="display: block; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; font-size: 0.75rem;">Pratinjau Tampilan Rumus:</small>
+                  <div id="edit-math-preview-content" style="font-size: 1rem; color: var(--text-main); white-space: pre-line;"></div>
+                </div>
               </div>
 
               <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
@@ -356,7 +362,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 4: TAMBAH SOAL -->
+        <!-- SEKSI 4: TAMBAH SOAL (DILENGKAPI LIVE PREVIEW KATEX) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
@@ -408,10 +414,16 @@
                 <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
               </div>
 
-              <!-- Baris 4: Teks Isi Soal -->
+              <!-- Baris 4: Teks Isi Soal & Live Preview Box -->
               <div class="form-group">
                 <label for="question-content">Teks Soal / Pertanyaan (Dukung Matematika <code>$...$</code>)</label>
-                <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini... Gunakan $...$ untuk rumus matematika."></textarea>
+                <textarea id="question-content" rows="4" required placeholder="Contoh: Hasil dari $2\frac{1}{3} + 1\frac{1}{3} = \dots$"></textarea>
+
+                <!-- Kotak Live Preview KaTeX di Form Tambah Soal -->
+                <div id="math-preview-box" style="margin-top: 8px; padding: 10px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; min-height: 42px; display: none;">
+                  <small style="display: block; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; font-size: 0.75rem;">Pratinjau Tampilan Rumus:</small>
+                  <div id="math-preview-content" style="font-size: 1rem; color: var(--text-main); white-space: pre-line;"></div>
+                </div>
               </div>
 
               <!-- Baris 5: Pilihan Jawaban (A, B, C, D, E, F) -->
@@ -646,7 +658,7 @@
   <!-- Script Ekosistem -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
-  <!-- KaTeX Core & Auto-render Extension (Checkpoint 21) -->
+  <!-- KaTeX Core & Auto-render Extension -->
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
   
