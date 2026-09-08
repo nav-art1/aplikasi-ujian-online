@@ -939,6 +939,7 @@ const GuruModule = {
 
       let contentHtml = '';
 
+      // Tampilkan Grup Stimulus jika ada
       if (stimulusGroups && stimulusGroups.length > 0) {
         stimulusGroups.forEach((stim, sIdx) => {
           const stimQuestions = (questions || []).filter(q => q.stimulus_group_id === stim.id);
@@ -947,9 +948,10 @@ const GuruModule = {
             <div class="card" style="border-left: 4px solid var(--primary-color); background: #fdfdfd; margin-bottom: 20px;">
               <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0;">
                 <span style="font-weight: bold; color: var(--primary-color);">Grup Stimulus ${sIdx + 1}: ${stim.title || 'Tanpa Judul'}</span>
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                   <button class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}')">+ Tambah Soal di Stimulus Ini</button>
-                  <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus Stimulus</button>
+                  <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit Stimulus</button>
+                  <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}', ${stimQuestions.length})">Hapus Stimulus</button>
                 </div>
               </div>
               <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6; white-space: pre-line;">
@@ -968,6 +970,7 @@ const GuruModule = {
         });
       }
 
+      // Tampilkan Soal Mandiri
       const standaloneQuestions = (questions || []).filter(q => !q.stimulus_group_id);
       if (standaloneQuestions.length > 0) {
         contentHtml += `
@@ -1052,8 +1055,13 @@ const GuruModule = {
     }
   },
 
-  async deleteStimulusGroup(stimulusId, examId) {
-    const yakin = confirm("PERINGATAN: Menghapus grup stimulus akan melepaskan keterikatan stimulus pada soal-soal di dalamnya (soal akan tetap ada sebagai soal mandiri).\n\nLanjutkan penghapusan?");
+  async deleteStimulusGroup(stimulusId, examId, questionCount = 0) {
+    let confirmMsg = "Apakah Anda yakin ingin menghapus grup stimulus ini?";
+    if (questionCount > 0) {
+      confirmMsg = `Grup stimulus ini memuat ${questionCount} butir soal.\n\nJika grup stimulus dihapus, soal-soal di dalamnya AKAN TETAP ADA dan otomatis berubah menjadi 'Soal Mandiri (Tanpa Stimulus)'.\n\nLanjutkan penghapusan?`;
+    }
+
+    const yakin = confirm(confirmMsg);
     if (!yakin) return;
 
     const client = getSupabaseClient();
@@ -1082,53 +1090,54 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN STIMULUS MODAL
+  // MANAJEMEN STIMULUS (BUAT & EDIT - CHECKPOINT 20)
   // ==========================================
 
   setupStimulusEventListeners() {
-    const modalStimulus = document.getElementById("modal-create-stimulus");
-    const btnOpen = document.getElementById("btn-open-modal-stimulus");
-    const btnClose = document.getElementById("btn-close-modal-stimulus");
-    const btnCancel = document.getElementById("btn-cancel-create-stimulus");
-    const form = document.getElementById("form-create-stimulus");
-    const alertEl = document.getElementById("stimulus-form-alert");
-    const btnSave = document.getElementById("btn-save-stimulus");
+    // 1. Buat Stimulus Baru
+    const modalCreate = document.getElementById("modal-create-stimulus");
+    const btnOpenCreate = document.getElementById("btn-open-modal-stimulus");
+    const btnCloseCreate = document.getElementById("btn-close-modal-stimulus");
+    const btnCancelCreate = document.getElementById("btn-cancel-create-stimulus");
+    const formCreate = document.getElementById("form-create-stimulus");
+    const alertCreate = document.getElementById("stimulus-form-alert");
+    const btnSaveCreate = document.getElementById("btn-save-stimulus");
 
-    const openModal = () => {
+    const openCreateModal = () => {
       if (!this.selectedExamId) {
         alert("Silakan pilih sesi ujian terlebih dahulu sebelum membuat stimulus.");
         return;
       }
-      form.reset();
-      alertEl.classList.add("d-none");
-      btnSave.disabled = false;
-      btnSave.innerText = "Simpan Stimulus";
-      modalStimulus.classList.remove("d-none");
+      formCreate.reset();
+      alertCreate.classList.add("d-none");
+      btnSaveCreate.disabled = false;
+      btnSaveCreate.innerText = "Simpan Stimulus";
+      modalCreate.classList.remove("d-none");
     };
 
-    const closeModal = () => modalStimulus.classList.add("d-none");
+    const closeCreateModal = () => modalCreate.classList.add("d-none");
 
-    if (btnOpen) btnOpen.addEventListener("click", openModal);
-    if (btnClose) btnClose.addEventListener("click", closeModal);
-    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+    if (btnOpenCreate) btnOpenCreate.addEventListener("click", openCreateModal);
+    if (btnCloseCreate) btnCloseCreate.addEventListener("click", closeCreateModal);
+    if (btnCancelCreate) btnCancelCreate.addEventListener("click", closeCreateModal);
 
-    if (modalStimulus) {
-      modalStimulus.addEventListener("click", (e) => {
-        if (e.target === modalStimulus) closeModal();
+    if (modalCreate) {
+      modalCreate.addEventListener("click", (e) => {
+        if (e.target === modalCreate) closeCreateModal();
       });
     }
 
-    if (form) {
-      form.addEventListener("submit", async (e) => {
+    if (formCreate) {
+      formCreate.addEventListener("submit", async (e) => {
         e.preventDefault();
-        alertEl.classList.add("d-none");
+        alertCreate.classList.add("d-none");
 
         const title = document.getElementById("stimulus-title").value.trim();
         const imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
         const content = document.getElementById("stimulus-content").value.trim();
 
-        btnSave.disabled = true;
-        btnSave.innerText = "Menyimpan...";
+        btnSaveCreate.disabled = true;
+        btnSaveCreate.innerText = "Menyimpan...";
 
         const client = getSupabaseClient();
         try {
@@ -1143,16 +1152,107 @@ const GuruModule = {
 
           if (error) throw error;
 
-          closeModal();
+          closeCreateModal();
           await this.loadBankSoalContent(this.selectedExamId);
         } catch (err) {
-          alertEl.className = "alert alert-error";
-          alertEl.innerText = `Gagal menyimpan stimulus: ${err.message}`;
-          alertEl.classList.remove("d-none");
-          btnSave.disabled = false;
-          btnSave.innerText = "Coba Simpan Lagi";
+          alertCreate.className = "alert alert-error";
+          alertCreate.innerText = `Gagal menyimpan stimulus: ${err.message}`;
+          alertCreate.classList.remove("d-none");
+          btnSaveCreate.disabled = false;
+          btnSaveCreate.innerText = "Coba Simpan Lagi";
         }
       });
+    }
+
+    // 2. Edit Stimulus
+    const modalEdit = document.getElementById("modal-edit-stimulus");
+    const btnCloseEdit = document.getElementById("btn-close-modal-edit-stimulus");
+    const btnCancelEdit = document.getElementById("btn-cancel-edit-stimulus");
+    const formEdit = document.getElementById("form-edit-stimulus");
+    const alertEdit = document.getElementById("edit-stimulus-form-alert");
+    const btnUpdateEdit = document.getElementById("btn-update-stimulus");
+
+    const closeEditModal = () => modalEdit.classList.add("d-none");
+
+    if (btnCloseEdit) btnCloseEdit.addEventListener("click", closeEditModal);
+    if (btnCancelEdit) btnCancelEdit.addEventListener("click", closeEditModal);
+
+    if (modalEdit) {
+      modalEdit.addEventListener("click", (e) => {
+        if (e.target === modalEdit) closeEditModal();
+      });
+    }
+
+    if (formEdit) {
+      formEdit.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        alertEdit.classList.add("d-none");
+
+        const stimulusId = document.getElementById("edit-stimulus-id").value;
+        const examId = document.getElementById("edit-stimulus-exam-id").value;
+        const title = document.getElementById("edit-stimulus-title").value.trim();
+        const imageUrl = document.getElementById("edit-stimulus-image-url").value.trim() || null;
+        const content = document.getElementById("edit-stimulus-content").value.trim();
+
+        btnUpdateEdit.disabled = true;
+        btnUpdateEdit.innerText = "Memperbarui...";
+
+        const client = getSupabaseClient();
+        try {
+          const { error } = await client
+            .from('stimulus_groups')
+            .update({
+              title: title,
+              image_url: imageUrl,
+              content: content
+            })
+            .eq('id', stimulusId);
+
+          if (error) throw error;
+
+          closeEditModal();
+          await this.loadBankSoalContent(examId);
+        } catch (err) {
+          alertEdit.className = "alert alert-error";
+          alertEdit.innerText = `Gagal memperbarui stimulus: ${err.message}`;
+          alertEdit.classList.remove("d-none");
+        } finally {
+          btnUpdateEdit.disabled = false;
+          btnUpdateEdit.innerText = "Simpan Perubahan";
+        }
+      });
+    }
+  },
+
+  async openEditStimulusModal(stimulusId) {
+    const modal = document.getElementById("modal-edit-stimulus");
+    const alertEl = document.getElementById("edit-stimulus-form-alert");
+    const btnUpdate = document.getElementById("btn-update-stimulus");
+
+    alertEl.classList.add("d-none");
+    btnUpdate.disabled = false;
+    btnUpdate.innerText = "Simpan Perubahan";
+    modal.classList.remove("d-none");
+
+    const client = getSupabaseClient();
+    try {
+      const { data: stim, error } = await client
+        .from('stimulus_groups')
+        .select('*')
+        .eq('id', stimulusId)
+        .single();
+
+      if (error) throw error;
+
+      document.getElementById("edit-stimulus-id").value = stim.id;
+      document.getElementById("edit-stimulus-exam-id").value = stim.exam_id;
+      document.getElementById("edit-stimulus-title").value = stim.title || "";
+      document.getElementById("edit-stimulus-image-url").value = stim.image_url || "";
+      document.getElementById("edit-stimulus-content").value = stim.content || "";
+    } catch (err) {
+      alertEl.className = "alert alert-error";
+      alertEl.innerText = `Gagal memuat data stimulus: ${err.message}`;
+      alertEl.classList.remove("d-none");
     }
   },
 
@@ -1364,7 +1464,7 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MODAL EDIT BUTIR SOAL (CHECKPOINT 19)
+  // MODAL EDIT BUTIR SOAL
   // ==========================================
 
   async openEditQuestionModal(questionId, examId) {
@@ -1419,7 +1519,6 @@ const GuruModule = {
         ? "Centang kotak untuk kunci jawaban benar (PG Kompleks)." 
         : "Pilih 1 radio button untuk kunci jawaban benar.";
 
-      // Siapkan opsi A-F (menggabungkan opsi yang ada dengan slot kosong)
       const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
       const existingOptionsMap = {};
       (q.options || []).forEach(opt => {
@@ -1548,7 +1647,6 @@ const GuruModule = {
 
         const client = getSupabaseClient();
         try {
-          // 1. Perbarui data tabel questions
           const { error: qUpdateErr } = await client
             .from('questions')
             .update({
@@ -1564,7 +1662,6 @@ const GuruModule = {
 
           if (qUpdateErr) throw qUpdateErr;
 
-          // 2. Bersihkan opsi lama dan simpan opsi baru yang diperbarui
           await client.from('options').delete().eq('question_id', questionId);
 
           const newOptionsPayload = optionsToSave.map(opt => ({
