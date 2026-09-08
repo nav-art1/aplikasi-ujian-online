@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konfirmasi Data Peserta Ujian</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body style="background: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px 0;">
+
+  <div class="container form-container" style="max-width: 540px; margin: auto; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);">
+    <header class="text-center mb-4">
+      <h2 style="color: var(--primary-color); font-weight: 800;">Konfirmasi Peserta</h2>
+      <p class="text-muted" style="font-size: 0.9rem;">Periksa kebenaran data identitas Anda sebelum memulai tes</p>
+    </header>
+
+    <!-- KARTU DATA SISWA -->
+    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+      <div style="font-size: 0.8rem; font-weight: 700; color: var(--secondary-color); text-transform: uppercase; margin-bottom: 10px;">
+        Identitas Siswa
+      </div>
+      <table style="width: 100%; font-size: 0.95rem; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 0; color: var(--text-muted); width: 40%;">Nama Lengkap</td>
+          <td style="padding: 4px 0; font-weight: 700; color: var(--text-main);" id="display-student-name">-</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: var(--text-muted);">NIS / NISN</td>
+          <td style="padding: 4px 0; font-weight: 600;" id="display-student-nisn">-</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: var(--text-muted);">Kelas / Rombel</td>
+          <td style="padding: 4px 0; font-weight: 600;" id="display-student-class">-</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- KARTU DETAIL UJIAN -->
+    <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+      <div style="font-size: 0.8rem; font-weight: 700; color: #4338ca; text-transform: uppercase; margin-bottom: 10px;">
+        Informasi Sesi Ujian
+      </div>
+      <table style="width: 100%; font-size: 0.95rem; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 4px 0; color: #475569; width: 40%;">Mata Pelajaran</td>
+          <td style="padding: 4px 0; font-weight: 700; color: #1e1b4b;" id="display-exam-subject">-</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #475569;">Judul Ujian</td>
+          <td style="padding: 4px 0; font-weight: 600;" id="display-exam-title">-</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; color: #475569;">Alokasi Durasi</td>
+          <td style="padding: 4px 0; font-weight: 700; color: var(--primary-color);" id="display-exam-duration">- Menit</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- PETUNJUK PENGERJAAN SINGKAT -->
+    <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 12px; margin-bottom: 20px; font-size: 0.85rem; color: #92400e; line-height: 1.5;">
+      <strong>⚠️ Perhatian:</strong>
+      <ul style="margin-left: 18px; margin-top: 4px;">
+        <li>Waktu ujian akan langsung berjalan mundur begitu tombol pengerjaan ditekan.</li>
+        <li>Jawaban akan tersimpan secara otomatis setiap kali Anda memilih opsi.</li>
+        <li>Pastikan koneksi internet stabil selama pengerjaan berlangsung.</li>
+      </ul>
+    </div>
+
+    <!-- TOMBOL AKSI -->
+    <button type="button" class="btn btn-primary btn-block" id="btn-start-exam" style="padding: 12px; font-size: 1.05rem;">
+      Mulai Mengerjakan Ujian &rarr;
+    </button>
+
+    <div class="text-center" style="margin-top: 15px;">
+      <button type="button" id="btn-cancel-session" style="background: none; border: none; color: var(--danger-color); font-size: 0.85rem; cursor: pointer; text-decoration: underline;">
+        Bukan data Anda? Ganti akun / Keluar
+      </button>
+    </div>
+  </div>
+
+  <script src="js/siswa-auth.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // 1. Ambil data sesi yang disimpan dari index.html
+      const session = StudentAuthModule.getActiveSession();
+
+      // Jika belum login atau sesi tidak sah, lempar balik ke halaman login
+      if (!session || !session.student || !session.exam) {
+        alert("Sesi akses tidak ditemukan. Silakan masukkan NISN dan Token terlebih dahulu.");
+        window.location.href = "index.html";
+        return;
+      }
+
+      // 2. Tampilkan data ke layar
+      document.getElementById("display-student-name").innerText = session.student.full_name || "-";
+      document.getElementById("display-student-nisn").innerText = session.student.student_number || "-";
+      document.getElementById("display-student-class").innerText = session.student.class_name || "-";
+
+      document.getElementById("display-exam-subject").innerText = session.exam.subject || "-";
+      document.getElementById("display-exam-title").innerText = session.exam.title || "-";
+      document.getElementById("display-exam-duration").innerText = `${session.exam.duration_minutes} Menit`;
+
+      // 3. Aksi Tombol Mulai
+      document.getElementById("btn-start-exam").addEventListener("click", () => {
+        const yakin = confirm("Apakah Anda sudah siap memulai pengerjaan ujian sekarang?");
+        if (yakin) {
+          // Akan diarahkan ke lembar ujian (Checkpoint 28)
+          window.location.href = "ujian.html";
+        }
+      });
+
+      // 4. Tombol Batal/Keluar
+      document.getElementById("btn-cancel-session").addEventListener("click", () => {
+        StudentAuthModule.clearSession();
+      });
+    });
+  </script>
+</body>
+</html>
