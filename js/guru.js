@@ -1,6 +1,6 @@
 // ==========================================================================
 // MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL,
-// KATEX, & UPLOAD STORAGE (CHECKPOINT 22)
+// KATEX, LIVE PREVIEW, & UPLOAD STORAGE SUPABASE
 // ==========================================================================
 
 const GuruModule = {
@@ -27,7 +27,7 @@ const GuruModule = {
     }
   },
 
-  // Helper fungsi upload gambar ke Supabase Storage (exam-images)
+  // Helper upload gambar ke Supabase Storage (bucket: exam-images)
   async uploadImageFile(file, folder = 'questions') {
     if (!file) return null;
 
@@ -54,6 +54,30 @@ const GuruModule = {
       .getPublicUrl(data.path);
 
     return publicUrlData.publicUrl;
+  },
+
+  // Hitung nomor urut soal berikutnya berdasarkan nomor terbesar yang ada di database
+  async getNextQuestionNumber(examId) {
+    if (!examId) return 1;
+    const client = getSupabaseClient();
+    try {
+      const { data: maxQ, error } = await client
+        .from('questions')
+        .select('original_number')
+        .eq('exam_id', examId)
+        .order('original_number', { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (maxQ && maxQ.length > 0 && maxQ[0].original_number !== null && maxQ[0].original_number !== undefined) {
+        return parseInt(maxQ[0].original_number, 10) + 1;
+      }
+      return 1;
+    } catch (err) {
+      console.warn("Gagal menghitung nomor berikutnya:", err);
+      return 1;
+    }
   },
 
   async initDashboard(teacherProfile) {
@@ -93,7 +117,7 @@ const GuruModule = {
     const pageTitle = document.getElementById("current-menu-title");
 
     navLinks.forEach(link => {
-      link.addEventListener("click", (e) => {
+      link.addEventListener("click", async (e) => {
         e.preventDefault();
         const targetId = link.getAttribute("data-target");
 
@@ -110,7 +134,7 @@ const GuruModule = {
             return;
           }
 
-          this.syncActiveExamToQuestionForm();
+          await this.syncActiveExamToQuestionForm();
         }
 
         navLinks.forEach(l => l.classList.remove("active"));
@@ -1186,7 +1210,6 @@ const GuruModule = {
         btnSaveCreate.innerText = "Mengunggah & Menyimpan...";
 
         try {
-          // Jika ada file gambar lokal yang dipilih, unggah ke storage
           if (fileInput && fileInput.files && fileInput.files[0]) {
             imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
           }
@@ -1354,18 +1377,9 @@ const GuruModule = {
     if (this.selectedExamId) {
       await this.loadStimulusDropdown(this.selectedExamId, "question-stimulus-id");
 
+      // Gunakan nomor terbesar + 1 anti bentrok nomor kembar
       if (numberInput) {
-        const client = getSupabaseClient();
-        try {
-          const { count } = await client
-            .from('questions')
-            .select('*', { count: 'exact', head: true })
-            .eq('exam_id', this.selectedExamId);
-          
-          numberInput.value = (count || 0) + 1;
-        } catch (err) {
-          console.warn("Gagal menghitung nomor urut otomatis:", err);
-        }
+        numberInput.value = await this.getNextQuestionNumber(this.selectedExamId);
       }
     }
   },
@@ -1482,7 +1496,6 @@ const GuruModule = {
         btnSave.innerText = "Mengunggah & Menyimpan...";
 
         try {
-          // Upload file gambar jika guru memilih berkas
           if (fileInput && fileInput.files && fileInput.files[0]) {
             imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
           }
@@ -1523,6 +1536,7 @@ const GuruModule = {
           formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan!`;
           formAlert.classList.remove("d-none");
 
+          // Reset teks input soal
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
           if (fileInput) fileInput.value = "";
@@ -1530,7 +1544,8 @@ const GuruModule = {
           textInputs.forEach(input => input.value = "");
           keyInputs.forEach((input, idx) => input.checked = (idx === 0));
 
-          document.getElementById("question-number").value = originalNumber + 1;
+          // Set nomor berikutnya yang aman secara real-time
+          document.getElementById("question-number").value = await this.getNextQuestionNumber(examId);
 
           await this.loadBankSoalContent(examId);
         } catch (err) {
