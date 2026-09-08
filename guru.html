@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Panel Guru - Aplikasi Ujian Online</title>
   <link rel="stylesheet" href="css/style.css">
+  
+  <!-- KaTeX CSS untuk Notasi Matematika & Sains (Checkpoint 21) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 </head>
 <body>
   <!-- 1. TAMPILAN JIKA BELUM LOGIN -->
@@ -91,6 +94,7 @@
               <li>Buka menu <strong>Siswa</strong> untuk memasukkan daftar murid.</li>
               <li>Buka menu <strong>Ujian</strong> untuk membuat jadwal dan token ujian.</li>
               <li>Buka menu <strong>Bank Soal</strong>, buat stimulus bacaan jika diperlukan, lalu input soal di <strong>Tambah Soal</strong>.</li>
+              <li>Gunakan notasi <code>$...$</code> untuk menulis rumus matematika (contoh: <code>$x^2 + \frac{1}{2}$</code>).</li>
               <li>Bagikan Token Ujian kepada siswa untuk mulai mengerjakan.</li>
             </ol>
           </div>
@@ -237,7 +241,7 @@
               </div>
 
               <div class="form-group">
-                <label for="stimulus-content">Isi Wacana / Narasi Teks</label>
+                <label for="stimulus-content">Isi Wacana / Narasi Teks (Dukung Matematika <code>$...$</code>)</label>
                 <textarea id="stimulus-content" rows="6" required placeholder="Tuliskan wacana teks, artikel, dialog, atau deskripsi data di sini..."></textarea>
               </div>
 
@@ -251,7 +255,7 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT STIMULUS (CHECKPOINT 20) -->
+        <!-- MODAL EDIT STIMULUS -->
         <div id="modal-edit-stimulus" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -273,7 +277,7 @@
               </div>
 
               <div class="form-group">
-                <label for="edit-stimulus-content">Isi Wacana / Narasi Teks</label>
+                <label for="edit-stimulus-content">Isi Wacana / Narasi Teks (Dukung Matematika <code>$...$</code>)</label>
                 <textarea id="edit-stimulus-content" rows="6" required></textarea>
               </div>
 
@@ -298,7 +302,6 @@
               <input type="hidden" id="edit-q-id">
               <input type="hidden" id="edit-q-exam-id">
 
-              <!-- Baris 1: Stimulus Group -->
               <div class="form-group" style="background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                 <label for="edit-q-stimulus-id" style="font-weight: 600;">Grup Stimulus</label>
                 <select id="edit-q-stimulus-id">
@@ -306,7 +309,6 @@
                 </select>
               </div>
 
-              <!-- Baris 2: Nomor, Tipe, Poin -->
               <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 12px;">
                 <div class="form-group">
                   <label for="edit-q-number">No. Asli</label>
@@ -331,20 +333,17 @@
               </div>
 
               <div class="form-group">
-                <label for="edit-q-content">Teks Soal / Pertanyaan</label>
+                <label for="edit-q-content">Teks Soal / Pertanyaan (Dukung Matematika <code>$...$</code>)</label>
                 <textarea id="edit-q-content" rows="4" required></textarea>
               </div>
 
-              <!-- Baris Pilihan Jawaban Edit -->
               <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                   <label style="font-weight: bold; font-size: 0.95rem;">Pilihan Jawaban & Kunci</label>
                   <small id="edit-key-instruction" class="text-muted">Pilih 1 kunci benar.</small>
                 </div>
 
-                <div id="edit-options-container" style="display: flex; flex-direction: column; gap: 10px;">
-                  <!-- Opsi A s/d F diisi otomatis oleh JS -->
-                </div>
+                <div id="edit-options-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
               </div>
 
               <div id="edit-q-form-alert" class="alert d-none"></div>
@@ -411,8 +410,8 @@
 
               <!-- Baris 4: Teks Isi Soal -->
               <div class="form-group">
-                <label for="question-content">Teks Soal / Pertanyaan</label>
-                <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini..."></textarea>
+                <label for="question-content">Teks Soal / Pertanyaan (Dukung Matematika <code>$...$</code>)</label>
+                <textarea id="question-content" rows="4" required placeholder="Tuliskan butir pertanyaan di sini... Gunakan $...$ untuk rumus matematika."></textarea>
               </div>
 
               <!-- Baris 5: Pilihan Jawaban (A, B, C, D, E, F) -->
@@ -646,6 +645,11 @@
 
   <!-- Script Ekosistem -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- KaTeX Core & Auto-render Extension (Checkpoint 21) -->
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  
   <script src="js/supabase.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/auth.js"></script>
