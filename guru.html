@@ -125,7 +125,7 @@
           </div>
         </section>
 
-        <!-- MODAL FORM BUAT UJIAN BARU -->
+        <!-- MODAL FORM BUAT UJIAN BARU (DILENGKAPI SCROLL) -->
         <div id="modal-create-exam" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 600px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -218,7 +218,7 @@
           </div>
         </section>
 
-        <!-- MODAL BUAT STIMULUS BARU -->
+        <!-- MODAL BUAT STIMULUS BARU (DILENGKAPI SCROLL) -->
         <div id="modal-create-stimulus" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -251,9 +251,9 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT SOAL (CHECKPOINT 19) -->
+        <!-- MODAL EDIT SOAL (DILENGKAPI SCROLL RESPONSIF) -->
         <div id="modal-edit-question" class="modal-overlay d-none">
-          <div class="modal-content" style="max-width: 750px;">
+          <div class="modal-content" style="max-width: 780px;">
             <div class="card-header" style="margin-bottom: 15px;">
               <span class="card-title">Edit Butir Soal</span>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit-q">X</button>
@@ -307,13 +307,13 @@
                 </div>
 
                 <div id="edit-options-container" style="display: flex; flex-direction: column; gap: 10px;">
-                  <!-- Opsi A s/d F akan di-generate secara dinamis sesuai data -->
+                  <!-- Opsi A s/d F diisi otomatis oleh JS -->
                 </div>
               </div>
 
               <div id="edit-q-form-alert" class="alert d-none"></div>
 
-              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; position: sticky; bottom: -10px; background: #ffffff; padding: 10px 0; border-top: 1px solid #e2e8f0;">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-edit-q">Batal</button>
                 <button type="submit" class="btn btn-primary" id="btn-update-question">Simpan Perubahan</button>
               </div>
@@ -339,7 +339,7 @@
             <form id="form-create-question">
               <input type="hidden" id="question-exam-id">
 
-              <!-- Baris 1: Stimulus Group (Opsional) -->
+              <!-- Baris 1: Stimulus Group -->
               <div class="form-group" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
                 <label for="question-stimulus-id" style="font-weight: 600; color: var(--text-main);">Kaitkan ke Grup Stimulus</label>
                 <select id="question-stimulus-id">
@@ -367,7 +367,7 @@
                 </div>
               </div>
 
-              <!-- Baris 3: URL Gambar Khusus Soal (Opsional) -->
+              <!-- Baris 3: URL Gambar Khusus Soal -->
               <div class="form-group">
                 <label for="question-image-url">URL Gambar Butir Soal (Opsional)</label>
                 <input type="url" id="question-image-url" placeholder="https://contoh.com/gambar-soal.png">
@@ -411,13 +411,13 @@
                     <strong style="width: 25px;">D.</strong>
                     <input type="text" class="option-text-input" data-label="D" required placeholder="Teks pilihan D..." style="flex-grow: 1;">
                   </div>
-                  <!-- Opsi E (Opsional) -->
+                  <!-- Opsi E -->
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="radio" name="correct_key" class="option-key-input" value="E" title="Tandai Benar">
                     <strong style="width: 25px;">E.</strong>
                     <input type="text" class="option-text-input" data-label="E" placeholder="Teks pilihan E (opsional)..." style="flex-grow: 1;">
                   </div>
-                  <!-- Opsi F (Opsional) -->
+                  <!-- Opsi F -->
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="radio" name="correct_key" class="option-key-input" value="F" title="Tandai Benar">
                     <strong style="width: 25px;">F.</strong>
@@ -501,7 +501,7 @@
           </div>
         </section>
 
-        <!-- MODAL EDIT SISWA -->
+        <!-- MODAL EDIT SISWA (DILENGKAPI SCROLL) -->
         <div id="modal-edit-student" class="modal-overlay d-none">
           <div class="modal-content">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -572,7 +572,7 @@
           </div>
         </section>
 
-        <!-- MODAL EDIT KELAS -->
+        <!-- MODAL EDIT KELAS (DILENGKAPI SCROLL) -->
         <div id="modal-edit-class" class="modal-overlay d-none">
           <div class="modal-content">
             <div class="card-header" style="margin-bottom: 15px;">
