@@ -30,7 +30,8 @@ body {
   background-color: var(--bg-main);
   color: var(--text-main);
   line-height: 1.5;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden; /* Mencegah seluruh halaman luar bergeser */
 }
 
 /* ==========================================================================
@@ -109,6 +110,9 @@ body {
 }
 
 @media (max-width: 768px) {
+  body {
+    overflow: auto;
+  }
   .form-grid-3 {
     grid-template-columns: 1fr;
   }
@@ -221,11 +225,12 @@ body {
 }
 
 /* ==========================================================================
-   TATA LETAK DASHBOARD
+   TATA LETAK DASHBOARD (KUNCI AGAR HEADER TIDAK IKUT NAIK)
    ========================================================================== */
 .dashboard-wrapper {
   display: flex;
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
 }
 
@@ -236,6 +241,7 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  height: 100vh;
 }
 
 .sidebar-brand {
@@ -245,6 +251,7 @@ body {
   letter-spacing: 1px;
   background-color: #0f172a;
   border-bottom: 1px solid #334155;
+  flex-shrink: 0;
 }
 
 .sidebar-menu {
@@ -279,14 +286,17 @@ body {
   padding: 20px;
   border-top: 1px solid #334155;
   background-color: #0f172a;
+  flex-shrink: 0;
 }
 
+/* Bagian Main Content: Header diam di tempat, hanya content-body yang scroll */
 .main-content {
   flex-grow: 1;
-  overflow-y: auto;
-  max-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* Kontainer utama tidak ikut scroll */
+  background-color: var(--bg-main);
 }
 
 .topbar {
@@ -296,9 +306,9 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex-shrink: 0; /* Header tetap kokoh di atas */
+  z-index: 50;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .page-title h3 {
@@ -315,6 +325,8 @@ body {
 .content-body {
   padding: 28px;
   flex-grow: 1;
+  overflow-y: auto; /* Hanya isi konten ini yang boleh bergulir */
+  max-height: calc(100vh - 65px);
 }
 
 /* ==========================================================================
@@ -447,29 +459,29 @@ body {
 }
 
 /* Kustomisasi scrollbar */
+.content-body::-webkit-scrollbar,
 .modal-content::-webkit-scrollbar,
-.main-content::-webkit-scrollbar,
 .sidebar-menu::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
+.content-body::-webkit-scrollbar-track,
 .modal-content::-webkit-scrollbar-track,
-.main-content::-webkit-scrollbar-track,
 .sidebar-menu::-webkit-scrollbar-track {
   background: #f1f5f9;
   border-radius: 4px;
 }
 
+.content-body::-webkit-scrollbar-thumb,
 .modal-content::-webkit-scrollbar-thumb,
-.main-content::-webkit-scrollbar-thumb,
 .sidebar-menu::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
 
+.content-body::-webkit-scrollbar-thumb:hover,
 .modal-content::-webkit-scrollbar-thumb:hover,
-.main-content::-webkit-scrollbar-thumb:hover,
 .sidebar-menu::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
@@ -478,14 +490,20 @@ body {
   .dashboard-wrapper {
     flex-direction: column;
     height: auto;
+    overflow: visible;
   }
   .sidebar {
     width: 100%;
     height: auto;
   }
   .main-content {
+    height: auto;
+    overflow: visible;
+  }
+  .content-body {
     max-height: none;
     overflow-y: visible;
+    padding: 16px;
   }
   .modal-overlay {
     padding: 10px;
