@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, & SOAL
+// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL, & KATEX
 // ==========================================================================
 
 const GuruModule = {
@@ -8,6 +8,23 @@ const GuruModule = {
   examsList: [],
   selectedExamId: null,
   selectedExamTitle: '',
+
+  // Fungsi utilitas render KaTeX otomatis pada elemen kontainer
+  renderMath(containerElement) {
+    if (typeof renderMathInElement === 'function' && containerElement) {
+      try {
+        renderMathInElement(containerElement, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false }
+          ],
+          throwOnError: false
+        });
+      } catch (err) {
+        console.warn("KaTeX render notice:", err);
+      }
+    }
+  },
 
   async initDashboard(teacherProfile) {
     this.currentTeacher = teacherProfile;
@@ -939,7 +956,6 @@ const GuruModule = {
 
       let contentHtml = '';
 
-      // Tampilkan Grup Stimulus jika ada
       if (stimulusGroups && stimulusGroups.length > 0) {
         stimulusGroups.forEach((stim, sIdx) => {
           const stimQuestions = (questions || []).filter(q => q.stimulus_group_id === stim.id);
@@ -954,7 +970,7 @@ const GuruModule = {
                   <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}', ${stimQuestions.length})">Hapus Stimulus</button>
                 </div>
               </div>
-              <div style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6; white-space: pre-line;">
+              <div class="math-content" style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6; white-space: pre-line;">
                 ${stim.content || ''}
               </div>
               ${stim.image_url ? `<div style="margin-bottom: 15px;"><img src="${stim.image_url}" style="max-width: 100%; max-height: 250px; border-radius: 6px; border: 1px solid var(--border-color);"></div>` : ''}
@@ -970,7 +986,6 @@ const GuruModule = {
         });
       }
 
-      // Tampilkan Soal Mandiri
       const standaloneQuestions = (questions || []).filter(q => !q.stimulus_group_id);
       if (standaloneQuestions.length > 0) {
         contentHtml += `
@@ -986,6 +1001,9 @@ const GuruModule = {
       }
 
       container.innerHTML = contentHtml;
+
+      // Render formula matematika KaTeX seketika setelah HTML tertempel
+      this.renderMath(container);
     } catch (err) {
       container.innerHTML = `
         <div class="card" style="border: 1px solid var(--danger-color); color: var(--danger-color);">
@@ -1007,7 +1025,7 @@ const GuruModule = {
       const isKey = opt.is_correct ? 'style="color: var(--success-color); font-weight: bold;"' : 'style="color: var(--text-muted);"';
       const checkIcon = opt.is_correct ? '✓ ' : '';
       optionsListHtml += `
-        <div ${isKey} style="font-size: 0.9rem; margin-bottom: 4px;">
+        <div ${isKey} class="math-content" style="font-size: 0.9rem; margin-bottom: 4px;">
           ${checkIcon}<strong>${opt.option_label}.</strong> ${opt.content}
         </div>
       `;
@@ -1026,7 +1044,7 @@ const GuruModule = {
             <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus Soal</button>
           </div>
         </div>
-        <div style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5;">
+        <div class="math-content" style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5; white-space: pre-line;">
           ${q.content}
         </div>
         ${q.image_url ? `<div style="margin-bottom: 10px;"><img src="${q.image_url}" style="max-height: 180px; border-radius: 4px; border: 1px solid var(--border-color);"></div>` : ''}
@@ -1090,11 +1108,10 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN STIMULUS (BUAT & EDIT - CHECKPOINT 20)
+  // MANAJEMEN STIMULUS
   // ==========================================
 
   setupStimulusEventListeners() {
-    // 1. Buat Stimulus Baru
     const modalCreate = document.getElementById("modal-create-stimulus");
     const btnOpenCreate = document.getElementById("btn-open-modal-stimulus");
     const btnCloseCreate = document.getElementById("btn-close-modal-stimulus");
@@ -1164,7 +1181,6 @@ const GuruModule = {
       });
     }
 
-    // 2. Edit Stimulus
     const modalEdit = document.getElementById("modal-edit-stimulus");
     const btnCloseEdit = document.getElementById("btn-close-modal-edit-stimulus");
     const btnCancelEdit = document.getElementById("btn-cancel-edit-stimulus");
