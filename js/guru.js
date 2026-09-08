@@ -1,6 +1,6 @@
 // ==========================================================================
 // MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL,
-// REORDERING BLOK STIMULUS, KATEX, STORAGE, & IMPORT EXCEL (OPSI A - F)
+// REORDERING BLOK STIMULUS, KATEX, STORAGE, & IMPORT EXCEL + VALIDASI (CHECKPOINT 25)
 // ==========================================================================
 
 const GuruModule = {
@@ -319,9 +319,9 @@ const GuruModule = {
     }
   },
 
-  // ==========================================
-  // FITUR IMPORT EXCEL (DUKUNG OPSI A S/D F)
-  // ==========================================
+  // =========================================================================
+  // FITUR IMPORT EXCEL DENGAN STIMULUS & VALIDASI KETAT (CHECKPOINT 25)
+  // =========================================================================
 
   downloadExcelTemplate() {
     if (typeof XLSX === 'undefined') {
@@ -332,6 +332,8 @@ const GuruModule = {
     const templateData = [
       {
         nomor: 1,
+        judul_stimulus: '',
+        isi_stimulus: '',
         tipe: 'pg',
         poin: 1.0,
         soal: 'Ibukota negara Indonesia saat ini adalah...',
@@ -346,16 +348,34 @@ const GuruModule = {
       },
       {
         nomor: 2,
+        judul_stimulus: 'Teks Bacaan Ekosistem Mangrove',
+        isi_stimulus: 'Hutan mangrove merupakan ekosistem pesisir yang memiliki peranan ekologis sangat besar. Selain meredam gelombang air laut, akarnya menjadi tempat pemijahan udang dan ikan kecil.',
         tipe: 'pgk',
         poin: 2.0,
-        soal: 'Manakah dari bilangan berikut yang merupakan faktor dari 12? (Contoh PGK dengan 6 opsi A sampai F)',
-        opsi_a: '1',
-        opsi_b: '2',
-        opsi_c: '3',
-        opsi_d: '4',
-        opsi_e: '5',
-        opsi_f: '6',
-        kunci: 'A,B,C,D,F',
+        soal: 'Berdasarkan teks bacaan, manakah peran utama hutan mangrove? (Pilihan Ganda Kompleks)',
+        opsi_a: 'Meredam gelombang air laut',
+        opsi_b: 'Tempat pemijahan udang dan ikan',
+        opsi_c: 'Sebagai penghasil batu bara',
+        opsi_d: 'Mencegah terjadinya abrasi',
+        opsi_e: 'Mempercepat pengeringan air laut',
+        opsi_f: '',
+        kunci: 'A,B,D',
+        gambar_url: ''
+      },
+      {
+        nomor: 3,
+        judul_stimulus: 'Teks Bacaan Ekosistem Mangrove',
+        isi_stimulus: '', // Dikosongkan jika merujuk ke stimulus yang sama di atas
+        tipe: 'pg',
+        poin: 1.0,
+        soal: 'Di area manakah ekosistem mangrove biasanya berkembang subur?',
+        opsi_a: 'Pegunungan tinggi',
+        opsi_b: 'Gurun pasir',
+        opsi_c: 'Wilayah pesisir pantai berlumpur',
+        opsi_d: 'Danau air tawar dalam',
+        opsi_e: '',
+        opsi_f: '',
+        kunci: 'C',
         gambar_url: ''
       }
     ];
@@ -363,7 +383,7 @@ const GuruModule = {
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template Soal");
-    XLSX.writeFile(workbook, "template_soal_ujian.xlsx");
+    XLSX.writeFile(workbook, "template_soal_ujian_akm.xlsx");
   },
 
   setupImportExcelEventListeners() {
@@ -406,16 +426,28 @@ const GuruModule = {
 
             this.parsedExcelQuestions = [];
             let tableRows = '';
+            let validCount = 0;
+            let invalidCount = 0;
+
+            // Cache pelacak narasi stimulus agar grup yang sama terhubung
+            const stimulusTextMap = {};
 
             rawJson.forEach((row, idx) => {
               const num = row.nomor || (idx + 1);
+              const stimTitle = row.judul_stimulus ? String(row.judul_stimulus).trim() : '';
+              const stimContent = row.isi_stimulus ? String(row.isi_stimulus).trim() : '';
+
+              if (stimTitle && stimContent) {
+                stimulusTextMap[stimTitle] = stimContent;
+              }
+
               const type = (row.tipe || 'pg').toLowerCase().trim();
               const points = parseFloat(row.poin) || 1.0;
               const content = (row.soal || '').trim();
-              const rawKey = String(row.kunci || 'A').toUpperCase().trim();
+              const rawKey = String(row.kunci || '').toUpperCase().trim();
               const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
 
-              // Baca opsi A, B, C, D, E, dan F
+              // Baca opsi A s.d. F
               const options = [];
               ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
                 const optText = row[`opsi_${lbl}`] ? String(row[`opsi_${lbl}`]).trim() : '';
@@ -428,38 +460,69 @@ const GuruModule = {
                 }
               });
 
-              if (content && options.length >= 2) {
+              // Validasi integritas butir soal
+              const errors = [];
+              if (!content) errors.push("Teks pertanyaan kosong");
+              if (options.length < 2) errors.push("Opsi kurang dari 2");
+              if (correctKeys.length === 0) errors.push("Kunci jawaban belum ditentukan");
+              if (type !== 'pg' && type !== 'pgk') errors.push("Tipe soal tidak valid (harus pg / pgk)");
+
+              const isValid = errors.length === 0;
+
+              if (isValid) {
+                validCount++;
                 this.parsedExcelQuestions.push({
                   original_number: num,
+                  stimulus_title: stimTitle || null,
+                  stimulus_content: stimulusTextMap[stimTitle] || stimContent || '',
                   question_type: type,
                   points: points,
                   content: content,
                   image_url: row.gambar_url ? String(row.gambar_url).trim() : null,
                   correct_keys: correctKeys,
-                  options: options
+                  options: options,
+                  is_valid: true
                 });
-
-                tableRows += `
-                  <tr>
-                    <td>${num}</td>
-                    <td><span class="badge ${type === 'pg' ? 'badge-success' : 'badge-warning'}">${type.toUpperCase()}</span></td>
-                    <td>${points}</td>
-                    <td>${content.substring(0, 70)}${content.length > 70 ? '...' : ''} <small class="text-muted">(${options.length} opsi)</small></td>
-                    <td><strong>${correctKeys.join(', ')}</strong></td>
-                  </tr>
-                `;
+              } else {
+                invalidCount++;
               }
+
+              const statusBadge = isValid 
+                ? '<span class="badge badge-success">Valid</span>' 
+                : `<span class="badge badge-danger" title="${errors.join(', ')}">Error: ${errors.join(', ')}</span>`;
+
+              const stimInfo = stimTitle 
+                ? `<span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-color);">📌 ${stimTitle}</span>` 
+                : '<span class="text-muted" style="font-size: 0.8rem;">(Soal Mandiri)</span>';
+
+              tableRows += `
+                <tr style="${isValid ? '' : 'background: #fff1f2;'}">
+                  <td><strong>${num}</strong></td>
+                  <td>${stimInfo}</td>
+                  <td><span class="badge ${type === 'pg' ? 'badge-success' : 'badge-warning'}">${type.toUpperCase()}</span></td>
+                  <td>${points}</td>
+                  <td>${content ? content.substring(0, 50) + (content.length > 50 ? '...' : '') : '<em class="text-muted">(Kosong)</em>'} <small class="text-muted">(${options.length} opsi)</small></td>
+                  <td><strong>${correctKeys.length > 0 ? correctKeys.join(', ') : '-'}</strong></td>
+                  <td>${statusBadge}</td>
+                </tr>
+              `;
             });
 
-            if (this.parsedExcelQuestions.length === 0) {
+            if (validCount === 0) {
               alertEl.className = "alert alert-error";
-              alertEl.innerText = "Tidak ada butir soal valid yang dapat diimpor. Pastikan kolom soal, opsi_a, opsi_b, dan kunci terisi.";
+              alertEl.innerText = "Seluruh baris soal di file Excel memiliki kesalahan validasi. Silakan periksa kolom soal, opsi, dan kunci.";
               alertEl.classList.remove("d-none");
-              previewArea.classList.add("d-none");
-              return;
+              btnCommit.disabled = true;
+            } else {
+              btnCommit.disabled = false;
+              if (invalidCount > 0) {
+                alertEl.className = "alert alert-error";
+                alertEl.innerText = `Ditemukan ${invalidCount} baris bermasalah yang akan dilewati. Sebanyak ${validCount} butir soal valid siap diimpor.`;
+                alertEl.classList.remove("d-none");
+              }
             }
 
-            summaryText.innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Butir Soal Terbaca Siap Diimpor`;
+            summaryText.innerText = `Pratinjau: ${validCount} Soal Valid Terbaca (${invalidCount} Soal Tidak Valid)`;
             previewBody.innerHTML = tableRows;
             previewArea.classList.remove("d-none");
           } catch (err) {
@@ -482,23 +545,62 @@ const GuruModule = {
         }
 
         if (!this.parsedExcelQuestions || this.parsedExcelQuestions.length === 0) {
-          alert("Belum ada data soal yang siap diimpor.");
+          alert("Belum ada data soal valid yang siap diimpor.");
           return;
         }
 
         btnCommit.disabled = true;
-        btnCommit.innerText = "Mengimpor Data...";
+        btnCommit.innerText = "Mengimpor & Memproses Stimulus...";
         alertEl.classList.add("d-none");
 
         const client = getSupabaseClient();
         try {
+          // 1. Petakan atau buat grup stimulus baru di Supabase
+          const stimulusIdCache = {};
+          const { data: existingStimuli } = await client
+            .from('stimulus_groups')
+            .select('id, title')
+            .eq('exam_id', examId);
+
+          (existingStimuli || []).forEach(s => {
+            if (s.title) stimulusIdCache[s.title.trim().toLowerCase()] = s.id;
+          });
+
+          // 2. Loop butir soal dan buat stimulus jika belum ada
           let countSuccess = 0;
           for (const q of this.parsedExcelQuestions) {
+            let finalStimulusId = null;
+
+            if (q.stimulus_title) {
+              const key = q.stimulus_title.toLowerCase().trim();
+              if (stimulusIdCache[key]) {
+                finalStimulusId = stimulusIdCache[key];
+              } else {
+                // Buat entri grup stimulus baru otomatis
+                const { data: newStim, error: stimInsertErr } = await client
+                  .from('stimulus_groups')
+                  .insert({
+                    exam_id: examId,
+                    title: q.stimulus_title,
+                    content: q.stimulus_content || 'Wacana stimulus otomatis hasil import Excel.',
+                    image_url: null
+                  })
+                  .select()
+                  .single();
+
+                if (!stimInsertErr && newStim) {
+                  stimulusIdCache[key] = newStim.id;
+                  finalStimulusId = newStim.id;
+                }
+              }
+            }
+
+            // 3. Masukkan butir soal
             const { data: insertedQ, error: qErr } = await client
               .from('questions')
               .insert({
                 exam_id: examId,
-                stimulus_group_id: null,
+                stimulus_group_id: finalStimulusId,
                 original_number: q.original_number,
                 question_type: q.question_type,
                 points: q.points,
@@ -512,6 +614,7 @@ const GuruModule = {
 
             if (qErr) throw qErr;
 
+            // 4. Masukkan opsi jawaban
             const optionsPayload = q.options.map(opt => ({
               question_id: insertedQ.id,
               option_label: opt.option_label,
@@ -526,7 +629,7 @@ const GuruModule = {
           }
 
           alertEl.className = "alert alert-success";
-          alertEl.innerText = `Berhasil mengimpor ${countSuccess} butir soal ke dalam ujian!`;
+          alertEl.innerText = `Sukses mengimpor ${countSuccess} butir soal beserta stimulus terkait ke dalam ujian!`;
           alertEl.classList.remove("d-none");
 
           fileInput.value = "";
