@@ -37,6 +37,7 @@ const GuruModule = {
     this.setupBankSoalEventListeners();
     this.setupStimulusEventListeners();
     this.setupQuestionFormEventListeners();
+    this.setupEditQuestionEventListeners();
   },
 
   setupNavigation() {
@@ -1017,7 +1018,10 @@ const GuruModule = {
             ${typeLabel}
             <small class="text-muted">(${q.points || 1} Poin)</small>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus Soal</button>
+          <div class="action-buttons">
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit Soal</button>
+            <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus Soal</button>
+          </div>
         </div>
         <div style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5;">
           ${q.content}
@@ -1066,7 +1070,6 @@ const GuruModule = {
     }
   },
 
-  // Navigasi cepat dari Bank Soal langsung ke Tambah Soal dengan stimulus terpilih
   goToAddQuestionWithStimulus(stimulusId) {
     const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
     if (navTambah) {
@@ -1079,7 +1082,7 @@ const GuruModule = {
   },
 
   // ==========================================
-  // MANAJEMEN STIMULUS MODAL (CHECKPOINT 18)
+  // MANAJEMEN STIMULUS MODAL
   // ==========================================
 
   setupStimulusEventListeners() {
@@ -1153,9 +1156,8 @@ const GuruModule = {
     }
   },
 
-  // Mengisi dropdown grup stimulus pada form Tambah Soal
-  async loadStimulusDropdown(examId) {
-    const selectEl = document.getElementById("question-stimulus-id");
+  async loadStimulusDropdown(examId, targetSelectId = "question-stimulus-id") {
+    const selectEl = document.getElementById(targetSelectId);
     if (!selectEl) return;
 
     selectEl.innerHTML = '<option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>';
@@ -1193,7 +1195,7 @@ const GuruModule = {
     if (displayEl) displayEl.innerText = this.selectedExamTitle || "-";
 
     if (this.selectedExamId) {
-      await this.loadStimulusDropdown(this.selectedExamId);
+      await this.loadStimulusDropdown(this.selectedExamId, "question-stimulus-id");
 
       if (numberInput) {
         const client = getSupabaseClient();
@@ -1229,7 +1231,7 @@ const GuruModule = {
     if (typeSelect) {
       typeSelect.addEventListener("change", (e) => {
         const isPgk = e.target.value === 'pgk';
-        const keyInputs = document.querySelectorAll(".option-key-input");
+        const keyInputs = document.querySelectorAll("#options-inputs-container .option-key-input");
 
         keyInputs.forEach(input => {
           input.type = isPgk ? 'checkbox' : 'radio';
@@ -1266,8 +1268,8 @@ const GuruModule = {
           return;
         }
 
-        const textInputs = document.querySelectorAll(".option-text-input");
-        const keyInputs = document.querySelectorAll(".option-key-input");
+        const textInputs = document.querySelectorAll("#options-inputs-container .option-text-input");
+        const keyInputs = document.querySelectorAll("#options-inputs-container .option-key-input");
 
         const optionsData = [];
         const correctKeys = [];
@@ -1356,6 +1358,237 @@ const GuruModule = {
         } finally {
           btnSave.disabled = false;
           btnSave.innerText = "Simpan Butir Soal";
+        }
+      });
+    }
+  },
+
+  // ==========================================
+  // MODAL EDIT BUTIR SOAL (CHECKPOINT 19)
+  // ==========================================
+
+  async openEditQuestionModal(questionId, examId) {
+    const modal = document.getElementById("modal-edit-question");
+    const alertEl = document.getElementById("edit-q-form-alert");
+    const optionsContainer = document.getElementById("edit-options-container");
+    const typeSelect = document.getElementById("edit-q-type");
+    const keyInstruction = document.getElementById("edit-key-instruction");
+
+    alertEl.classList.add("d-none");
+    optionsContainer.innerHTML = '<p class="text-muted">Memuat opsi jawaban...</p>';
+    modal.classList.remove("d-none");
+
+    await this.loadStimulusDropdown(examId, "edit-q-stimulus-id");
+
+    const client = getSupabaseClient();
+    try {
+      const { data: q, error: qErr } = await client
+        .from('questions')
+        .select(`
+          id,
+          exam_id,
+          stimulus_group_id,
+          original_number,
+          question_type,
+          points,
+          image_url,
+          content,
+          options (
+            id,
+            option_label,
+            content,
+            is_correct
+          )
+        `)
+        .eq('id', questionId)
+        .single();
+
+      if (qErr) throw qErr;
+
+      document.getElementById("edit-q-id").value = q.id;
+      document.getElementById("edit-q-exam-id").value = q.exam_id;
+      document.getElementById("edit-q-stimulus-id").value = q.stimulus_group_id || "";
+      document.getElementById("edit-q-number").value = q.original_number || 1;
+      typeSelect.value = q.question_type || "pg";
+      document.getElementById("edit-q-points").value = q.points || 1.0;
+      document.getElementById("edit-q-image-url").value = q.image_url || "";
+      document.getElementById("edit-q-content").value = q.content || "";
+
+      const isPgk = q.question_type === 'pgk';
+      keyInstruction.innerText = isPgk 
+        ? "Centang kotak untuk kunci jawaban benar (PG Kompleks)." 
+        : "Pilih 1 radio button untuk kunci jawaban benar.";
+
+      // Siapkan opsi A-F (menggabungkan opsi yang ada dengan slot kosong)
+      const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+      const existingOptionsMap = {};
+      (q.options || []).forEach(opt => {
+        existingOptionsMap[opt.option_label] = opt;
+      });
+
+      let optionsHtml = '';
+      labels.forEach(lbl => {
+        const opt = existingOptionsMap[lbl] || { id: '', content: '', is_correct: false };
+        const inputType = isPgk ? 'checkbox' : 'radio';
+        const checkedAttr = opt.is_correct ? 'checked' : '';
+        const nameAttr = isPgk ? '' : 'name="edit_correct_key"';
+
+        optionsHtml += `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="${inputType}" ${nameAttr} class="edit-option-key" value="${lbl}" ${checkedAttr} title="Tandai Benar">
+            <strong style="width: 25px;">${lbl}.</strong>
+            <input type="text" class="edit-option-text" data-label="${lbl}" data-option-id="${opt.id}" value="${opt.content || ''}" placeholder="Teks pilihan ${lbl}..." style="flex-grow: 1;">
+          </div>
+        `;
+      });
+
+      optionsContainer.innerHTML = optionsHtml;
+    } catch (err) {
+      alertEl.className = "alert alert-error";
+      alertEl.innerText = `Gagal membaca detail soal: ${err.message}`;
+      alertEl.classList.remove("d-none");
+    }
+  },
+
+  setupEditQuestionEventListeners() {
+    const modal = document.getElementById("modal-edit-question");
+    const btnClose = document.getElementById("btn-close-modal-edit-q");
+    const btnCancel = document.getElementById("btn-cancel-edit-q");
+    const form = document.getElementById("form-edit-question");
+    const typeSelect = document.getElementById("edit-q-type");
+    const keyInstruction = document.getElementById("edit-key-instruction");
+    const alertEl = document.getElementById("edit-q-form-alert");
+    const btnUpdate = document.getElementById("btn-update-question");
+
+    const closeModal = () => modal.classList.add("d-none");
+
+    if (btnClose) btnClose.addEventListener("click", closeModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+
+    if (modal) {
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+
+    if (typeSelect) {
+      typeSelect.addEventListener("change", (e) => {
+        const isPgk = e.target.value === 'pgk';
+        const keys = document.querySelectorAll(".edit-option-key");
+        keys.forEach(k => {
+          k.type = isPgk ? 'checkbox' : 'radio';
+          if (!isPgk) {
+            k.name = "edit_correct_key";
+          } else {
+            k.removeAttribute("name");
+          }
+        });
+
+        if (keyInstruction) {
+          keyInstruction.innerText = isPgk 
+            ? "Centang kotak untuk kunci jawaban benar (PG Kompleks)." 
+            : "Pilih 1 radio button untuk kunci jawaban benar.";
+        }
+      });
+    }
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        alertEl.classList.add("d-none");
+
+        const questionId = document.getElementById("edit-q-id").value;
+        const examId = document.getElementById("edit-q-exam-id").value;
+        const stimulusId = document.getElementById("edit-q-stimulus-id").value || null;
+        const originalNumber = parseInt(document.getElementById("edit-q-number").value, 10);
+        const questionType = document.getElementById("edit-q-type").value;
+        const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
+        const imageUrl = document.getElementById("edit-q-image-url").value.trim() || null;
+        const content = document.getElementById("edit-q-content").value.trim();
+
+        const textInputs = document.querySelectorAll(".edit-option-text");
+        const keyInputs = document.querySelectorAll(".edit-option-key");
+
+        const optionsToSave = [];
+        const correctKeys = [];
+
+        textInputs.forEach((txt, idx) => {
+          const label = txt.getAttribute("data-label");
+          const val = txt.value.trim();
+          const isCorrect = keyInputs[idx].checked;
+
+          if (val) {
+            if (isCorrect) correctKeys.push(label);
+            optionsToSave.push({
+              id: txt.getAttribute("data-option-id") || null,
+              question_id: questionId,
+              option_label: label,
+              content: val,
+              is_correct: isCorrect
+            });
+          }
+        });
+
+        if (optionsToSave.length < 2) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = "Soal harus memiliki minimal 2 pilihan jawaban.";
+          alertEl.classList.remove("d-none");
+          return;
+        }
+
+        if (correctKeys.length === 0) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = "Tentukan minimal satu kunci jawaban yang benar.";
+          alertEl.classList.remove("d-none");
+          return;
+        }
+
+        btnUpdate.disabled = true;
+        btnUpdate.innerText = "Memperbarui...";
+
+        const client = getSupabaseClient();
+        try {
+          // 1. Perbarui data tabel questions
+          const { error: qUpdateErr } = await client
+            .from('questions')
+            .update({
+              stimulus_group_id: stimulusId,
+              original_number: originalNumber,
+              question_type: questionType,
+              points: points,
+              image_url: imageUrl,
+              content: content,
+              correct_keys: correctKeys
+            })
+            .eq('id', questionId);
+
+          if (qUpdateErr) throw qUpdateErr;
+
+          // 2. Bersihkan opsi lama dan simpan opsi baru yang diperbarui
+          await client.from('options').delete().eq('question_id', questionId);
+
+          const newOptionsPayload = optionsToSave.map(opt => ({
+            question_id: questionId,
+            option_label: opt.option_label,
+            content: opt.content,
+            is_correct: opt.is_correct
+          }));
+
+          const { error: optInsertErr } = await client
+            .from('options')
+            .insert(newOptionsPayload);
+
+          if (optInsertErr) throw optInsertErr;
+
+          closeModal();
+          await this.loadBankSoalContent(examId);
+        } catch (err) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = `Gagal memperbarui soal: ${err.message}`;
+          alertEl.classList.remove("d-none");
+        } finally {
+          btnUpdate.disabled = false;
+          btnUpdate.innerText = "Simpan Perubahan";
         }
       });
     }
