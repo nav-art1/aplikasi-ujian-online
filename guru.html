@@ -125,7 +125,7 @@
           </div>
         </section>
 
-        <!-- MODAL FORM BUAT UJIAN BARU (DILENGKAPI SCROLL) -->
+        <!-- MODAL FORM BUAT UJIAN BARU -->
         <div id="modal-create-exam" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 600px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -218,7 +218,7 @@
           </div>
         </section>
 
-        <!-- MODAL BUAT STIMULUS BARU (DILENGKAPI SCROLL) -->
+        <!-- MODAL BUAT STIMULUS BARU -->
         <div id="modal-create-stimulus" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -251,7 +251,43 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT SOAL (DILENGKAPI SCROLL RESPONSIF) -->
+        <!-- MODAL EDIT STIMULUS (CHECKPOINT 20) -->
+        <div id="modal-edit-stimulus" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 650px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Edit Grup Stimulus / Wacana</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit-stimulus">X</button>
+            </div>
+            <form id="form-edit-stimulus">
+              <input type="hidden" id="edit-stimulus-id">
+              <input type="hidden" id="edit-stimulus-exam-id">
+
+              <div class="form-group">
+                <label for="edit-stimulus-title">Judul Stimulus / Tema Wacana</label>
+                <input type="text" id="edit-stimulus-title" required>
+              </div>
+
+              <div class="form-group">
+                <label for="edit-stimulus-image-url">URL Gambar Stimulus (Opsional)</label>
+                <input type="url" id="edit-stimulus-image-url" placeholder="https://contoh.com/gambar-infografis.jpg">
+              </div>
+
+              <div class="form-group">
+                <label for="edit-stimulus-content">Isi Wacana / Narasi Teks</label>
+                <textarea id="edit-stimulus-content" rows="6" required></textarea>
+              </div>
+
+              <div id="edit-stimulus-form-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px; position: sticky; bottom: -10px; background: #ffffff; padding: 10px 0; border-top: 1px solid #e2e8f0;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-stimulus">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-update-stimulus">Simpan Perubahan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- MODAL EDIT SOAL -->
         <div id="modal-edit-question" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 780px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -411,13 +447,13 @@
                     <strong style="width: 25px;">D.</strong>
                     <input type="text" class="option-text-input" data-label="D" required placeholder="Teks pilihan D..." style="flex-grow: 1;">
                   </div>
-                  <!-- Opsi E -->
+                  <!-- Opsi E (Opsional) -->
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="radio" name="correct_key" class="option-key-input" value="E" title="Tandai Benar">
                     <strong style="width: 25px;">E.</strong>
                     <input type="text" class="option-text-input" data-label="E" placeholder="Teks pilihan E (opsional)..." style="flex-grow: 1;">
                   </div>
-                  <!-- Opsi F -->
+                  <!-- Opsi F (Opsional) -->
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="radio" name="correct_key" class="option-key-input" value="F" title="Tandai Benar">
                     <strong style="width: 25px;">F.</strong>
@@ -501,7 +537,7 @@
           </div>
         </section>
 
-        <!-- MODAL EDIT SISWA (DILENGKAPI SCROLL) -->
+        <!-- MODAL EDIT SISWA -->
         <div id="modal-edit-student" class="modal-overlay d-none">
           <div class="modal-content">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -572,7 +608,7 @@
           </div>
         </section>
 
-        <!-- MODAL EDIT KELAS (DILENGKAPI SCROLL) -->
+        <!-- MODAL EDIT KELAS -->
         <div id="modal-edit-class" class="modal-overlay d-none">
           <div class="modal-content">
             <div class="card-header" style="margin-bottom: 15px;">
