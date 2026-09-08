@@ -9,7 +9,7 @@ const GuruModule = {
   selectedExamId: null,
   selectedExamTitle: '',
 
-  // Fungsi utilitas render KaTeX otomatis pada elemen kontainer
+  // Utilitas render formula matematika KaTeX otomatis
   renderMath(containerElement) {
     if (typeof renderMathInElement === 'function' && containerElement) {
       try {
@@ -1001,8 +1001,6 @@ const GuruModule = {
       }
 
       container.innerHTML = contentHtml;
-
-      // Render formula matematika KaTeX seketika setelah HTML tertempel
       this.renderMath(container);
     } catch (err) {
       container.innerHTML = `
@@ -1337,6 +1335,24 @@ const GuruModule = {
     const btnSave = document.getElementById("btn-save-question");
     const btnBack = document.getElementById("btn-back-to-bank");
 
+    // Live Math Preview Event Listener
+    const questionInput = document.getElementById("question-content");
+    const previewBox = document.getElementById("math-preview-box");
+    const previewContent = document.getElementById("math-preview-content");
+
+    if (questionInput && previewBox && previewContent) {
+      questionInput.addEventListener("input", (e) => {
+        const val = e.target.value.trim();
+        if (val) {
+          previewBox.style.display = "block";
+          previewContent.innerText = val;
+          this.renderMath(previewContent);
+        } else {
+          previewBox.style.display = "none";
+        }
+      });
+    }
+
     if (btnBack) {
       btnBack.addEventListener("click", () => {
         const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
@@ -1461,6 +1477,7 @@ const GuruModule = {
 
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
+          if (previewBox) previewBox.style.display = "none";
           textInputs.forEach(input => input.value = "");
           keyInputs.forEach((input, idx) => input.checked = (idx === 0));
 
@@ -1489,6 +1506,8 @@ const GuruModule = {
     const optionsContainer = document.getElementById("edit-options-container");
     const typeSelect = document.getElementById("edit-q-type");
     const keyInstruction = document.getElementById("edit-key-instruction");
+    const editPreviewBox = document.getElementById("edit-math-preview-box");
+    const editPreviewContent = document.getElementById("edit-math-preview-content");
 
     alertEl.classList.add("d-none");
     optionsContainer.innerHTML = '<p class="text-muted">Memuat opsi jawaban...</p>';
@@ -1529,6 +1548,17 @@ const GuruModule = {
       document.getElementById("edit-q-points").value = q.points || 1.0;
       document.getElementById("edit-q-image-url").value = q.image_url || "";
       document.getElementById("edit-q-content").value = q.content || "";
+
+      // Inisialisasi pratinjau saat modal edit pertama kali dibuka
+      if (editPreviewBox && editPreviewContent) {
+        if (q.content && q.content.trim()) {
+          editPreviewBox.style.display = "block";
+          editPreviewContent.innerText = q.content;
+          this.renderMath(editPreviewContent);
+        } else {
+          editPreviewBox.style.display = "none";
+        }
+      }
 
       const isPgk = q.question_type === 'pgk';
       keyInstruction.innerText = isPgk 
@@ -1574,6 +1604,24 @@ const GuruModule = {
     const keyInstruction = document.getElementById("edit-key-instruction");
     const alertEl = document.getElementById("edit-q-form-alert");
     const btnUpdate = document.getElementById("btn-update-question");
+
+    // Live Math Preview Event Listener untuk Modal Edit
+    const editQuestionInput = document.getElementById("edit-q-content");
+    const editPreviewBox = document.getElementById("edit-math-preview-box");
+    const editPreviewContent = document.getElementById("edit-math-preview-content");
+
+    if (editQuestionInput && editPreviewBox && editPreviewContent) {
+      editQuestionInput.addEventListener("input", (e) => {
+        const val = e.target.value.trim();
+        if (val) {
+          editPreviewBox.style.display = "block";
+          editPreviewContent.innerText = val;
+          this.renderMath(editPreviewContent);
+        } else {
+          editPreviewBox.style.display = "none";
+        }
+      });
+    }
 
     const closeModal = () => modal.classList.add("d-none");
 
