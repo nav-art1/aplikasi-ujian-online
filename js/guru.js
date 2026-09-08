@@ -1,6 +1,6 @@
 // ==========================================================================
 // MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL,
-// REORDERING BLOK STIMULUS & INTERNAL SOAL, KATEX, & STORAGE
+// REORDERING BLOK STIMULUS, KATEX, STORAGE, & IMPORT EXCEL (OPSI A - F)
 // ==========================================================================
 
 const GuruModule = {
@@ -11,6 +11,7 @@ const GuruModule = {
   selectedExamTitle: '',
   targetStimulusId: null,
   targetStimulusTitle: '',
+  parsedExcelQuestions: [],
 
   renderMath(containerElement) {
     if (typeof renderMathInElement === 'function' && containerElement) {
@@ -117,7 +118,6 @@ const GuruModule = {
     }
   },
 
-  // Rapikan seluruh nomor soal: Menjaga satu blok stimulus selalu bergandengan tanpa celah
   async renumberAllQuestions(examId) {
     if (!examId) return;
     const yakin = confirm("Rapikan seluruh nomor urut soal (1 s.d. selesai) dan satukan nomor butir soal pada tiap stimulus?");
@@ -134,7 +134,6 @@ const GuruModule = {
       if (error) throw error;
       if (!allQuestions || allQuestions.length === 0) return;
 
-      // Kumpulkan dan kelompokkan berdasarkan blok kronologis
       const orderedList = [];
       const visitedStimuli = new Set();
 
@@ -143,7 +142,6 @@ const GuruModule = {
           orderedList.push(q);
         } else if (!visitedStimuli.has(q.stimulus_group_id)) {
           visitedStimuli.add(q.stimulus_group_id);
-          // Ambil semua soal dalam stimulus ini dan satukan berurutan
           const sameStim = allQuestions
             .filter(item => item.stimulus_group_id === q.stimulus_group_id)
             .sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -151,7 +149,6 @@ const GuruModule = {
         }
       }
 
-      // Berikan nomor urut bulat 1, 2, 3, ...
       for (let i = 0; i < orderedList.length; i++) {
         const newNum = i + 1;
         await client
@@ -167,15 +164,9 @@ const GuruModule = {
     }
   },
 
-  // =========================================================================
-  // LOGIKA GESER URUTAN BLOK STIMULUS & INTERNAL BUTIR SOAL
-  // =========================================================================
-
-  // Geser SELURUH BLOK STIMULUS (Naik / Turun) melewati item soal lain
   async moveStimulusBlock(stimulusId, examId, direction) {
     const client = getSupabaseClient();
     try {
-      // 1. Ambil seluruh soal terurut
       const { data: allQuestions, error } = await client
         .from('questions')
         .select('id, stimulus_group_id, original_number')
@@ -185,7 +176,6 @@ const GuruModule = {
       if (error) throw error;
       if (!allQuestions || allQuestions.length === 0) return;
 
-      // 2. Bentuk daftar blok unit: tiap unit adalah soal mandiri tunggal ATAU array soal dalam 1 stimulus
       const units = [];
       const visitedStim = new Set();
 
@@ -203,14 +193,12 @@ const GuruModule = {
       if (currentUnitIndex === -1) return;
 
       const targetUnitIndex = currentUnitIndex + direction;
-      if (targetUnitIndex < 0 || targetUnitIndex >= units.length) return; // Sudah paling atas/bawah
+      if (targetUnitIndex < 0 || targetUnitIndex >= units.length) return;
 
-      // 3. Tukar posisi kedua unit blok
       const temp = units[currentUnitIndex];
       units[currentUnitIndex] = units[targetUnitIndex];
       units[targetUnitIndex] = temp;
 
-      // 4. Hitung ulang nomor urut untuk seluruh soal dari unit yang telah ditukar
       let counter = 1;
       for (const u of units) {
         for (const q of u.questions) {
@@ -227,9 +215,6 @@ const GuruModule = {
     }
   },
 
-  // Geser satu butir soal:
-  // - Jika di dalam stimulus: HANYA bertukar posisi di dalam stimulus tersebut
-  // - Jika soal mandiri: bertukar posisi dengan soal mandiri di sekitarnya
   async moveQuestionOrder(questionId, examId, stimulusId, direction) {
     const client = getSupabaseClient();
     try {
@@ -238,7 +223,6 @@ const GuruModule = {
         .select('id, original_number, stimulus_group_id')
         .eq('exam_id', examId);
 
-      // Jika soal berada di stimulus, batasi hanya menukar di dalam stimulus tersebut
       if (stimulusId) {
         query = query.eq('stimulus_group_id', stimulusId);
       } else {
@@ -258,7 +242,6 @@ const GuruModule = {
       const currentQ = scopeQuestions[currentIndex];
       const targetQ = scopeQuestions[targetIndex];
 
-      // Tukar nomor asli keduanya
       await client.from('questions').update({ original_number: -99999 }).eq('id', currentQ.id);
       await client.from('questions').update({ original_number: currentQ.original_number }).eq('id', targetQ.id);
       await client.from('questions').update({ original_number: targetQ.original_number }).eq('id', currentQ.id);
@@ -336,6 +319,233 @@ const GuruModule = {
     }
   },
 
+  // ==========================================
+  // FITUR IMPORT EXCEL (DUKUNG OPSI A S/D F)
+  // ==========================================
+
+  downloadExcelTemplate() {
+    if (typeof XLSX === 'undefined') {
+      alert("Pustaka SheetJS (XLSX) belum selesai dimuat.");
+      return;
+    }
+
+    const templateData = [
+      {
+        nomor: 1,
+        tipe: 'pg',
+        poin: 1.0,
+        soal: 'Ibukota negara Indonesia saat ini adalah...',
+        opsi_a: 'Jakarta',
+        opsi_b: 'Surabaya',
+        opsi_c: 'Bandung',
+        opsi_d: 'Medan',
+        opsi_e: '',
+        opsi_f: '',
+        kunci: 'A',
+        gambar_url: ''
+      },
+      {
+        nomor: 2,
+        tipe: 'pgk',
+        poin: 2.0,
+        soal: 'Manakah dari bilangan berikut yang merupakan faktor dari 12? (Contoh PGK dengan 6 opsi A sampai F)',
+        opsi_a: '1',
+        opsi_b: '2',
+        opsi_c: '3',
+        opsi_d: '4',
+        opsi_e: '5',
+        opsi_f: '6',
+        kunci: 'A,B,C,D,F',
+        gambar_url: ''
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Soal");
+    XLSX.writeFile(workbook, "template_soal_ujian.xlsx");
+  },
+
+  setupImportExcelEventListeners() {
+    const btnDownload = document.getElementById("btn-download-template");
+    const fileInput = document.getElementById("excel-file-input");
+    const examSelect = document.getElementById("import-exam-select");
+    const previewArea = document.getElementById("import-preview-area");
+    const previewBody = document.getElementById("import-preview-body");
+    const summaryText = document.getElementById("import-summary-text");
+    const btnCommit = document.getElementById("btn-commit-import");
+    const alertEl = document.getElementById("import-alert");
+
+    if (btnDownload) {
+      btnDownload.addEventListener("click", () => this.downloadExcelTemplate());
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        alertEl.classList.add("d-none");
+        const reader = new FileReader();
+
+        reader.onload = (evt) => {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rawJson = XLSX.utils.sheet_to_json(worksheet);
+
+            if (!rawJson || rawJson.length === 0) {
+              alertEl.className = "alert alert-error";
+              alertEl.innerText = "File Excel kosong atau format kolom tidak sesuai.";
+              alertEl.classList.remove("d-none");
+              previewArea.classList.add("d-none");
+              return;
+            }
+
+            this.parsedExcelQuestions = [];
+            let tableRows = '';
+
+            rawJson.forEach((row, idx) => {
+              const num = row.nomor || (idx + 1);
+              const type = (row.tipe || 'pg').toLowerCase().trim();
+              const points = parseFloat(row.poin) || 1.0;
+              const content = (row.soal || '').trim();
+              const rawKey = String(row.kunci || 'A').toUpperCase().trim();
+              const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+
+              // Baca opsi A, B, C, D, E, dan F
+              const options = [];
+              ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
+                const optText = row[`opsi_${lbl}`] ? String(row[`opsi_${lbl}`]).trim() : '';
+                if (optText) {
+                  options.push({
+                    option_label: lbl.toUpperCase(),
+                    content: optText,
+                    is_correct: correctKeys.includes(lbl.toUpperCase())
+                  });
+                }
+              });
+
+              if (content && options.length >= 2) {
+                this.parsedExcelQuestions.push({
+                  original_number: num,
+                  question_type: type,
+                  points: points,
+                  content: content,
+                  image_url: row.gambar_url ? String(row.gambar_url).trim() : null,
+                  correct_keys: correctKeys,
+                  options: options
+                });
+
+                tableRows += `
+                  <tr>
+                    <td>${num}</td>
+                    <td><span class="badge ${type === 'pg' ? 'badge-success' : 'badge-warning'}">${type.toUpperCase()}</span></td>
+                    <td>${points}</td>
+                    <td>${content.substring(0, 70)}${content.length > 70 ? '...' : ''} <small class="text-muted">(${options.length} opsi)</small></td>
+                    <td><strong>${correctKeys.join(', ')}</strong></td>
+                  </tr>
+                `;
+              }
+            });
+
+            if (this.parsedExcelQuestions.length === 0) {
+              alertEl.className = "alert alert-error";
+              alertEl.innerText = "Tidak ada butir soal valid yang dapat diimpor. Pastikan kolom soal, opsi_a, opsi_b, dan kunci terisi.";
+              alertEl.classList.remove("d-none");
+              previewArea.classList.add("d-none");
+              return;
+            }
+
+            summaryText.innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Butir Soal Terbaca Siap Diimpor`;
+            previewBody.innerHTML = tableRows;
+            previewArea.classList.remove("d-none");
+          } catch (err) {
+            alertEl.className = "alert alert-error";
+            alertEl.innerText = `Gagal membaca file Excel: ${err.message}`;
+            alertEl.classList.remove("d-none");
+          }
+        };
+
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    if (btnCommit) {
+      btnCommit.addEventListener("click", async () => {
+        const examId = examSelect.value;
+        if (!examId) {
+          alert("Silakan pilih target sesi ujian terlebih dahulu.");
+          return;
+        }
+
+        if (!this.parsedExcelQuestions || this.parsedExcelQuestions.length === 0) {
+          alert("Belum ada data soal yang siap diimpor.");
+          return;
+        }
+
+        btnCommit.disabled = true;
+        btnCommit.innerText = "Mengimpor Data...";
+        alertEl.classList.add("d-none");
+
+        const client = getSupabaseClient();
+        try {
+          let countSuccess = 0;
+          for (const q of this.parsedExcelQuestions) {
+            const { data: insertedQ, error: qErr } = await client
+              .from('questions')
+              .insert({
+                exam_id: examId,
+                stimulus_group_id: null,
+                original_number: q.original_number,
+                question_type: q.question_type,
+                points: q.points,
+                image_url: q.image_url,
+                content: q.content,
+                correct_keys: q.correct_keys,
+                group_id: null
+              })
+              .select()
+              .single();
+
+            if (qErr) throw qErr;
+
+            const optionsPayload = q.options.map(opt => ({
+              question_id: insertedQ.id,
+              option_label: opt.option_label,
+              content: opt.content,
+              is_correct: opt.is_correct
+            }));
+
+            const { error: optErr } = await client.from('options').insert(optionsPayload);
+            if (optErr) throw optErr;
+
+            countSuccess++;
+          }
+
+          alertEl.className = "alert alert-success";
+          alertEl.innerText = `Berhasil mengimpor ${countSuccess} butir soal ke dalam ujian!`;
+          alertEl.classList.remove("d-none");
+
+          fileInput.value = "";
+          previewArea.classList.add("d-none");
+          this.parsedExcelQuestions = [];
+
+          await this.loadBankSoalContent(examId);
+        } catch (err) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = `Terjadi kesalahan saat mengimpor: ${err.message}`;
+          alertEl.classList.remove("d-none");
+        } finally {
+          btnCommit.disabled = false;
+          btnCommit.innerText = "🚀 Simpan Semua ke Bank Soal";
+        }
+      });
+    }
+  },
+
   async initDashboard(teacherProfile) {
     this.currentTeacher = teacherProfile;
 
@@ -365,6 +575,7 @@ const GuruModule = {
     this.setupStimulusEventListeners();
     this.setupQuestionFormEventListeners();
     this.setupEditQuestionEventListeners();
+    this.setupImportExcelEventListeners();
   },
 
   setupNavigation() {
@@ -417,6 +628,11 @@ const GuruModule = {
           this.loadExamsTable();
         } else if (targetId === "panel-bank-soal") {
           this.loadBankSoalExamFilter();
+        } else if (targetId === "panel-import-excel") {
+          const importSelect = document.getElementById("import-exam-select");
+          if (importSelect && this.selectedExamId) {
+            importSelect.value = this.selectedExamId;
+          }
         }
       });
     });
@@ -857,10 +1073,6 @@ const GuruModule = {
     }
   },
 
-  // ==========================================
-  // MANAJEMEN UJIAN
-  // ==========================================
-
   generateExamToken() {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let token = "";
@@ -1116,10 +1328,6 @@ const GuruModule = {
     }
   },
 
-  // ==========================================
-  // BANK SOAL & STIMULUS
-  // ==========================================
-
   setExamActive(examId, examTitle) {
     this.selectedExamId = examId;
     this.selectedExamTitle = examTitle;
@@ -1129,7 +1337,8 @@ const GuruModule = {
   async loadBankSoalExamFilter() {
     const client = getSupabaseClient();
     const filterSelect = document.getElementById("bank-exam-filter");
-    if (!client || !this.currentTeacher || !filterSelect) return;
+    const importSelect = document.getElementById("import-exam-select");
+    if (!client || !this.currentTeacher) return;
 
     try {
       const { data: exams, error } = await client
@@ -1147,17 +1356,20 @@ const GuruModule = {
         optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
       });
 
-      filterSelect.innerHTML = optionsHtml;
+      if (filterSelect) filterSelect.innerHTML = optionsHtml;
+      if (importSelect) importSelect.innerHTML = optionsHtml;
 
       if (this.examsList.length > 0) {
         if (!this.selectedExamId || !this.examsList.find(e => e.id === this.selectedExamId)) {
           const firstExam = this.examsList[0];
           const firstTitle = `${firstExam.title} (${firstExam.subject || '-'})`;
-          filterSelect.value = firstExam.id;
+          if (filterSelect) filterSelect.value = firstExam.id;
+          if (importSelect) importSelect.value = firstExam.id;
           this.setExamActive(firstExam.id, firstTitle);
           await this.loadBankSoalContent(firstExam.id);
         } else {
-          filterSelect.value = this.selectedExamId;
+          if (filterSelect) filterSelect.value = this.selectedExamId;
+          if (importSelect) importSelect.value = this.selectedExamId;
           await this.loadBankSoalContent(this.selectedExamId);
         }
       } else {
@@ -1166,7 +1378,7 @@ const GuruModule = {
         this.syncActiveExamToQuestionForm();
       }
     } catch (err) {
-      console.warn("Gagal memuat filter ujian Bank Soal:", err);
+      console.warn("Gagal memuat filter ujian:", err);
     }
   },
 
@@ -1274,7 +1486,6 @@ const GuruModule = {
 
       let contentHtml = '';
 
-      // Tampilkan Grup Stimulus dengan tombol geser blok (▲ / ▼)
       const stimuliWithQuestions = (stimulusGroups || []).map(stim => {
         const stimQuestions = (questions || [])
           .filter(q => q.stimulus_group_id === stim.id)
@@ -1292,7 +1503,6 @@ const GuruModule = {
             <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0; flex-wrap: wrap; gap: 10px;">
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="font-weight: bold; color: var(--primary-color);">Wacana / Stimulus: ${stim.title || 'Tanpa Judul'}</span>
-                <!-- Tombol Geser Blok Stimulus Sekaligus -->
                 <div style="display: inline-flex; gap: 4px;">
                   <button class="btn btn-secondary btn-sm" title="Geser Blok Stimulus Naik (Melewati Soal Lain)" onclick="GuruModule.moveStimulusBlock('${stim.id}', '${examId}', -1)">▲ Blok</button>
                   <button class="btn btn-secondary btn-sm" title="Geser Blok Stimulus Turun (Melewati Soal Lain)" onclick="GuruModule.moveStimulusBlock('${stim.id}', '${examId}', 1)">▼ Blok</button>
@@ -1319,7 +1529,6 @@ const GuruModule = {
         `;
       });
 
-      // Tampilkan Soal Mandiri
       const standaloneQuestions = (questions || []).filter(q => !q.stimulus_group_id);
       if (standaloneQuestions.length > 0) {
         contentHtml += `
@@ -1441,10 +1650,6 @@ const GuruModule = {
       navTambah.click();
     }
   },
-
-  // ==========================================
-  // MANAJEMEN STIMULUS
-  // ==========================================
 
   setupStimulusEventListeners() {
     const modalCreate = document.getElementById("modal-create-stimulus");
@@ -1648,10 +1853,6 @@ const GuruModule = {
       console.warn("Gagal memuat dropdown stimulus:", err);
     }
   },
-
-  // ==========================================
-  // FORMULIR TAMBAH SOAL
-  // ==========================================
 
   async syncActiveExamToQuestionForm() {
     const examIdInput = document.getElementById("question-exam-id");
@@ -1877,10 +2078,6 @@ const GuruModule = {
       });
     }
   },
-
-  // ==========================================
-  // MODAL EDIT BUTIR SOAL
-  // ==========================================
 
   async openEditQuestionModal(questionId, examId) {
     const modal = document.getElementById("modal-edit-question");
