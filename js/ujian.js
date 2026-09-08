@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA (CHECKPOINT 28)
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA & SINKRONISASI DATABASE (CHECKPOINT 29)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -10,6 +10,7 @@ const ExamRunnerModule = {
   userAnswers: {}, // Format: { [questionId]: { keys: ['A'], isDoubt: false } }
   timerInterval: null,
   remainingSeconds: 0,
+  startTimeIso: null,
 
   renderMath(element) {
     if (typeof renderMathInElement === 'function' && element) {
@@ -35,7 +36,8 @@ const ExamRunnerModule = {
       return;
     }
 
-    // Tampilkan data header
+    this.startTimeIso = new Date().toISOString();
+
     document.getElementById("header-exam-title").innerText = `${this.session.exam.title} (${this.session.exam.subject || '-'})`;
     document.getElementById("header-student-info").innerText = `${this.session.student.full_name} (${this.session.student.class_name})`;
 
@@ -49,7 +51,6 @@ const ExamRunnerModule = {
     document.getElementById("btn-prev-question").addEventListener("click", () => this.navigate(-1));
     document.getElementById("btn-next-question").addEventListener("click", () => this.navigate(1));
     
-    // Toggle Ragu-Ragu
     document.getElementById("check-doubt").addEventListener("change", (e) => {
       const q = this.questions[this.currentIndex];
       if (!q) return;
@@ -62,7 +63,6 @@ const ExamRunnerModule = {
       this.renderGridNumbers();
     });
 
-    // Buka/Tutup Drawer Nomor Soal
     const drawer = document.getElementById("drawer-grid");
     document.getElementById("btn-toggle-grid").addEventListener("click", () => drawer.classList.remove("d-none"));
     document.getElementById("btn-close-grid").addEventListener("click", () => drawer.classList.add("d-none"));
@@ -70,8 +70,7 @@ const ExamRunnerModule = {
       if (e.target === drawer) drawer.classList.add("d-none");
     });
 
-    // Kumpulkan Ujian
-    document.getElementById("btn-finish-exam").addEventListener("click", () => this.finishExam());
+    document.getElementById("btn-finish-exam").addEventListener("click", () => this.finishExam(false));
   },
 
   async loadExamContent() {
@@ -79,7 +78,6 @@ const ExamRunnerModule = {
     const examId = this.session.exam.id;
 
     try {
-      // 1. Ambil seluruh stimulus wacana
       const { data: stimuli } = await client
         .from('stimulus_groups')
         .select('*')
@@ -89,7 +87,6 @@ const ExamRunnerModule = {
         this.stimuliMap[s.id] = s;
       });
 
-      // 2. Ambil seluruh butir pertanyaan beserta opsi jawabannya
       const { data: qData, error: qErr } = await client
         .from('questions')
         .select(`
@@ -100,6 +97,7 @@ const ExamRunnerModule = {
           points,
           image_url,
           content,
+          correct_keys,
           options (
             id,
             option_label,
@@ -117,14 +115,12 @@ const ExamRunnerModule = {
         return;
       }
 
-      // Logika pengacakan per siswa jika diaktifkan (menjaga soal stimulus tetap mengelompok)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsPreservingStimulus(qData);
       } else {
         this.questions = qData;
       }
 
-      // Acak opsi jawaban jika diaktifkan
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options) {
@@ -141,7 +137,6 @@ const ExamRunnerModule = {
     }
   },
 
-  // Helper pengacakan soal dengan mengunci keutuhan stimulus
   shuffleQuestionsPreservingStimulus(questionsList) {
     const units = [];
     const visitedStim = new Set();
@@ -172,7 +167,6 @@ const ExamRunnerModule = {
     if (this.questions.length === 0) return;
     const q = this.questions[this.currentIndex];
 
-    // 1. Tampilkan Blok Stimulus jika ada
     const stimContainer = document.getElementById("stimulus-block-container");
     if (q.stimulus_group_id && this.stimuliMap[q.stimulus_group_id]) {
       const stim = this.stimuliMap[q.stimulus_group_id];
@@ -194,7 +188,6 @@ const ExamRunnerModule = {
       stimContainer.classList.add("d-none");
     }
 
-    // 2. Tampilkan Butir Soal
     document.getElementById("display-q-number").innerText = `Soal No. ${this.currentIndex + 1}`;
     const typeLabel = q.question_type === 'pg' ? 'Pilihan Ganda' : 'PG Kompleks';
     document.getElementById("display-q-type").innerText = typeLabel;
@@ -213,7 +206,6 @@ const ExamRunnerModule = {
       imgWrap.style.display = "none";
     }
 
-    // 3. Tampilkan Pilihan Jawaban
     const optionsContainer = document.getElementById("display-options-list");
     const isPgk = q.question_type === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
@@ -238,10 +230,7 @@ const ExamRunnerModule = {
     optionsContainer.innerHTML = optionsHtml;
     this.renderMath(optionsContainer);
 
-    // 4. Status Ragu-Ragu
     document.getElementById("check-doubt").checked = currentAns.isDoubt;
-
-    // 5. Visibilitas Tombol Navigasi
     document.getElementById("btn-prev-question").style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
     
     const isLast = this.currentIndex === this.questions.length - 1;
@@ -326,7 +315,6 @@ const ExamRunnerModule = {
     }
   },
 
-  // Manajemen Timer Hitung Mundur
   initTimer() {
     const storageKey = `timer_end_${this.session.exam.id}_${this.session.student.id}`;
     let endTime = localStorage.getItem(storageKey);
@@ -356,7 +344,7 @@ const ExamRunnerModule = {
 
       timerEl.innerText = `⏱️ ${hStr}:${mStr}:${sStr}`;
 
-      if (diffSec <= 300) { // Kurang dari 5 menit
+      if (diffSec <= 300) {
         timerEl.classList.add("warning");
       }
 
@@ -371,7 +359,6 @@ const ExamRunnerModule = {
     this.timerInterval = setInterval(updateTimer, 1000);
   },
 
-  // Penyimpanan Lokal Jawaban Sementara
   saveLocalAnswers() {
     const storageKey = `answers_${this.session.exam.id}_${this.session.student.id}`;
     sessionStorage.setItem(storageKey, JSON.stringify(this.userAnswers));
@@ -389,7 +376,7 @@ const ExamRunnerModule = {
     }
   },
 
-  // Finalisasi Ujian (Checkpoint 29 akan menyinkronkan kalkulasi nilai & tabel attempts)
+  // Finalisasi Ujian, Kalkulasi Skor, & Simpan ke Supabase
   async finishExam(isAuto = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -404,8 +391,117 @@ const ExamRunnerModule = {
     const timerStorageKey = `timer_end_${this.session.exam.id}_${this.session.student.id}`;
     localStorage.removeItem(timerStorageKey);
 
-    alert("Ujian berhasil dikumpulkan. Anda akan diarahkan ke halaman penyelesaian.");
-    window.location.href = "selesai.html";
+    const btnFinish = document.getElementById("btn-finish-exam");
+    if (btnFinish) {
+      btnFinish.disabled = true;
+      btnFinish.innerText = "Mengirim Jawaban...";
+    }
+
+    const client = getSupabaseClient();
+    try {
+      // 1. Kalkulasi Penilaian
+      let totalEarnedScore = 0;
+      let maxPossibleScore = 0;
+      let correctCount = 0;
+      const studentAnswersPayload = [];
+
+      this.questions.forEach(q => {
+        const qPoints = parseFloat(q.points) || 1.0;
+        maxPossibleScore += qPoints;
+
+        const userAns = this.userAnswers[q.id] || { keys: [] };
+        const selectedKeys = userAns.keys || [];
+
+        // Kunci benar dari database (array)
+        const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
+        const userKeysSorted = [...selectedKeys].map(k => String(k).toUpperCase().trim()).sort();
+        const trueKeysSorted = [...trueKeys].sort();
+
+        // Cek kecocokan kunci
+        const isCorrect = (userKeysSorted.length === trueKeysSorted.length) &&
+          userKeysSorted.every((val, index) => val === trueKeysSorted[index]);
+
+        let scoreEarned = 0;
+        if (isCorrect) {
+          scoreEarned = qPoints;
+          totalEarnedScore += qPoints;
+          correctCount++;
+        }
+
+        studentAnswersPayload.push({
+          question_id: q.id,
+          selected_keys: selectedKeys,
+          is_correct: isCorrect,
+          score_earned: scoreEarned
+        });
+      });
+
+      // Konversi nilai skala 0 - 100
+      const finalPercentage = maxPossibleScore > 0 
+        ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
+        : 0;
+
+      // 2. Simpan Rekaman ke Tabel exam_attempts
+      const { data: attemptData, error: attemptErr } = await client
+        .from('exam_attempts')
+        .insert({
+          exam_id: this.session.exam.id,
+          student_id: this.session.student.id,
+          score: finalPercentage,
+          total_points: totalEarnedScore,
+          started_at: this.startTimeIso,
+          submitted_at: new Date().toISOString(),
+          status: 'completed'
+        })
+        .select()
+        .single();
+
+      if (attemptErr) throw attemptErr;
+
+      // 3. Simpan Detail Jawaban ke Tabel student_answers
+      if (studentAnswersPayload.length > 0) {
+        const answersData = studentAnswersPayload.map(a => ({
+          attempt_id: attemptData.id,
+          question_id: a.question_id,
+          selected_keys: a.selected_keys,
+          is_correct: a.is_correct,
+          score_earned: a.score_earned
+        }));
+
+        const { error: ansInsertErr } = await client
+          .from('student_answers')
+          .insert(answersData);
+
+        if (ansInsertErr) throw ansInsertErr;
+      }
+
+      // 4. Simpan ringkasan untuk selesai.html
+      const finishSummary = {
+        student_name: this.session.student.full_name,
+        student_number: this.session.student.student_number,
+        exam_title: this.session.exam.title,
+        subject: this.session.exam.subject,
+        total_questions: this.questions.length,
+        correct_count: correctCount,
+        final_score: finalPercentage,
+        submitted_at: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      };
+
+      sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
+
+      // Hapus data sesi pengerjaan lokal
+      const answersStorageKey = `answers_${this.session.exam.id}_${this.session.student.id}`;
+      sessionStorage.removeItem(answersStorageKey);
+
+      window.location.href = "selesai.html";
+    } catch (err) {
+      console.error("Gagal menyimpan hasil ujian:", err);
+      alert(`Terjadi kendala saat mengirim jawaban: ${err.message}. Hubungi guru pengawas.`);
+      if (btnFinish) {
+        btnFinish.disabled = false;
+        btnFinish.innerText = "Coba Kumpulkan Lagi";
+      }
+    }
   }
 };
 
