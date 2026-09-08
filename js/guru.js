@@ -1,5 +1,6 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL, & KATEX
+// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL,
+// KATEX, & UPLOAD STORAGE (CHECKPOINT 22)
 // ==========================================================================
 
 const GuruModule = {
@@ -24,6 +25,35 @@ const GuruModule = {
         console.warn("KaTeX render notice:", err);
       }
     }
+  },
+
+  // Helper fungsi upload gambar ke Supabase Storage (exam-images)
+  async uploadImageFile(file, folder = 'questions') {
+    if (!file) return null;
+
+    const client = getSupabaseClient();
+    if (!client) throw new Error("Supabase client belum siap.");
+
+    const fileExt = file.name.split('.').pop();
+    const cleanExt = fileExt ? fileExt.toLowerCase() : 'jpg';
+    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${cleanExt}`;
+
+    const { data, error } = await client.storage
+      .from('exam-images')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      throw new Error(`Upload gambar gagal: ${error.message}`);
+    }
+
+    const { data: publicUrlData } = client.storage
+      .from('exam-images')
+      .getPublicUrl(data.path);
+
+    return publicUrlData.publicUrl;
   },
 
   async initDashboard(teacherProfile) {
@@ -1148,14 +1178,20 @@ const GuruModule = {
         alertCreate.classList.add("d-none");
 
         const title = document.getElementById("stimulus-title").value.trim();
-        const imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
+        const fileInput = document.getElementById("stimulus-image-file");
+        let imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
         const content = document.getElementById("stimulus-content").value.trim();
 
         btnSaveCreate.disabled = true;
-        btnSaveCreate.innerText = "Menyimpan...";
+        btnSaveCreate.innerText = "Mengunggah & Menyimpan...";
 
-        const client = getSupabaseClient();
         try {
+          // Jika ada file gambar lokal yang dipilih, unggah ke storage
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
+          }
+
+          const client = getSupabaseClient();
           const { error } = await client
             .from('stimulus_groups')
             .insert({
@@ -1205,14 +1241,19 @@ const GuruModule = {
         const stimulusId = document.getElementById("edit-stimulus-id").value;
         const examId = document.getElementById("edit-stimulus-exam-id").value;
         const title = document.getElementById("edit-stimulus-title").value.trim();
-        const imageUrl = document.getElementById("edit-stimulus-image-url").value.trim() || null;
+        const fileInput = document.getElementById("edit-stimulus-image-file");
+        let imageUrl = document.getElementById("edit-stimulus-image-url").value.trim() || null;
         const content = document.getElementById("edit-stimulus-content").value.trim();
 
         btnUpdateEdit.disabled = true;
         btnUpdateEdit.innerText = "Memperbarui...";
 
-        const client = getSupabaseClient();
         try {
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
+          }
+
+          const client = getSupabaseClient();
           const { error } = await client
             .from('stimulus_groups')
             .update({
@@ -1242,8 +1283,10 @@ const GuruModule = {
     const modal = document.getElementById("modal-edit-stimulus");
     const alertEl = document.getElementById("edit-stimulus-form-alert");
     const btnUpdate = document.getElementById("btn-update-stimulus");
+    const fileInput = document.getElementById("edit-stimulus-image-file");
 
     alertEl.classList.add("d-none");
+    if (fileInput) fileInput.value = "";
     btnUpdate.disabled = false;
     btnUpdate.innerText = "Simpan Perubahan";
     modal.classList.remove("d-none");
@@ -1335,7 +1378,6 @@ const GuruModule = {
     const btnSave = document.getElementById("btn-save-question");
     const btnBack = document.getElementById("btn-back-to-bank");
 
-    // Live Math Preview Event Listener
     const questionInput = document.getElementById("question-content");
     const previewBox = document.getElementById("math-preview-box");
     const previewContent = document.getElementById("math-preview-content");
@@ -1392,7 +1434,8 @@ const GuruModule = {
         const originalNumber = parseInt(document.getElementById("question-number").value, 10);
         const questionType = document.getElementById("question-type").value;
         const points = parseFloat(document.getElementById("question-points").value) || 1.0;
-        const imageUrl = document.getElementById("question-image-url").value.trim() || null;
+        const fileInput = document.getElementById("question-image-file");
+        let imageUrl = document.getElementById("question-image-url").value.trim() || null;
         const content = document.getElementById("question-content").value.trim();
 
         if (!examId) {
@@ -1436,10 +1479,15 @@ const GuruModule = {
         }
 
         btnSave.disabled = true;
-        btnSave.innerText = "Menyimpan Soal...";
+        btnSave.innerText = "Mengunggah & Menyimpan...";
 
-        const client = getSupabaseClient();
         try {
+          // Upload file gambar jika guru memilih berkas
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
+          }
+
+          const client = getSupabaseClient();
           const { data: newQuestion, error: qErr } = await client
             .from('questions')
             .insert({
@@ -1477,6 +1525,7 @@ const GuruModule = {
 
           document.getElementById("question-content").value = "";
           document.getElementById("question-image-url").value = "";
+          if (fileInput) fileInput.value = "";
           if (previewBox) previewBox.style.display = "none";
           textInputs.forEach(input => input.value = "");
           keyInputs.forEach((input, idx) => input.checked = (idx === 0));
@@ -1508,8 +1557,10 @@ const GuruModule = {
     const keyInstruction = document.getElementById("edit-key-instruction");
     const editPreviewBox = document.getElementById("edit-math-preview-box");
     const editPreviewContent = document.getElementById("edit-math-preview-content");
+    const fileInput = document.getElementById("edit-q-image-file");
 
     alertEl.classList.add("d-none");
+    if (fileInput) fileInput.value = "";
     optionsContainer.innerHTML = '<p class="text-muted">Memuat opsi jawaban...</p>';
     modal.classList.remove("d-none");
 
@@ -1549,7 +1600,6 @@ const GuruModule = {
       document.getElementById("edit-q-image-url").value = q.image_url || "";
       document.getElementById("edit-q-content").value = q.content || "";
 
-      // Inisialisasi pratinjau saat modal edit pertama kali dibuka
       if (editPreviewBox && editPreviewContent) {
         if (q.content && q.content.trim()) {
           editPreviewBox.style.display = "block";
@@ -1605,7 +1655,6 @@ const GuruModule = {
     const alertEl = document.getElementById("edit-q-form-alert");
     const btnUpdate = document.getElementById("btn-update-question");
 
-    // Live Math Preview Event Listener untuk Modal Edit
     const editQuestionInput = document.getElementById("edit-q-content");
     const editPreviewBox = document.getElementById("edit-math-preview-box");
     const editPreviewContent = document.getElementById("edit-math-preview-content");
@@ -1666,7 +1715,8 @@ const GuruModule = {
         const originalNumber = parseInt(document.getElementById("edit-q-number").value, 10);
         const questionType = document.getElementById("edit-q-type").value;
         const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
-        const imageUrl = document.getElementById("edit-q-image-url").value.trim() || null;
+        const fileInput = document.getElementById("edit-q-image-file");
+        let imageUrl = document.getElementById("edit-q-image-url").value.trim() || null;
         const content = document.getElementById("edit-q-content").value.trim();
 
         const textInputs = document.querySelectorAll(".edit-option-text");
@@ -1709,8 +1759,12 @@ const GuruModule = {
         btnUpdate.disabled = true;
         btnUpdate.innerText = "Memperbarui...";
 
-        const client = getSupabaseClient();
         try {
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
+          }
+
+          const client = getSupabaseClient();
           const { error: qUpdateErr } = await client
             .from('questions')
             .update({
