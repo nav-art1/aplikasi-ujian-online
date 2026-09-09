@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA (FIX PILIHAN GANDA & FALLBACK OPTIONS)
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA (FIX DIRECT LOAD OPTIONS)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -101,7 +101,7 @@ const ExamRunnerModule = {
         this.stimuliMap[s.id] = s;
       });
 
-      // 2. Ambil butir soal
+      // 2. Ambil seluruh butir pertanyaan murni
       const { data: qData, error: qErr } = await client
         .from('questions')
         .select(`
@@ -112,13 +112,7 @@ const ExamRunnerModule = {
           points,
           image_url,
           content,
-          correct_keys,
-          options (
-            id,
-            question_id,
-            option_label,
-            content
-          )
+          correct_keys
         `)
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
@@ -131,29 +125,25 @@ const ExamRunnerModule = {
         return;
       }
 
-      // 3. Cadangan (Fallback): jika relasi options di atas menghasilkan array kosong, ambil langsung dari tabel options
-      let allNeedFallback = qData.some(q => !q.options || q.options.length === 0);
-      if (allNeedFallback) {
-        const questionIds = qData.map(q => q.id);
-        const { data: directOptions, error: optErr } = await client
-          .from('options')
-          .select('id, question_id, option_label, content')
-          .in('question_id', questionIds);
+      // 3. Ambil langsung opsi jawaban dari tabel options berdasarkan ID soal
+      const questionIds = qData.map(q => q.id);
+      const { data: allOptions, error: optErr } = await client
+        .from('options')
+        .select('id, question_id, option_label, content')
+        .in('question_id', questionIds);
 
-        if (!optErr && directOptions && directOptions.length > 0) {
-          const optMap = {};
-          directOptions.forEach(opt => {
-            if (!optMap[opt.question_id]) optMap[opt.question_id] = [];
-            optMap[opt.question_id].push(opt);
-          });
+      if (optErr) throw optErr;
 
-          qData.forEach(q => {
-            if (!q.options || q.options.length === 0) {
-              q.options = optMap[q.id] || [];
-            }
-          });
-        }
-      }
+      // Petakan opsi ke masing-masing soal
+      const optionsMap = {};
+      (allOptions || []).forEach(opt => {
+        if (!optionsMap[opt.question_id]) optionsMap[opt.question_id] = [];
+        optionsMap[opt.question_id].push(opt);
+      });
+
+      qData.forEach(q => {
+        q.options = optionsMap[q.id] || [];
+      });
 
       // 4. Pengacakan soal jika diaktifkan (tetap menjaga kelompok stimulus)
       if (this.session.exam.randomize_questions) {
@@ -267,7 +257,6 @@ const ExamRunnerModule = {
       const isPgk = q.question_type === 'pgk';
       const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
       
-      // Ambil opsi yang tersedia dan urutkan
       const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
 
       if (opts.length === 0) {
@@ -327,10 +316,8 @@ const ExamRunnerModule = {
     }
 
     if (!isPgk) {
-      // Pilihan ganda biasa (1 pilihan)
       this.userAnswers[questionId].keys = [optionKey];
     } else {
-      // PG Kompleks (multi pilihan)
       const keys = this.userAnswers[questionId].keys || [];
       const index = keys.indexOf(optionKey);
       if (index > -1) {
