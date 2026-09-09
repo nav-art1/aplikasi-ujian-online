@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA (FIX DIRECT LOAD OPTIONS)
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA & DETEKSI ANTI-CURANG AKTIF
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -7,10 +7,16 @@ const ExamRunnerModule = {
   questions: [],
   stimuliMap: {},
   currentIndex: 0,
-  userAnswers: {}, // Format: { [questionId]: { keys: ['A'], isDoubt: false } }
+  userAnswers: {},
   timerInterval: null,
   remainingSeconds: 0,
   startTimeIso: null,
+
+  // Variabel State Anti-Curang
+  violationCount: 0,
+  maxViolations: 3,
+  isCheatGuardActive: false,
+  initialWindowHeight: window.innerHeight,
 
   renderMath(element) {
     if (typeof renderMathInElement === 'function' && element) {
@@ -47,43 +53,91 @@ const ExamRunnerModule = {
     this.restoreLocalAnswers();
     await this.loadExamContent();
     this.initTimer();
+    this.initAntiCheat(); // Mengaktifkan proteksi anti-curang
+  },
+
+  // ---------------------------------------------------------
+  // MODUL DETEKSI ANTI-KECURANGAN
+  // ---------------------------------------------------------
+  initAntiCheat() {
+    if (!this.session.exam.anti_cheat) return;
+
+    this.isCheatGuardActive = true;
+    this.maxViolations = this.session.exam.max_violations || 3;
+    this.violationCount = 0;
+
+    // 1. Deteksi Pindah Tab / Buka Aplikasi Lain
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && this.isCheatGuardActive) {
+        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (membuka tab lain atau aplikasi lain)!");
+      }
+    });
+
+    // 2. Deteksi Kehilangan Fokus Jendela Browser
+    window.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (!document.hasFocus() && this.isCheatGuardActive) {
+          this.handleViolation("Fokus layar ujian terputus! Dilarang membuka jendela lain.");
+        }
+      }, 500);
+    });
+
+    // 3. Deteksi Layar Belah (Split Screen) & Jendela Mengambang (Floating Window)
+    window.addEventListener("resize", () => {
+      if (!this.isCheatGuardActive) return;
+
+      const currentHeight = window.innerHeight;
+      const heightDrop = (this.initialWindowHeight - currentHeight) / this.initialWindowHeight;
+
+      // Cek apakah resize terjadi karena keyboard virtual HP terbuka
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      const isTyping = (activeTag === 'input' || activeTag === 'textarea');
+
+      if (heightDrop > 0.38 && !isTyping) {
+        this.handleViolation("Terdeteksi perubahan ukuran layar drastis (Layar Belah / Jendela Mengambang tidak diizinkan)!");
+      }
+    });
+  },
+
+  handleViolation(reason) {
+    if (!this.isCheatGuardActive) return;
+
+    this.violationCount++;
+    const sisa = this.maxViolations - this.violationCount;
+
+    if (sisa > 0) {
+      alert(`⚠️ PERINGATAN KECURANGAN (${this.violationCount}/${this.maxViolations})\n\n${reason}\n\nSisa toleransi pelanggaran: ${sisa} kali lagi. Jika batas terlampaui, ujian Anda akan otomatis dikunci dan dikumpulkan ke server!`);
+    } else {
+      this.isCheatGuardActive = false;
+      alert(`🚨 BATAS PELANGGARAN TERLAMPAUI!\n\nAnda telah melanggar aturan ujian sebanyak ${this.maxViolations} kali. Sistem mengunci dan mengumpulkan ujian Anda secara otomatis.`);
+      this.finishExam(true); // Kumpulkan paksa
+    }
   },
 
   setupEvents() {
-    const btnPrev = document.getElementById("btn-prev-question");
-    const btnNext = document.getElementById("btn-next-question");
-    const checkDoubt = document.getElementById("check-doubt");
-    const drawer = document.getElementById("drawer-grid");
-    const btnToggleGrid = document.getElementById("btn-toggle-grid");
-    const btnCloseGrid = document.getElementById("btn-close-grid");
-    const btnFinish = document.getElementById("btn-finish-exam");
-
-    if (btnPrev) btnPrev.addEventListener("click", () => this.navigate(-1));
-    if (btnNext) btnNext.addEventListener("click", () => this.navigate(1));
+    document.getElementById("btn-prev-question")?.addEventListener("click", () => this.navigate(-1));
+    document.getElementById("btn-next-question")?.addEventListener("click", () => this.navigate(1));
     
-    if (checkDoubt) {
-      checkDoubt.addEventListener("change", (e) => {
-        const q = this.questions[this.currentIndex];
-        if (!q) return;
+    document.getElementById("check-doubt")?.addEventListener("change", (e) => {
+      const q = this.questions[this.currentIndex];
+      if (!q) return;
 
-        if (!this.userAnswers[q.id]) {
-          this.userAnswers[q.id] = { keys: [], isDoubt: false };
-        }
-        this.userAnswers[q.id].isDoubt = e.target.checked;
-        this.saveLocalAnswers();
-        this.renderGridNumbers();
-      });
-    }
+      if (!this.userAnswers[q.id]) {
+        this.userAnswers[q.id] = { keys: [], isDoubt: false };
+      }
+      this.userAnswers[q.id].isDoubt = e.target.checked;
+      this.saveLocalAnswers();
+      this.renderGridNumbers();
+    });
 
-    if (btnToggleGrid && drawer) btnToggleGrid.addEventListener("click", () => drawer.classList.remove("d-none"));
-    if (btnCloseGrid && drawer) btnCloseGrid.addEventListener("click", () => drawer.classList.add("d-none"));
-    if (drawer) {
-      drawer.addEventListener("click", (e) => {
-        if (e.target === drawer) drawer.classList.add("d-none");
-      });
-    }
+    const drawer = document.getElementById("drawer-grid");
+    document.getElementById("btn-toggle-grid")?.addEventListener("click", () => drawer?.classList.remove("d-none"));
+    document.getElementById("btn-close-grid")?.addEventListener("click", () => drawer?.classList.add("d-none"));
+    drawer?.addEventListener("click", (e) => {
+      if (e.target === drawer) drawer.classList.add("d-none");
+    });
 
-    if (btnFinish) btnFinish.addEventListener("click", () => this.finishExam(false));
+    document.getElementById("btn-finish-exam")?.addEventListener("click", () => this.finishExam(false));
   },
 
   async loadExamContent() {
@@ -91,7 +145,6 @@ const ExamRunnerModule = {
     const examId = this.session.exam.id;
 
     try {
-      // 1. Ambil data stimulus
       const { data: stimuli } = await client
         .from('stimulus_groups')
         .select('*')
@@ -101,7 +154,6 @@ const ExamRunnerModule = {
         this.stimuliMap[s.id] = s;
       });
 
-      // 2. Ambil seluruh butir pertanyaan murni
       const { data: qData, error: qErr } = await client
         .from('questions')
         .select(`
@@ -125,7 +177,6 @@ const ExamRunnerModule = {
         return;
       }
 
-      // 3. Ambil langsung opsi jawaban dari tabel options berdasarkan ID soal
       const questionIds = qData.map(q => q.id);
       const { data: allOptions, error: optErr } = await client
         .from('options')
@@ -134,7 +185,6 @@ const ExamRunnerModule = {
 
       if (optErr) throw optErr;
 
-      // Petakan opsi ke masing-masing soal
       const optionsMap = {};
       (allOptions || []).forEach(opt => {
         if (!optionsMap[opt.question_id]) optionsMap[opt.question_id] = [];
@@ -145,14 +195,12 @@ const ExamRunnerModule = {
         q.options = optionsMap[q.id] || [];
       });
 
-      // 4. Pengacakan soal jika diaktifkan (tetap menjaga kelompok stimulus)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsPreservingStimulus(qData);
       } else {
         this.questions = qData;
       }
 
-      // 5. Pengacakan opsi jika diaktifkan
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options && q.options.length > 0) {
@@ -200,7 +248,6 @@ const ExamRunnerModule = {
     const q = this.questions[this.currentIndex];
     if (!q) return;
 
-    // 1. Render Blok Stimulus
     const stimContainer = document.getElementById("stimulus-block-container");
     if (stimContainer) {
       if (q.stimulus_group_id && this.stimuliMap[q.stimulus_group_id]) {
@@ -224,7 +271,6 @@ const ExamRunnerModule = {
       }
     }
 
-    // 2. Render Teks Pertanyaan & Poin
     const numEl = document.getElementById("display-q-number");
     const typeEl = document.getElementById("display-q-type");
     const pointsEl = document.getElementById("display-q-points");
@@ -251,12 +297,10 @@ const ExamRunnerModule = {
       }
     }
 
-    // 3. Render Pilihan Ganda (Opsi A s.d. F)
     const optionsContainer = document.getElementById("display-options-list");
     if (optionsContainer) {
       const isPgk = q.question_type === 'pgk';
       const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
-      
       const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
 
       if (opts.length === 0) {
@@ -284,12 +328,10 @@ const ExamRunnerModule = {
       }
     }
 
-    // 4. Status Ragu-Ragu
     const currentAnsObj = this.userAnswers[q.id] || { keys: [], isDoubt: false };
     const checkDoubtEl = document.getElementById("check-doubt");
     if (checkDoubtEl) checkDoubtEl.checked = !!currentAnsObj.isDoubt;
 
-    // 5. Visibilitas Tombol Navigasi
     const btnPrev = document.getElementById("btn-prev-question");
     if (btnPrev) btnPrev.style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
     
@@ -373,8 +415,7 @@ const ExamRunnerModule = {
       this.currentIndex = index;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
-      const drawer = document.getElementById("drawer-grid");
-      if (drawer) drawer.classList.add("d-none");
+      document.getElementById("drawer-grid")?.classList.add("d-none");
     }
   },
 
@@ -414,7 +455,7 @@ const ExamRunnerModule = {
 
       if (diffSec <= 0) {
         clearInterval(this.timerInterval);
-        alert("Waktu pengerjaan ujian telah habis! Jawaban Anda akan dikumpulkan secara otomatis.");
+        alert("Waktu ujian habis! Jawaban Anda akan dikumpulkan secara otomatis.");
         this.finishExam(true);
       }
     };
@@ -445,11 +486,13 @@ const ExamRunnerModule = {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
       let confirmMsg = "Apakah Anda yakin ingin menyelesaikan dan mengumpulkan ujian ini?";
       if (unansweredCount > 0) {
-        confirmMsg = `Masih ada ${unansweredCount} butir soal yang belum Anda jawab!\n\nApakah Anda benar-benar yakin ingin mengumpulkan ujian sekarang?`;
+        confirmMsg = `Masih ada ${unansweredCount} butir soal yang belum Anda jawab!\n\nTetap kumpulkan ujian sekarang?`;
       }
       if (!confirm(confirmMsg)) return;
     }
 
+    // Matikan pengawas anti-curang dan timer
+    this.isCheatGuardActive = false;
     clearInterval(this.timerInterval);
     const timerStorageKey = `timer_end_${this.session.exam.id}_${this.session.student.id}`;
     localStorage.removeItem(timerStorageKey);
@@ -500,7 +543,7 @@ const ExamRunnerModule = {
         ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
         : 0;
 
-      // Simpan ke exam_attempts
+      // Simpan attempt ke Supabase beserta jumlah pelanggaran (violation_count)
       const { data: attemptData, error: attemptErr } = await client
         .from('exam_attempts')
         .insert({
@@ -508,6 +551,7 @@ const ExamRunnerModule = {
           student_id: this.session.student.id,
           score: finalPercentage,
           total_points: totalEarnedScore,
+          violation_count: this.violationCount,
           started_at: this.startTimeIso,
           submitted_at: new Date().toISOString(),
           status: 'completed'
@@ -517,7 +561,7 @@ const ExamRunnerModule = {
 
       if (attemptErr) throw attemptErr;
 
-      // Simpan ke student_answers
+      // Simpan jawaban siswa
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -530,7 +574,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // Simpan ringkasan untuk selesai.html
+      // Simpan data ringkasan untuk halaman selesai.html
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
@@ -539,6 +583,7 @@ const ExamRunnerModule = {
         total_questions: this.questions.length,
         correct_count: correctCount,
         final_score: finalPercentage,
+        violation_count: this.violationCount,
         submitted_at: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
 
