@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL OTENTIKASI & VALIDASI AKSES SISWA DENGAN PESAN DETAIL
+// MODUL OTENTIKASI & VALIDASI AKSES SISWA BESERTA PARAMETER ANTI-CURANG
 // ==========================================================================
 
 const StudentAuthModule = {
@@ -43,7 +43,7 @@ const StudentAuthModule = {
     }
 
     try {
-      // 1. Ambil data sesi ujian berdasarkan token (case-insensitive)
+      // 1. Ambil data sesi ujian termasuk kolom anti_cheat dan max_violations
       const { data: examData, error: examError } = await client
         .from('exams')
         .select(`
@@ -56,6 +56,8 @@ const StudentAuthModule = {
           class_id,
           randomize_questions,
           randomize_options,
+          anti_cheat,
+          max_violations,
           classes ( class_name )
         `)
         .ilike('token', token)
@@ -64,20 +66,20 @@ const StudentAuthModule = {
       if (examError) throw examError;
 
       if (!examData) {
-        this.showAlert(`Token ujian "${token}" tidak ditemukan. Pastikan token yang diketik sesuai dengan yang ada di panel guru.`, "error");
+        this.showAlert(`Token ujian "${token}" tidak ditemukan. Pastikan token yang diketik sesuai.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
       if (!examData.is_active) {
-        this.showAlert(`Ujian "${examData.title}" saat ini berstatus DITUTUP oleh guru. Minta guru untuk membuka sesi ujian ini terlebih dahulu.`, "error");
+        this.showAlert(`Ujian "${examData.title}" saat ini berstatus DITUTUP oleh guru.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
-      // 2. Ambil data siswa berdasarkan NIS/NISN
+      // 2. Ambil data siswa
       const { data: studentData, error: studentError } = await client
         .from('students')
         .select(`
@@ -94,14 +96,14 @@ const StudentAuthModule = {
       if (studentError) throw studentError;
 
       if (!studentData) {
-        this.showAlert(`Nomor siswa "${studentNumber}" tidak terdaftar. Pastikan nomor identitas Anda sudah dimasukkan guru di menu Siswa.`, "error");
+        this.showAlert(`Nomor siswa "${studentNumber}" tidak terdaftar di sistem.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
       if (!studentData.is_active) {
-        this.showAlert(`Akun siswa "${studentData.full_name}" dinonaktifkan. Hubungi pengawas ujian.`, "error");
+        this.showAlert(`Akun siswa "${studentData.full_name}" dinonaktifkan. Hubungi pengawas.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
@@ -111,13 +113,13 @@ const StudentAuthModule = {
       if (examData.class_id && studentData.class_id !== examData.class_id) {
         const targetClass = examData.classes ? examData.classes.class_name : 'Rombel Lain';
         const myClass = studentData.classes ? studentData.classes.class_name : 'Tanpa Kelas';
-        this.showAlert(`Sesi ujian ini khusus untuk rombel ${targetClass}. Anda saat ini terdaftar di ${myClass}.`, "error");
+        this.showAlert(`Sesi ujian ini khusus untuk rombel ${targetClass}. Anda terdaftar di ${myClass}.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
-      // 4. Simpan ke sessionStorage
+      // 4. Simpan ke sessionStorage lengkap dengan konfigurasi proteksi ujian
       const sessionPayload = {
         student: {
           id: studentData.id,
@@ -132,7 +134,9 @@ const StudentAuthModule = {
           duration_minutes: examData.duration_minutes,
           token: examData.token,
           randomize_questions: examData.randomize_questions,
-          randomize_options: examData.randomize_options
+          randomize_options: examData.randomize_options,
+          anti_cheat: examData.anti_cheat !== false,
+          max_violations: examData.max_violations || 3
         },
         login_timestamp: new Date().toISOString()
       };
@@ -143,10 +147,10 @@ const StudentAuthModule = {
 
       setTimeout(() => {
         window.location.href = "konfirmasi.html";
-      }, 700);
+      }, 600);
 
     } catch (err) {
-      console.error("Gagal verifikasi login siswa:", err);
+      console.error("Gagal verifikasi siswa:", err);
       this.showAlert(`Kendala sistem: ${err.message}`, "error");
       btnSubmit.disabled = false;
       btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
