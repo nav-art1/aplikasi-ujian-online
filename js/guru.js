@@ -1,6 +1,5 @@
 // ==========================================================================
-// MODUL PENGELOLAAN DASHBOARD GURU, SISWA, KELAS, UJIAN, STIMULUS, SOAL,
-// REORDERING BLOK STIMULUS, KATEX, STORAGE, & IMPORT EXCEL + VALIDASI (CHECKPOINT 25)
+// MODUL PENGELOLAAN DASHBOARD GURU & SETTING ANTI-CURANG (LENGKAP)
 // ==========================================================================
 
 const GuruModule = {
@@ -309,8 +308,7 @@ const GuruModule = {
           is_correct: opt.is_correct
         }));
 
-        const { error: optErr } = await client.from('options').insert(optionsPayload);
-        if (optErr) throw optErr;
+        await client.from('options').insert(optionsPayload);
       }
 
       await this.loadBankSoalContent(examId);
@@ -318,10 +316,6 @@ const GuruModule = {
       alert(`Gagal menduplikasi soal: ${err.message}`);
     }
   },
-
-  // =========================================================================
-  // FITUR IMPORT EXCEL DENGAN STIMULUS & VALIDASI KETAT (CHECKPOINT 25)
-  // =========================================================================
 
   downloadExcelTemplate() {
     if (typeof XLSX === 'undefined') {
@@ -349,7 +343,7 @@ const GuruModule = {
       {
         nomor: 2,
         judul_stimulus: 'Teks Bacaan Ekosistem Mangrove',
-        isi_stimulus: 'Hutan mangrove merupakan ekosistem pesisir yang memiliki peranan ekologis sangat besar. Selain meredam gelombang air laut, akarnya menjadi tempat pemijahan udang dan ikan kecil.',
+        isi_stimulus: 'Hutan mangrove merupakan ekosistem pesisir yang memiliki peranan ekologis sangat besar.',
         tipe: 'pgk',
         poin: 2.0,
         soal: 'Berdasarkan teks bacaan, manakah peran utama hutan mangrove? (Pilihan Ganda Kompleks)',
@@ -357,25 +351,9 @@ const GuruModule = {
         opsi_b: 'Tempat pemijahan udang dan ikan',
         opsi_c: 'Sebagai penghasil batu bara',
         opsi_d: 'Mencegah terjadinya abrasi',
-        opsi_e: 'Mempercepat pengeringan air laut',
+        opsi_e: 'Penyaring sedimen lumpur',
         opsi_f: '',
         kunci: 'A,B,D',
-        gambar_url: ''
-      },
-      {
-        nomor: 3,
-        judul_stimulus: 'Teks Bacaan Ekosistem Mangrove',
-        isi_stimulus: '', // Dikosongkan jika merujuk ke stimulus yang sama di atas
-        tipe: 'pg',
-        poin: 1.0,
-        soal: 'Di area manakah ekosistem mangrove biasanya berkembang subur?',
-        opsi_a: 'Pegunungan tinggi',
-        opsi_b: 'Gurun pasir',
-        opsi_c: 'Wilayah pesisir pantai berlumpur',
-        opsi_d: 'Danau air tawar dalam',
-        opsi_e: '',
-        opsi_f: '',
-        kunci: 'C',
         gambar_url: ''
       }
     ];
@@ -428,8 +406,6 @@ const GuruModule = {
             let tableRows = '';
             let validCount = 0;
             let invalidCount = 0;
-
-            // Cache pelacak narasi stimulus agar grup yang sama terhubung
             const stimulusTextMap = {};
 
             rawJson.forEach((row, idx) => {
@@ -447,7 +423,6 @@ const GuruModule = {
               const rawKey = String(row.kunci || '').toUpperCase().trim();
               const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
 
-              // Baca opsi A s.d. F
               const options = [];
               ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
                 const optText = row[`opsi_${lbl}`] ? String(row[`opsi_${lbl}`]).trim() : '';
@@ -460,12 +435,11 @@ const GuruModule = {
                 }
               });
 
-              // Validasi integritas butir soal
               const errors = [];
               if (!content) errors.push("Teks pertanyaan kosong");
               if (options.length < 2) errors.push("Opsi kurang dari 2");
               if (correctKeys.length === 0) errors.push("Kunci jawaban belum ditentukan");
-              if (type !== 'pg' && type !== 'pgk') errors.push("Tipe soal tidak valid (harus pg / pgk)");
+              if (type !== 'pg' && type !== 'pgk') errors.push("Tipe soal tidak valid");
 
               const isValid = errors.length === 0;
 
@@ -489,7 +463,7 @@ const GuruModule = {
 
               const statusBadge = isValid 
                 ? '<span class="badge badge-success">Valid</span>' 
-                : `<span class="badge badge-danger" title="${errors.join(', ')}">Error: ${errors.join(', ')}</span>`;
+                : `<span class="badge badge-danger">Error: ${errors.join(', ')}</span>`;
 
               const stimInfo = stimTitle 
                 ? `<span style="font-size: 0.8rem; font-weight: 600; color: var(--primary-color);">📌 ${stimTitle}</span>` 
@@ -510,16 +484,11 @@ const GuruModule = {
 
             if (validCount === 0) {
               alertEl.className = "alert alert-error";
-              alertEl.innerText = "Seluruh baris soal di file Excel memiliki kesalahan validasi. Silakan periksa kolom soal, opsi, dan kunci.";
+              alertEl.innerText = "Seluruh baris soal bermasalah. Periksa kembali file Anda.";
               alertEl.classList.remove("d-none");
               btnCommit.disabled = true;
             } else {
               btnCommit.disabled = false;
-              if (invalidCount > 0) {
-                alertEl.className = "alert alert-error";
-                alertEl.innerText = `Ditemukan ${invalidCount} baris bermasalah yang akan dilewati. Sebanyak ${validCount} butir soal valid siap diimpor.`;
-                alertEl.classList.remove("d-none");
-              }
             }
 
             summaryText.innerText = `Pratinjau: ${validCount} Soal Valid Terbaca (${invalidCount} Soal Tidak Valid)`;
@@ -544,18 +513,12 @@ const GuruModule = {
           return;
         }
 
-        if (!this.parsedExcelQuestions || this.parsedExcelQuestions.length === 0) {
-          alert("Belum ada data soal valid yang siap diimpor.");
-          return;
-        }
-
         btnCommit.disabled = true;
-        btnCommit.innerText = "Mengimpor & Memproses Stimulus...";
+        btnCommit.innerText = "Mengimpor Data...";
         alertEl.classList.add("d-none");
 
         const client = getSupabaseClient();
         try {
-          // 1. Petakan atau buat grup stimulus baru di Supabase
           const stimulusIdCache = {};
           const { data: existingStimuli } = await client
             .from('stimulus_groups')
@@ -566,7 +529,6 @@ const GuruModule = {
             if (s.title) stimulusIdCache[s.title.trim().toLowerCase()] = s.id;
           });
 
-          // 2. Loop butir soal dan buat stimulus jika belum ada
           let countSuccess = 0;
           for (const q of this.parsedExcelQuestions) {
             let finalStimulusId = null;
@@ -576,7 +538,6 @@ const GuruModule = {
               if (stimulusIdCache[key]) {
                 finalStimulusId = stimulusIdCache[key];
               } else {
-                // Buat entri grup stimulus baru otomatis
                 const { data: newStim, error: stimInsertErr } = await client
                   .from('stimulus_groups')
                   .insert({
@@ -595,7 +556,6 @@ const GuruModule = {
               }
             }
 
-            // 3. Masukkan butir soal
             const { data: insertedQ, error: qErr } = await client
               .from('questions')
               .insert({
@@ -614,7 +574,6 @@ const GuruModule = {
 
             if (qErr) throw qErr;
 
-            // 4. Masukkan opsi jawaban
             const optionsPayload = q.options.map(opt => ({
               question_id: insertedQ.id,
               option_label: opt.option_label,
@@ -622,14 +581,12 @@ const GuruModule = {
               is_correct: opt.is_correct
             }));
 
-            const { error: optErr } = await client.from('options').insert(optionsPayload);
-            if (optErr) throw optErr;
-
+            await client.from('options').insert(optionsPayload);
             countSuccess++;
           }
 
           alertEl.className = "alert alert-success";
-          alertEl.innerText = `Sukses mengimpor ${countSuccess} butir soal beserta stimulus terkait ke dalam ujian!`;
+          alertEl.innerText = `Sukses mengimpor ${countSuccess} butir soal ke dalam ujian!`;
           alertEl.classList.remove("d-none");
 
           fileInput.value = "";
@@ -639,7 +596,7 @@ const GuruModule = {
           await this.loadBankSoalContent(examId);
         } catch (err) {
           alertEl.className = "alert alert-error";
-          alertEl.innerText = `Terjadi kesalahan saat mengimpor: ${err.message}`;
+          alertEl.innerText = `Terjadi kendala saat mengimpor: ${err.message}`;
           alertEl.classList.remove("d-none");
         } finally {
           btnCommit.disabled = false;
@@ -698,7 +655,7 @@ const GuruModule = {
           }
 
           if (!this.selectedExamId) {
-            alert("Belum ada sesi ujian yang dipilih atau dibuat. Silakan buat ujian di menu 'Ujian' atau pilih ujian di 'Bank Soal'.");
+            alert("Belum ada sesi ujian yang dipilih. Silakan pilih di 'Bank Soal'.");
             const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
             if (bankTab) bankTab.click();
             return;
@@ -715,27 +672,16 @@ const GuruModule = {
 
         link.classList.add("active");
         const activePanel = document.getElementById(targetId);
-        if (activePanel) {
-          activePanel.classList.remove("d-none");
-        }
+        if (activePanel) activePanel.classList.remove("d-none");
+        if (pageTitle) pageTitle.innerText = link.innerText;
 
-        if (pageTitle) {
-          pageTitle.innerText = link.innerText;
-        }
-
-        if (targetId === "panel-siswa") {
-          this.loadStudentsTable();
-        } else if (targetId === "panel-kelas") {
-          this.loadClassesTable();
-        } else if (targetId === "panel-ujian") {
-          this.loadExamsTable();
-        } else if (targetId === "panel-bank-soal") {
-          this.loadBankSoalExamFilter();
-        } else if (targetId === "panel-import-excel") {
+        if (targetId === "panel-siswa") this.loadStudentsTable();
+        else if (targetId === "panel-kelas") this.loadClassesTable();
+        else if (targetId === "panel-ujian") this.loadExamsTable();
+        else if (targetId === "panel-bank-soal") this.loadBankSoalExamFilter();
+        else if (targetId === "panel-import-excel") {
           const importSelect = document.getElementById("import-exam-select");
-          if (importSelect && this.selectedExamId) {
-            importSelect.value = this.selectedExamId;
-          }
+          if (importSelect && this.selectedExamId) importSelect.value = this.selectedExamId;
         }
       });
     });
@@ -746,12 +692,10 @@ const GuruModule = {
     if (!client || !this.currentTeacher) return;
 
     try {
-      const { data: existingClasses, error } = await client
+      const { data: existingClasses } = await client
         .from('classes')
         .select('*')
         .eq('teacher_id', this.currentTeacher.id);
-
-      if (error) throw error;
 
       if (!existingClasses || existingClasses.length === 0) {
         await client.from('classes').insert({
@@ -760,7 +704,7 @@ const GuruModule = {
         });
       }
     } catch (err) {
-      console.warn("Gagal inisialisasi kelas awal:", err);
+      console.warn("Gagal inisialisasi kelas:", err);
     }
   },
 
@@ -769,13 +713,12 @@ const GuruModule = {
     if (!client || !this.currentTeacher) return;
 
     try {
-      const { data, error } = await client
+      const { data } = await client
         .from('classes')
         .select('*')
         .eq('teacher_id', this.currentTeacher.id)
         .order('class_name', { ascending: true });
 
-      if (error) throw error;
       this.classesList = data || [];
 
       const selectStudentAdd = document.getElementById("student-class-id");
@@ -791,7 +734,7 @@ const GuruModule = {
       if (selectStudentEdit) selectStudentEdit.innerHTML = optionsHtml;
       if (selectExamClass) selectExamClass.innerHTML = optionsHtml;
     } catch (err) {
-      console.error("Gagal membaca daftar kelas:", err);
+      console.error("Gagal membaca kelas:", err);
     }
   },
 
@@ -818,7 +761,7 @@ const GuruModule = {
       if (error) throw error;
 
       if (!students || students.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Belum ada siswa yang ditambahkan.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Belum ada siswa.</td></tr>';
         return;
       }
 
@@ -828,9 +771,6 @@ const GuruModule = {
         const badgeStatus = s.is_active 
           ? '<span class="badge badge-success">Aktif</span>' 
           : '<span class="badge badge-danger">Nonaktif</span>';
-
-        const toggleText = s.is_active ? 'Nonaktifkan' : 'Aktifkan';
-        const toggleBtnClass = s.is_active ? 'btn-warning' : 'btn-secondary';
 
         rowsHtml += `
           <tr>
@@ -842,7 +782,7 @@ const GuruModule = {
             <td>
               <div class="action-buttons">
                 <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStudent('${s.id}', '${s.class_id}', '${s.full_name}', '${s.student_number}')">Edit</button>
-                <button class="btn ${toggleBtnClass} btn-sm" onclick="GuruModule.toggleStudentStatus('${s.id}', ${s.is_active})">${toggleText}</button>
+                <button class="btn ${s.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleStudentStatus('${s.id}', ${s.is_active})">${s.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
                 <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStudent('${s.id}', '${s.full_name}')">Hapus</button>
               </div>
             </td>
@@ -853,7 +793,7 @@ const GuruModule = {
       tableBody.innerHTML = rowsHtml;
       await this.loadQuickStats();
     } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--danger-color);">Gagal memuat: ${err.message}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="text-center" style="color: var(--danger-color);">${err.message}</td></tr>`;
     }
   },
 
@@ -871,11 +811,6 @@ const GuruModule = {
         const studentNumber = document.getElementById("student-number").value.trim();
         const btnSave = document.getElementById("btn-save-student");
 
-        if (!classId) {
-          alert("Silakan pilih kelas terlebih dahulu.");
-          return;
-        }
-
         btnSave.disabled = true;
         btnSave.innerText = "Menyimpan...";
 
@@ -889,16 +824,11 @@ const GuruModule = {
           });
 
           if (error) throw error;
-
           formAdd.reset();
-          formAlert.className = "alert alert-success";
-          formAlert.innerText = `Siswa "${fullName}" berhasil ditambahkan!`;
-          formAlert.classList.remove("d-none");
-
           await this.loadStudentsTable();
         } catch (err) {
           formAlert.className = "alert alert-error";
-          formAlert.innerText = `Gagal menyimpan: ${err.message}`;
+          formAlert.innerText = `Gagal: ${err.message}`;
           formAlert.classList.remove("d-none");
         } finally {
           btnSave.disabled = false;
@@ -923,37 +853,19 @@ const GuruModule = {
         const classId = document.getElementById("edit-student-class-id").value;
         const fullName = document.getElementById("edit-student-full-name").value.trim();
         const studentNumber = document.getElementById("edit-student-number").value.trim();
-        const btnUpdate = document.getElementById("btn-update-student");
-
-        btnUpdate.disabled = true;
-        btnUpdate.innerText = "Memperbarui...";
 
         const client = getSupabaseClient();
         try {
-          const { error } = await client.from('students')
-            .update({
-              class_id: classId,
-              full_name: fullName,
-              student_number: studentNumber
-            })
+          await client.from('students')
+            .update({ class_id: classId, full_name: fullName, student_number: studentNumber })
             .eq('id', studentId);
-
-          if (error) throw error;
 
           closeModal();
           await this.loadStudentsTable();
         } catch (err) {
-          alert(`Gagal memperbarui siswa: ${err.message}`);
-        } finally {
-          btnUpdate.disabled = false;
-          btnUpdate.innerText = "Simpan Perubahan";
+          alert(`Gagal: ${err.message}`);
         }
       });
-    }
-
-    const btnRefresh = document.getElementById("btn-refresh-students");
-    if (btnRefresh) {
-      btnRefresh.addEventListener("click", () => this.loadStudentsTable());
     }
   },
 
@@ -966,39 +878,23 @@ const GuruModule = {
   },
 
   async toggleStudentStatus(studentId, currentStatus) {
-    const aksi = currentStatus ? "menonaktifkan" : "mengaktifkan";
-    const yakin = confirm(`Apakah Anda yakin ingin ${aksi} siswa ini?`);
-    if (!yakin) return;
-
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('students')
-        .update({ is_active: !currentStatus })
-        .eq('id', studentId);
-
-      if (error) throw error;
+      await client.from('students').update({ is_active: !currentStatus }).eq('id', studentId);
       await this.loadStudentsTable();
     } catch (err) {
-      alert(`Gagal mengubah status: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
   async deleteStudent(studentId, fullName) {
-    const yakin = confirm(`Apakah Anda yakin ingin menghapus data siswa "${fullName}"? Tindakan ini tidak dapat dibatalkan.`);
-    if (!yakin) return;
-
+    if (!confirm(`Hapus data siswa "${fullName}"?`)) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('students')
-        .delete()
-        .eq('id', studentId);
-
-      if (error) throw error;
+      await client.from('students').delete().eq('id', studentId);
       await this.loadStudentsTable();
     } catch (err) {
-      alert(`Gagal menghapus siswa: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
@@ -1010,16 +906,14 @@ const GuruModule = {
     tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Memuat data kelas...</td></tr>';
 
     try {
-      const { data: classes, error: classErr } = await client
+      const { data: classes } = await client
         .from('classes')
         .select('*')
         .eq('teacher_id', this.currentTeacher.id)
         .order('class_name', { ascending: true });
 
-      if (classErr) throw classErr;
-
       if (!classes || classes.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada kelas yang dibuat.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada kelas.</td></tr>';
         return;
       }
 
@@ -1040,7 +934,7 @@ const GuruModule = {
             <td>
               <div class="action-buttons">
                 <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditClass('${cls.id}', '${cls.class_name}')">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteClass('${cls.id}', '${cls.class_name}', ${studentCount || 0})">Hapus</button>
+                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteClass('${cls.id}', '${cls.class_name}')">Hapus</button>
               </div>
             </td>
           </tr>
@@ -1051,96 +945,52 @@ const GuruModule = {
       tableBody.innerHTML = rowsArray.join('');
       await this.loadQuickStats();
     } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="5" class="text-center" style="color: var(--danger-color);">Gagal memuat: ${err.message}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="5" class="text-center" style="color: var(--danger-color);">${err.message}</td></tr>`;
     }
   },
 
   setupClassEventListeners() {
     const formAdd = document.getElementById("form-add-class");
-    const formAlert = document.getElementById("class-form-alert");
-
     if (formAdd) {
       formAdd.addEventListener("submit", async (e) => {
         e.preventDefault();
-        formAlert.classList.add("d-none");
-
         const className = document.getElementById("new-class-name").value.trim();
-        const btnSave = document.getElementById("btn-save-class");
-
-        if (!className) return;
-
-        btnSave.disabled = true;
-        btnSave.innerText = "Menyimpan...";
-
         const client = getSupabaseClient();
         try {
-          const { error } = await client.from('classes').insert({
+          await client.from('classes').insert({
             teacher_id: this.currentTeacher.id,
             class_name: className
           });
-
-          if (error) throw error;
-
           formAdd.reset();
-          formAlert.className = "alert alert-success";
-          formAlert.innerText = `Kelas "${className}" berhasil ditambahkan!`;
-          formAlert.classList.remove("d-none");
-
           await this.loadClassesTable();
           await this.loadClassesDropdown();
         } catch (err) {
-          formAlert.className = "alert alert-error";
-          formAlert.innerText = `Gagal menyimpan: ${err.message}`;
-          formAlert.classList.remove("d-none");
-        } finally {
-          btnSave.disabled = false;
-          btnSave.innerText = "+ Tambah Kelas";
+          alert(`Gagal: ${err.message}`);
         }
       });
     }
 
     const modalEditClass = document.getElementById("modal-edit-class");
     const formEditClass = document.getElementById("form-edit-class");
-    const btnCloseModal = document.getElementById("btn-close-modal-edit-class");
-    const btnCancelModal = document.getElementById("btn-cancel-edit-class");
-
     const closeModal = () => modalEditClass.classList.add("d-none");
-    if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
-    if (btnCancelModal) btnCancelModal.addEventListener("click", closeModal);
+    document.getElementById("btn-close-modal-edit-class")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-edit-class")?.addEventListener("click", closeModal);
 
     if (formEditClass) {
       formEditClass.addEventListener("submit", async (e) => {
         e.preventDefault();
         const classId = document.getElementById("edit-class-id").value;
         const className = document.getElementById("edit-class-name").value.trim();
-        const btnUpdate = document.getElementById("btn-update-class");
-
-        btnUpdate.disabled = true;
-        btnUpdate.innerText = "Memperbarui...";
-
         const client = getSupabaseClient();
         try {
-          const { error } = await client.from('classes')
-            .update({ class_name: className })
-            .eq('id', classId);
-
-          if (error) throw error;
-
+          await client.from('classes').update({ class_name: className }).eq('id', classId);
           closeModal();
           await this.loadClassesTable();
           await this.loadClassesDropdown();
         } catch (err) {
-          alert(`Gagal memperbarui kelas: ${err.message}`);
-        } finally {
-          btnUpdate.disabled = false;
-          btnUpdate.innerText = "Simpan Perubahan";
+          alert(`Gagal: ${err.message}`);
         }
       });
-    }
-
-    const btnRefresh = document.getElementById("btn-refresh-classes");
-    if (btnRefresh) {
-      btnRefresh.addEventListener("click", () => this.loadClassesTable());
     }
   },
 
@@ -1150,29 +1000,15 @@ const GuruModule = {
     document.getElementById("modal-edit-class").classList.remove("d-none");
   },
 
-  async deleteClass(classId, className, studentCount) {
-    let confirmMsg = `Apakah Anda yakin ingin menghapus kelas "${className}"?`;
-    if (studentCount > 0) {
-      confirmMsg = `PERINGATAN: Kelas "${className}" memiliki ${studentCount} siswa di dalamnya!\n\nJika kelas ini dihapus, data siswa di dalamnya juga akan terhapus.\n\nApakah Anda benar-benar yakin ingin melanjutkan?`;
-    }
-
-    const yakin = confirm(confirmMsg);
-    if (!yakin) return;
-
+  async deleteClass(classId, className) {
+    if (!confirm(`Hapus kelas "${className}"?`)) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('classes')
-        .delete()
-        .eq('id', classId);
-
-      if (error) throw error;
-
+      await client.from('classes').delete().eq('id', classId);
       await this.loadClassesTable();
       await this.loadClassesDropdown();
-      await this.loadStudentsTable();
     } catch (err) {
-      alert(`Gagal menghapus kelas: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
@@ -1185,12 +1021,13 @@ const GuruModule = {
     return token;
   },
 
+  // MEMUAT TABEL UJIAN DENGAN INDIKATOR ANTI-CURANG
   async loadExamsTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("exams-table-body");
     if (!client || !this.currentTeacher || !tableBody) return;
 
-    tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Memuat daftar ujian...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Memuat daftar ujian...</td></tr>';
 
     try {
       const { data: exams, error } = await client
@@ -1203,6 +1040,8 @@ const GuruModule = {
           duration_minutes,
           randomize_questions,
           randomize_options,
+          anti_cheat,
+          max_violations,
           is_active,
           class_id,
           classes ( class_name )
@@ -1211,11 +1050,10 @@ const GuruModule = {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
       this.examsList = exams || [];
 
       if (!exams || exams.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Belum ada sesi ujian yang dibuat. Silakan klik "+ Buat Ujian Baru".</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian yang dibuat.</td></tr>';
         return;
       }
 
@@ -1225,34 +1063,33 @@ const GuruModule = {
         const badgeStatus = ex.is_active 
           ? '<span class="badge badge-success">Aktif</span>' 
           : '<span class="badge badge-danger">Tutup</span>';
-        
-        const toggleText = ex.is_active ? 'Tutup' : 'Buka';
-        const toggleBtnClass = ex.is_active ? 'btn-warning' : 'btn-secondary';
 
         const acakInfo = [
           ex.randomize_questions ? 'Soal' : '',
           ex.randomize_options ? 'Opsi' : ''
         ].filter(Boolean).join(' & ') || 'Urut';
 
-        const subjectBadge = ex.subject ? `<small style="display:block; color:var(--text-muted);">${ex.subject}</small>` : '';
+        const antiCheatBadge = ex.anti_cheat !== false
+          ? `<span class="badge badge-success" title="Maksimal toleransi: ${ex.max_violations || 3}x">🛡️ Aktif (${ex.max_violations || 3}x)</span>`
+          : '<span class="badge badge-secondary">Nonaktif</span>';
 
         rowsHtml += `
           <tr>
             <td>${idx + 1}</td>
-            <td><strong>${ex.title}</strong>${subjectBadge}</td>
+            <td><strong>${ex.title}</strong><small style="display:block; color:var(--text-muted);">${ex.subject || '-'}</small></td>
             <td>${className}</td>
             <td>
               <span style="font-family: monospace; font-size: 1.1rem; font-weight: bold; color: var(--primary-color); background: #e0e7ff; padding: 2px 6px; border-radius: 4px;">
                 ${ex.token}
               </span>
-              <button class="btn btn-secondary btn-sm" style="margin-left: 5px; padding: 2px 6px;" title="Salin Token" onclick="GuruModule.copyTokenToClipboard('${ex.token}')">📋</button>
             </td>
             <td>${ex.duration_minutes} mnt</td>
             <td><small>${acakInfo}</small></td>
+            <td>${antiCheatBadge}</td>
             <td>${badgeStatus}</td>
             <td>
               <div class="action-buttons">
-                <button class="btn ${toggleBtnClass} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${toggleText}</button>
+                <button class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
                 <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
               </div>
             </td>
@@ -1263,61 +1100,33 @@ const GuruModule = {
       tableBody.innerHTML = rowsHtml;
       await this.loadQuickStats();
     } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="8" class="text-center" style="color: var(--danger-color);">Gagal memuat ujian: ${err.message}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="9" class="text-center" style="color: var(--danger-color);">${err.message}</td></tr>`;
     }
   },
 
+  // MENYIMPAN FORM UJIAN DENGAN PARAMETER ANTI-CURANG
   setupExamEventListeners() {
     const modalExam = document.getElementById("modal-create-exam");
-    const btnOpenModal = document.getElementById("btn-open-modal-exam");
-    const btnCloseModal = document.getElementById("btn-close-modal-exam");
-    const btnCancelModal = document.getElementById("btn-cancel-create-exam");
-    const btnGenToken = document.getElementById("btn-generate-token");
     const tokenInput = document.getElementById("exam-token");
     const formCreateExam = document.getElementById("form-create-exam");
     const formAlert = document.getElementById("exam-form-alert");
     const btnSave = document.getElementById("btn-save-exam");
 
     const openModal = () => {
-      if (formCreateExam) formCreateExam.reset();
-      if (formAlert) formAlert.classList.add("d-none");
-      if (btnSave) {
-        btnSave.disabled = false;
-        btnSave.innerText = "Simpan & Terbitkan Ujian";
-      }
+      formCreateExam.reset();
+      formAlert.classList.add("d-none");
       if (tokenInput) tokenInput.value = this.generateExamToken();
-      if (modalExam) modalExam.classList.remove("d-none");
+      modalExam.classList.remove("d-none");
     };
 
-    const closeModal = () => {
-      if (modalExam) modalExam.classList.add("d-none");
-      if (btnSave) {
-        btnSave.disabled = false;
-        btnSave.innerText = "Simpan & Terbitkan Ujian";
-      }
-    };
+    const closeModal = () => modalExam.classList.add("d-none");
 
-    if (btnOpenModal) btnOpenModal.addEventListener("click", openModal);
-    if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
-    if (btnCancelModal) btnCancelModal.addEventListener("click", closeModal);
-
-    if (modalExam) {
-      modalExam.addEventListener("click", (e) => {
-        if (e.target === modalExam) closeModal();
-      });
-    }
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && modalExam && !modalExam.classList.contains("d-none")) {
-        closeModal();
-      }
+    document.getElementById("btn-open-modal-exam")?.addEventListener("click", openModal);
+    document.getElementById("btn-close-modal-exam")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-create-exam")?.addEventListener("click", closeModal);
+    document.getElementById("btn-generate-token")?.addEventListener("click", () => {
+      tokenInput.value = this.generateExamToken();
     });
-
-    if (btnGenToken && tokenInput) {
-      btnGenToken.addEventListener("click", () => {
-        tokenInput.value = this.generateExamToken();
-      });
-    }
 
     if (formCreateExam) {
       formCreateExam.addEventListener("submit", async (e) => {
@@ -1325,8 +1134,7 @@ const GuruModule = {
         formAlert.classList.add("d-none");
 
         const title = document.getElementById("exam-title").value.trim();
-        const subjectInput = document.getElementById("exam-subject");
-        const subject = subjectInput ? subjectInput.value.trim() : title;
+        const subject = document.getElementById("exam-subject").value.trim();
         const description = document.getElementById("exam-description").value.trim();
         const classId = document.getElementById("exam-class-id").value;
         const duration = parseInt(document.getElementById("exam-duration").value, 10);
@@ -1334,10 +1142,9 @@ const GuruModule = {
         const randomizeQuestions = document.getElementById("exam-randomize-questions").checked;
         const randomizeOptions = document.getElementById("exam-randomize-options").checked;
 
-        if (!classId) {
-          alert("Silakan pilih kelas target ujian.");
-          return;
-        }
+        // BACA PENGATURAN ANTI-CURANG
+        const antiCheat = document.getElementById("exam-anti-cheat") ? document.getElementById("exam-anti-cheat").checked : true;
+        const maxViolations = document.getElementById("exam-max-violations") ? parseInt(document.getElementById("exam-max-violations").value, 10) : 3;
 
         btnSave.disabled = true;
         btnSave.innerText = "Menerbitkan Ujian...";
@@ -1345,9 +1152,6 @@ const GuruModule = {
         const client = getSupabaseClient();
         try {
           const now = new Date();
-          const startTime = now.toISOString();
-          const endTime = new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString();
-
           const { error } = await client.from('exams').insert({
             teacher_id: this.currentTeacher.id,
             class_id: classId,
@@ -1356,78 +1160,55 @@ const GuruModule = {
             description: description,
             duration_minutes: duration,
             token: token,
-            start_time: startTime,
-            end_time: endTime,
+            start_time: now.toISOString(),
+            end_time: new Date(now.getTime() + (7 * 24 * 60 * 60 * 1000)).toISOString(),
             randomize_questions: randomizeQuestions,
             randomize_options: randomizeOptions,
+            anti_cheat: antiCheat,
+            max_violations: maxViolations,
             is_active: true
           });
 
           if (error) throw error;
-
           closeModal();
           await this.loadExamsTable();
           await this.loadBankSoalExamFilter();
         } catch (err) {
           formAlert.className = "alert alert-error";
-          formAlert.innerText = `Gagal menyimpan: ${err.message}`;
+          formAlert.innerText = `Gagal: ${err.message}`;
           formAlert.classList.remove("d-none");
+        } finally {
           btnSave.disabled = false;
-          btnSave.innerText = "Coba Simpan Lagi";
+          btnSave.innerText = "Simpan & Terbitkan Ujian";
         }
       });
     }
   },
 
-  copyTokenToClipboard(token) {
-    navigator.clipboard.writeText(token).then(() => {
-      alert(`Token ujian "${token}" berhasil disalin ke clipboard!`);
-    }).catch(() => {
-      alert(`Gagal menyalin. Token: ${token}`);
-    });
-  },
-
   async toggleExamStatus(examId, currentStatus) {
-    const aksi = currentStatus ? "menutup akses" : "membuka kembali";
-    const yakin = confirm(`Apakah Anda yakin ingin ${aksi} sesi ujian ini?`);
-    if (!yakin) return;
-
+    if (!confirm(`Ubah status ujian ini?`)) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('exams')
-        .update({ is_active: !currentStatus })
-        .eq('id', examId);
-
-      if (error) throw error;
+      await client.from('exams').update({ is_active: !currentStatus }).eq('id', examId);
       await this.loadExamsTable();
     } catch (err) {
-      alert(`Gagal mengubah status ujian: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
   async deleteExam(examId, examTitle) {
-    const yakin = confirm(`Apakah Anda yakin ingin menghapus ujian "${examTitle}"? Seluruh butir soal dan stimulus di ujian ini akan terhapus.`);
-    if (!yakin) return;
-
+    if (!confirm(`Hapus ujian "${examTitle}"? Seluruh butir soal di dalamnya akan terhapus.`)) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('exams')
-        .delete()
-        .eq('id', examId);
-
-      if (error) throw error;
-
+      await client.from('exams').delete().eq('id', examId);
       if (this.selectedExamId === examId) {
         this.selectedExamId = null;
         this.selectedExamTitle = '';
       }
-
       await this.loadExamsTable();
       await this.loadBankSoalExamFilter();
     } catch (err) {
-      alert(`Gagal menghapus ujian: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
@@ -1444,16 +1225,13 @@ const GuruModule = {
     if (!client || !this.currentTeacher) return;
 
     try {
-      const { data: exams, error } = await client
+      const { data: exams } = await client
         .from('exams')
         .select('id, title, subject')
         .eq('teacher_id', this.currentTeacher.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-
       this.examsList = exams || [];
-
       let optionsHtml = '<option value="">-- Pilih Sesi Ujian --</option>';
       this.examsList.forEach(e => {
         optionsHtml += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`;
@@ -1465,31 +1243,23 @@ const GuruModule = {
       if (this.examsList.length > 0) {
         if (!this.selectedExamId || !this.examsList.find(e => e.id === this.selectedExamId)) {
           const firstExam = this.examsList[0];
-          const firstTitle = `${firstExam.title} (${firstExam.subject || '-'})`;
           if (filterSelect) filterSelect.value = firstExam.id;
           if (importSelect) importSelect.value = firstExam.id;
-          this.setExamActive(firstExam.id, firstTitle);
+          this.setExamActive(firstExam.id, `${firstExam.title} (${firstExam.subject || '-'})`);
           await this.loadBankSoalContent(firstExam.id);
         } else {
           if (filterSelect) filterSelect.value = this.selectedExamId;
           if (importSelect) importSelect.value = this.selectedExamId;
           await this.loadBankSoalContent(this.selectedExamId);
         }
-      } else {
-        this.selectedExamId = null;
-        this.selectedExamTitle = '';
-        this.syncActiveExamToQuestionForm();
       }
     } catch (err) {
-      console.warn("Gagal memuat filter ujian:", err);
+      console.warn("Gagal filter ujian:", err);
     }
   },
 
   setupBankSoalEventListeners() {
     const filterSelect = document.getElementById("bank-exam-filter");
-    const btnGotoTambah = document.getElementById("btn-goto-tambah-soal");
-    const btnRenumber = document.getElementById("btn-renumber-questions");
-
     if (filterSelect) {
       filterSelect.addEventListener("change", (e) => {
         const val = e.target.value;
@@ -1499,134 +1269,64 @@ const GuruModule = {
       });
     }
 
-    if (btnGotoTambah) {
-      btnGotoTambah.addEventListener("click", () => {
-        if (!this.selectedExamId) {
-          alert("Silakan pilih salah satu ujian di dropdown Bank Soal terlebih dahulu.");
-          return;
-        }
-        this.targetStimulusId = null;
-        this.targetStimulusTitle = '';
-        const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
-        if (navTambah) navTambah.click();
-      });
-    }
+    document.getElementById("btn-goto-tambah-soal")?.addEventListener("click", () => {
+      if (!this.selectedExamId) {
+        alert("Silakan pilih ujian di dropdown Bank Soal terlebih dahulu.");
+        return;
+      }
+      document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]')?.click();
+    });
 
-    if (btnRenumber) {
-      btnRenumber.addEventListener("click", () => {
-        if (!this.selectedExamId) {
-          alert("Pilih sesi ujian terlebih dahulu.");
-          return;
-        }
-        this.renumberAllQuestions(this.selectedExamId);
-      });
-    }
+    document.getElementById("btn-renumber-questions")?.addEventListener("click", () => {
+      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu.");
+      this.renumberAllQuestions(this.selectedExamId);
+    });
   },
 
   async loadBankSoalContent(examId) {
     const container = document.getElementById("bank-soal-list-container");
-    if (!container) return;
+    if (!container || !examId) return;
 
-    if (!examId) {
-      container.innerHTML = `
-        <div class="card text-center" style="padding: 40px 20px;">
-          <p class="text-muted">Silakan pilih salah satu ujian di atas untuk melihat butir soal dan grup stimulus.</p>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = `
-      <div class="card text-center" style="padding: 30px;">
-        <p class="text-muted">Memuat butir soal dan stimulus...</p>
-      </div>
-    `;
+    container.innerHTML = '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Memuat butir soal...</p></div>';
 
     const client = getSupabaseClient();
     try {
-      const { data: stimulusGroups, error: stimErr } = await client
+      const { data: stimulusGroups } = await client
         .from('stimulus_groups')
         .select('*')
         .eq('exam_id', examId)
         .order('created_at', { ascending: true });
 
-      if (stimErr) throw stimErr;
-
-      const { data: questions, error: qErr } = await client
+      const { data: questions } = await client
         .from('questions')
         .select(`
-          id,
-          original_number,
-          question_type,
-          content,
-          image_url,
-          points,
-          stimulus_group_id,
-          options (
-            id,
-            option_label,
-            content,
-            is_correct
-          )
+          id, original_number, question_type, content, image_url, points, stimulus_group_id,
+          options ( id, option_label, content, is_correct )
         `)
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
 
-      if (qErr) throw qErr;
-
       if ((!questions || questions.length === 0) && (!stimulusGroups || stimulusGroups.length === 0)) {
-        container.innerHTML = `
-          <div class="card text-center" style="padding: 40px 20px;">
-            <p class="text-muted">Belum ada butir soal atau stimulus pada ujian ini.</p>
-            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
-              <button class="btn btn-secondary" onclick="document.getElementById('btn-open-modal-stimulus').click();">+ Buat Stimulus</button>
-              <button class="btn btn-primary" onclick="document.querySelector('.sidebar-menu .nav-link[data-target=\\'panel-tambah-soal\\']').click();">+ Mulai Tambah Soal</button>
-            </div>
-          </div>
-        `;
+        container.innerHTML = '<div class="card text-center" style="padding: 40px 20px;"><p class="text-muted">Belum ada butir soal atau stimulus.</p></div>';
         return;
       }
 
       let contentHtml = '';
-
-      const stimuliWithQuestions = (stimulusGroups || []).map(stim => {
-        const stimQuestions = (questions || [])
-          .filter(q => q.stimulus_group_id === stim.id)
-          .sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
-        const minNum = stimQuestions.length > 0 ? stimQuestions[0].original_number : 99999;
-        return { stim, stimQuestions, minNum };
-      });
-
-      stimuliWithQuestions.sort((a, b) => a.minNum - b.minNum);
-
-      stimuliWithQuestions.forEach(({ stim, stimQuestions }) => {
-        const titleEscaped = (stim.title || '').replace(/'/g, "\\'");
+      (stimulusGroups || []).forEach(stim => {
+        const stimQuestions = (questions || []).filter(q => q.stimulus_group_id === stim.id);
         contentHtml += `
           <div class="card" style="border-left: 4px solid var(--primary-color); background: #fdfdfd; margin-bottom: 20px;">
-            <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0; flex-wrap: wrap; gap: 10px;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-weight: bold; color: var(--primary-color);">Wacana / Stimulus: ${stim.title || 'Tanpa Judul'}</span>
-                <div style="display: inline-flex; gap: 4px;">
-                  <button class="btn btn-secondary btn-sm" title="Geser Blok Stimulus Naik (Melewati Soal Lain)" onclick="GuruModule.moveStimulusBlock('${stim.id}', '${examId}', -1)">▲ Blok</button>
-                  <button class="btn btn-secondary btn-sm" title="Geser Blok Stimulus Turun (Melewati Soal Lain)" onclick="GuruModule.moveStimulusBlock('${stim.id}', '${examId}', 1)">▼ Blok</button>
-                </div>
-              </div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                <button class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}', '${titleEscaped}')">+ Tambah Soal di Stimulus Ini</button>
-                <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit Stimulus</button>
-                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}', ${stimQuestions.length})">Hapus Stimulus</button>
+            <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; border-radius: 8px 8px 0 0;">
+              <strong>Wacana: ${stim.title}</strong>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}', '${stim.title}')">+ Tambah Soal</button>
+                <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}', ${stimQuestions.length})">Hapus</button>
               </div>
             </div>
-            <div class="math-content" style="font-size: 0.95rem; color: var(--text-main); margin-bottom: 15px; line-height: 1.6; white-space: pre-line;">
-              ${stim.content || ''}
-            </div>
-            ${stim.image_url ? `<div style="margin-bottom: 15px;"><img src="${stim.image_url}" style="max-width: 100%; max-height: 250px; border-radius: 6px; border: 1px solid var(--border-color);"></div>` : ''}
-            
-            <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px;">
-              Butir Soal Terkait (${stimQuestions.length} Soal):
-            </div>
+            <div class="math-content" style="font-size: 0.95rem; margin-bottom: 15px; white-space: pre-line;">${stim.content || ''}</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
-              ${stimQuestions.length > 0 ? stimQuestions.map(q => this.renderQuestionItem(q, examId, stim.id)).join('') : '<p class="text-muted" style="font-size: 0.85rem;">Belum ada butir soal. Klik "+ Tambah Soal di Stimulus Ini" untuk menambahkan.</p>'}
+              ${stimQuestions.map(q => this.renderQuestionItem(q, examId, stim.id)).join('')}
             </div>
           </div>
         `;
@@ -1636,9 +1336,7 @@ const GuruModule = {
       if (standaloneQuestions.length > 0) {
         contentHtml += `
           <div class="card">
-            <div class="card-header">
-              <span class="card-title">Soal Mandiri (Tanpa Stimulus) — ${standaloneQuestions.length} Soal</span>
-            </div>
+            <div class="card-header"><span class="card-title">Soal Mandiri (${standaloneQuestions.length} Soal)</span></div>
             <div style="display: flex; flex-direction: column; gap: 15px;">
               ${standaloneQuestions.map(q => this.renderQuestionItem(q, examId, null)).join('')}
             </div>
@@ -1649,311 +1347,173 @@ const GuruModule = {
       container.innerHTML = contentHtml;
       this.renderMath(container);
     } catch (err) {
-      container.innerHTML = `
-        <div class="card" style="border: 1px solid var(--danger-color); color: var(--danger-color);">
-          Gagal memuat bank soal: ${err.message}
-        </div>
-      `;
+      container.innerHTML = `<div class="card" style="color: var(--danger-color);">${err.message}</div>`;
     }
   },
 
   renderQuestionItem(q, examId, stimulusId = null) {
-    const typeLabel = q.question_type === 'pg' 
-      ? '<span class="badge badge-success">Pilihan Ganda</span>' 
-      : '<span class="badge badge-warning">PG Kompleks</span>';
-
     const sortedOptions = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
-
     let optionsListHtml = '';
     sortedOptions.forEach(opt => {
       const isKey = opt.is_correct ? 'style="color: var(--success-color); font-weight: bold;"' : 'style="color: var(--text-muted);"';
-      const checkIcon = opt.is_correct ? '✓ ' : '';
-      optionsListHtml += `
-        <div ${isKey} class="math-content" style="font-size: 0.9rem; margin-bottom: 4px;">
-          ${checkIcon}<strong>${opt.option_label}.</strong> ${opt.content}
-        </div>
-      `;
+      optionsListHtml += `<div ${isKey} class="math-content" style="font-size: 0.9rem; margin-bottom: 4px;">${opt.is_correct ? '✓ ' : ''}<strong>${opt.option_label}.</strong> ${opt.content}</div>`;
     });
 
     const stimParam = stimulusId ? `'${stimulusId}'` : 'null';
 
     return `
       <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 14px; background: #ffffff;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <strong style="font-size: 1rem; color: var(--primary-color);">No. ${q.original_number || '-'}</strong>
-            ${typeLabel}
+            <strong style="color: var(--primary-color);">No. ${q.original_number || '-'}</strong>
+            <span class="badge ${q.question_type === 'pg' ? 'badge-success' : 'badge-warning'}">${q.question_type.toUpperCase()}</span>
             <small class="text-muted">(${q.points || 1} Poin)</small>
           </div>
-          <div class="action-buttons" style="flex-wrap: wrap;">
-            <button class="btn btn-secondary btn-sm" title="Geser Urutan Naik (Internal)" onclick="GuruModule.moveQuestionOrder('${q.id}', '${examId}', ${stimParam}, -1)">▲</button>
-            <button class="btn btn-secondary btn-sm" title="Geser Urutan Turun (Internal)" onclick="GuruModule.moveQuestionOrder('${q.id}', '${examId}', ${stimParam}, 1)">▼</button>
-            <button class="btn btn-secondary btn-sm" title="Duplikasi Soal Ini" onclick="GuruModule.duplicateQuestion('${q.id}', '${examId}')">Duplikat</button>
-            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit Soal</button>
+          <div class="action-buttons">
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.moveQuestionOrder('${q.id}', '${examId}', ${stimParam}, -1)">▲</button>
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.moveQuestionOrder('${q.id}', '${examId}', ${stimParam}, 1)">▼</button>
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.duplicateQuestion('${q.id}', '${examId}')">Duplikat</button>
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
           </div>
         </div>
-        <div class="math-content" style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.5; white-space: pre-line;">
-          ${q.content}
-        </div>
-        ${q.image_url ? `<div style="margin-bottom: 10px;"><img src="${q.image_url}" style="max-height: 180px; border-radius: 4px; border: 1px solid var(--border-color);"></div>` : ''}
-        <div style="background: #f8fafc; padding: 10px; border-radius: 6px; border-left: 3px solid var(--border-color);">
-          ${optionsListHtml || '<em class="text-muted" style="font-size: 0.85rem;">Belum ada pilihan jawaban.</em>'}
-        </div>
+        <div class="math-content" style="font-size: 0.95rem; margin-bottom: 10px; white-space: pre-line;">${q.content}</div>
+        <div style="background: #f8fafc; padding: 10px; border-radius: 6px;">${optionsListHtml || '<em class="text-muted">Belum ada pilihan jawaban.</em>'}</div>
       </div>
     `;
   },
 
   async deleteQuestion(questionId, examId) {
-    const yakin = confirm("Apakah Anda yakin ingin menghapus butir soal ini?");
-    if (!yakin) return;
-
+    if (!confirm("Hapus butir soal ini?")) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('questions')
-        .delete()
-        .eq('id', questionId);
-
-      if (error) throw error;
+      await client.from('questions').delete().eq('id', questionId);
       await this.loadBankSoalContent(examId);
     } catch (err) {
-      alert(`Gagal menghapus butir soal: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
-  async deleteStimulusGroup(stimulusId, examId, questionCount = 0) {
-    let confirmMsg = "Apakah Anda yakin ingin menghapus grup stimulus ini?";
-    if (questionCount > 0) {
-      confirmMsg = `Grup stimulus ini memuat ${questionCount} butir soal.\n\nJika grup stimulus dihapus, soal-soal di dalamnya AKAN TETAP ADA dan otomatis berubah menjadi 'Soal Mandiri (Tanpa Stimulus)'.\n\nLanjutkan penghapusan?`;
-    }
-
-    const yakin = confirm(confirmMsg);
-    if (!yakin) return;
-
+  async deleteStimulusGroup(stimulusId, examId, count = 0) {
+    if (!confirm(`Hapus grup stimulus ini? ${count} soal di dalamnya akan menjadi soal mandiri.`)) return;
     const client = getSupabaseClient();
     try {
-      const { error } = await client
-        .from('stimulus_groups')
-        .delete()
-        .eq('id', stimulusId);
-
-      if (error) throw error;
+      await client.from('stimulus_groups').delete().eq('id', stimulusId);
       await this.loadBankSoalContent(examId);
     } catch (err) {
-      alert(`Gagal menghapus grup stimulus: ${err.message}`);
+      alert(`Gagal: ${err.message}`);
     }
   },
 
-  goToAddQuestionWithStimulus(stimulusId, stimulusTitle = '') {
+  goToAddQuestionWithStimulus(stimulusId, title = '') {
     this.targetStimulusId = stimulusId;
-    this.targetStimulusTitle = stimulusTitle;
-    const navTambah = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
-    if (navTambah) {
-      navTambah.click();
-    }
+    this.targetStimulusTitle = title;
+    document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]')?.click();
   },
 
   setupStimulusEventListeners() {
     const modalCreate = document.getElementById("modal-create-stimulus");
-    const btnOpenCreate = document.getElementById("btn-open-modal-stimulus");
-    const btnCloseCreate = document.getElementById("btn-close-modal-stimulus");
-    const btnCancelCreate = document.getElementById("btn-cancel-create-stimulus");
     const formCreate = document.getElementById("form-create-stimulus");
-    const alertCreate = document.getElementById("stimulus-form-alert");
-    const btnSaveCreate = document.getElementById("btn-save-stimulus");
-
-    const openCreateModal = () => {
-      if (!this.selectedExamId) {
-        alert("Silakan pilih sesi ujian terlebih dahulu sebelum membuat stimulus.");
-        return;
-      }
+    const closeCreate = () => modalCreate.classList.add("d-none");
+    document.getElementById("btn-open-modal-stimulus")?.addEventListener("click", () => {
+      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu.");
       formCreate.reset();
-      alertCreate.classList.add("d-none");
-      btnSaveCreate.disabled = false;
-      btnSaveCreate.innerText = "Simpan Stimulus";
       modalCreate.classList.remove("d-none");
-    };
-
-    const closeCreateModal = () => modalCreate.classList.add("d-none");
-
-    if (btnOpenCreate) btnOpenCreate.addEventListener("click", openCreateModal);
-    if (btnCloseCreate) btnCloseCreate.addEventListener("click", closeCreateModal);
-    if (btnCancelCreate) btnCancelCreate.addEventListener("click", closeCreateModal);
-
-    if (modalCreate) {
-      modalCreate.addEventListener("click", (e) => {
-        if (e.target === modalCreate) closeCreateModal();
-      });
-    }
+    });
+    document.getElementById("btn-close-modal-stimulus")?.addEventListener("click", closeCreate);
+    document.getElementById("btn-cancel-create-stimulus")?.addEventListener("click", closeCreate);
 
     if (formCreate) {
       formCreate.addEventListener("submit", async (e) => {
         e.preventDefault();
-        alertCreate.classList.add("d-none");
-
         const title = document.getElementById("stimulus-title").value.trim();
+        const content = document.getElementById("stimulus-content").value.trim();
         const fileInput = document.getElementById("stimulus-image-file");
         let imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
-        const content = document.getElementById("stimulus-content").value.trim();
-
-        btnSaveCreate.disabled = true;
-        btnSaveCreate.innerText = "Mengunggah & Menyimpan...";
 
         try {
-          if (fileInput && fileInput.files && fileInput.files[0]) {
+          if (fileInput && fileInput.files[0]) {
             imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
           }
-
           const client = getSupabaseClient();
-          const { error } = await client
-            .from('stimulus_groups')
-            .insert({
-              exam_id: this.selectedExamId,
-              title: title,
-              image_url: imageUrl,
-              content: content
-            });
-
-          if (error) throw error;
-
-          closeCreateModal();
+          await client.from('stimulus_groups').insert({
+            exam_id: this.selectedExamId,
+            title: title,
+            image_url: imageUrl,
+            content: content
+          });
+          closeCreate();
           await this.loadBankSoalContent(this.selectedExamId);
         } catch (err) {
-          alertCreate.className = "alert alert-error";
-          alertCreate.innerText = `Gagal menyimpan stimulus: ${err.message}`;
-          alertCreate.classList.remove("d-none");
-          btnSaveCreate.disabled = false;
-          btnSaveCreate.innerText = "Coba Simpan Lagi";
+          alert(`Gagal: ${err.message}`);
         }
       });
     }
 
     const modalEdit = document.getElementById("modal-edit-stimulus");
-    const btnCloseEdit = document.getElementById("btn-close-modal-edit-stimulus");
-    const btnCancelEdit = document.getElementById("btn-cancel-edit-stimulus");
     const formEdit = document.getElementById("form-edit-stimulus");
-    const alertEdit = document.getElementById("edit-stimulus-form-alert");
-    const btnUpdateEdit = document.getElementById("btn-update-stimulus");
-
-    const closeEditModal = () => modalEdit.classList.add("d-none");
-
-    if (btnCloseEdit) btnCloseEdit.addEventListener("click", closeEditModal);
-    if (btnCancelEdit) btnCancelEdit.addEventListener("click", closeEditModal);
-
-    if (modalEdit) {
-      modalEdit.addEventListener("click", (e) => {
-        if (e.target === modalEdit) closeEditModal();
-      });
-    }
+    const closeEdit = () => modalEdit.classList.add("d-none");
+    document.getElementById("btn-close-modal-edit-stimulus")?.addEventListener("click", closeEdit);
+    document.getElementById("btn-cancel-edit-stimulus")?.addEventListener("click", closeEdit);
 
     if (formEdit) {
       formEdit.addEventListener("submit", async (e) => {
         e.preventDefault();
-        alertEdit.classList.add("d-none");
-
         const stimulusId = document.getElementById("edit-stimulus-id").value;
-        const examId = document.getElementById("edit-stimulus-exam-id").value;
         const title = document.getElementById("edit-stimulus-title").value.trim();
+        const content = document.getElementById("edit-stimulus-content").value.trim();
         const fileInput = document.getElementById("edit-stimulus-image-file");
         let imageUrl = document.getElementById("edit-stimulus-image-url").value.trim() || null;
-        const content = document.getElementById("edit-stimulus-content").value.trim();
-
-        btnUpdateEdit.disabled = true;
-        btnUpdateEdit.innerText = "Memperbarui...";
 
         try {
-          if (fileInput && fileInput.files && fileInput.files[0]) {
+          if (fileInput && fileInput.files[0]) {
             imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
           }
-
           const client = getSupabaseClient();
-          const { error } = await client
-            .from('stimulus_groups')
-            .update({
-              title: title,
-              image_url: imageUrl,
-              content: content
-            })
-            .eq('id', stimulusId);
-
-          if (error) throw error;
-
-          closeEditModal();
-          await this.loadBankSoalContent(examId);
+          await client.from('stimulus_groups').update({
+            title: title,
+            image_url: imageUrl,
+            content: content
+          }).eq('id', stimulusId);
+          closeEdit();
+          await this.loadBankSoalContent(this.selectedExamId);
         } catch (err) {
-          alertEdit.className = "alert alert-error";
-          alertEdit.innerText = `Gagal memperbarui stimulus: ${err.message}`;
-          alertEdit.classList.remove("d-none");
-        } finally {
-          btnUpdateEdit.disabled = false;
-          btnUpdateEdit.innerText = "Simpan Perubahan";
+          alert(`Gagal: ${err.message}`);
         }
       });
     }
   },
 
   async openEditStimulusModal(stimulusId) {
-    const modal = document.getElementById("modal-edit-stimulus");
-    const alertEl = document.getElementById("edit-stimulus-form-alert");
-    const btnUpdate = document.getElementById("btn-update-stimulus");
-    const fileInput = document.getElementById("edit-stimulus-image-file");
-
-    alertEl.classList.add("d-none");
-    if (fileInput) fileInput.value = "";
-    btnUpdate.disabled = false;
-    btnUpdate.innerText = "Simpan Perubahan";
-    modal.classList.remove("d-none");
-
     const client = getSupabaseClient();
     try {
-      const { data: stim, error } = await client
-        .from('stimulus_groups')
-        .select('*')
-        .eq('id', stimulusId)
-        .single();
-
-      if (error) throw error;
-
+      const { data: stim } = await client.from('stimulus_groups').select('*').eq('id', stimulusId).single();
       document.getElementById("edit-stimulus-id").value = stim.id;
-      document.getElementById("edit-stimulus-exam-id").value = stim.exam_id;
       document.getElementById("edit-stimulus-title").value = stim.title || "";
       document.getElementById("edit-stimulus-image-url").value = stim.image_url || "";
       document.getElementById("edit-stimulus-content").value = stim.content || "";
+      document.getElementById("modal-edit-stimulus").classList.remove("d-none");
     } catch (err) {
-      alertEl.className = "alert alert-error";
-      alertEl.innerText = `Gagal memuat data stimulus: ${err.message}`;
-      alertEl.classList.remove("d-none");
+      alert(`Gagal: ${err.message}`);
     }
   },
 
   async loadStimulusDropdown(examId, targetSelectId = "question-stimulus-id") {
     const selectEl = document.getElementById(targetSelectId);
-    if (!selectEl) return;
+    if (!selectEl || !examId) return;
 
     selectEl.innerHTML = '<option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>';
-
-    if (!examId) return;
-
     const client = getSupabaseClient();
     try {
-      const { data: groups, error } = await client
-        .from('stimulus_groups')
-        .select('id, title')
-        .eq('exam_id', examId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
+      const { data: groups } = await client.from('stimulus_groups').select('id, title').eq('exam_id', examId);
       (groups || []).forEach((g, idx) => {
-        selectEl.innerHTML += `<option value="${g.id}">Grup ${idx + 1}: ${g.title || 'Tanpa Judul'}</option>`;
+        selectEl.innerHTML += `<option value="${g.id}">Grup ${idx + 1}: ${g.title}</option>`;
       });
-
       if (this.targetStimulusId && targetSelectId === "question-stimulus-id") {
         selectEl.value = this.targetStimulusId;
       }
     } catch (err) {
-      console.warn("Gagal memuat dropdown stimulus:", err);
+      console.warn("Gagal load dropdown stimulus:", err);
     }
   },
 
@@ -1962,21 +1522,19 @@ const GuruModule = {
     const displayEl = document.getElementById("active-exam-title-display");
     const numberInput = document.getElementById("question-number");
     const stimBanner = document.getElementById("active-stimulus-banner");
-    const stimTitleDisplay = document.getElementById("active-stimulus-title-display");
 
     if (examIdInput) examIdInput.value = this.selectedExamId || "";
     if (displayEl) displayEl.innerText = this.selectedExamTitle || "-";
 
-    if (this.targetStimulusId && stimBanner && stimTitleDisplay) {
+    if (this.targetStimulusId && stimBanner) {
       stimBanner.classList.remove("d-none");
-      stimTitleDisplay.innerText = this.targetStimulusTitle || "Grup Stimulus Terpilih";
+      document.getElementById("active-stimulus-title-display").innerText = this.targetStimulusTitle;
     } else if (stimBanner) {
       stimBanner.classList.add("d-none");
     }
 
     if (this.selectedExamId) {
       await this.loadStimulusDropdown(this.selectedExamId, "question-stimulus-id");
-
       if (numberInput) {
         numberInput.value = await this.getSuggestedQuestionNumber(this.selectedExamId, this.targetStimulusId);
       }
@@ -1986,197 +1544,85 @@ const GuruModule = {
   setupQuestionFormEventListeners() {
     const form = document.getElementById("form-create-question");
     const typeSelect = document.getElementById("question-type");
-    const keyInstruction = document.getElementById("key-instruction");
-    const formAlert = document.getElementById("question-form-alert");
-    const btnSave = document.getElementById("btn-save-question");
-    const btnBack = document.getElementById("btn-back-to-bank");
-    const btnDetachStimulus = document.getElementById("btn-detach-stimulus");
-    const stimSelect = document.getElementById("question-stimulus-id");
-
-    const questionInput = document.getElementById("question-content");
-    const previewBox = document.getElementById("math-preview-box");
-    const previewContent = document.getElementById("math-preview-content");
-
-    if (questionInput && previewBox && previewContent) {
-      questionInput.addEventListener("input", (e) => {
-        const val = e.target.value.trim();
-        if (val) {
-          previewBox.style.display = "block";
-          previewContent.innerText = val;
-          this.renderMath(previewContent);
-        } else {
-          previewBox.style.display = "none";
-        }
-      });
-    }
-
-    if (btnDetachStimulus) {
-      btnDetachStimulus.addEventListener("click", async () => {
-        this.targetStimulusId = null;
-        this.targetStimulusTitle = '';
-        if (stimSelect) stimSelect.value = "";
-        const stimBanner = document.getElementById("active-stimulus-banner");
-        if (stimBanner) stimBanner.classList.add("d-none");
-        const numberInput = document.getElementById("question-number");
-        if (numberInput) {
-          numberInput.value = await this.getSuggestedQuestionNumber(this.selectedExamId, null);
-        }
-      });
-    }
-
-    if (btnBack) {
-      btnBack.addEventListener("click", () => {
-        this.targetStimulusId = null;
-        this.targetStimulusTitle = '';
-        const bankTab = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
-        if (bankTab) bankTab.click();
-      });
-    }
 
     if (typeSelect) {
       typeSelect.addEventListener("change", (e) => {
         const isPgk = e.target.value === 'pgk';
-        const keyInputs = document.querySelectorAll("#options-inputs-container .option-key-input");
-
-        keyInputs.forEach(input => {
+        document.querySelectorAll("#options-inputs-container .option-key-input").forEach(input => {
           input.type = isPgk ? 'checkbox' : 'radio';
-          if (!isPgk) {
-            input.name = "correct_key";
-          } else {
-            input.removeAttribute("name");
-          }
+          if (!isPgk) input.name = "correct_key";
+          else input.removeAttribute("name");
         });
-
-        if (keyInstruction) {
-          keyInstruction.innerText = isPgk 
-            ? "Centang satu atau lebih kotak untuk kunci jawaban benar (PG Kompleks)."
-            : "Pilih 1 radio button untuk kunci jawaban benar.";
-        }
       });
     }
 
     if (form) {
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        formAlert.classList.add("d-none");
-
-        const examId = this.selectedExamId || document.getElementById("question-exam-id")?.value;
-        const stimulusSelectEl = document.getElementById("question-stimulus-id");
-        const stimulusId = stimulusSelectEl?.value || this.targetStimulusId || null;
+        const examId = this.selectedExamId;
+        const stimulusId = document.getElementById("question-stimulus-id").value || null;
         const originalNumber = parseInt(document.getElementById("question-number").value, 10);
         const questionType = document.getElementById("question-type").value;
         const points = parseFloat(document.getElementById("question-points").value) || 1.0;
+        const content = document.getElementById("question-content").value.trim();
         const fileInput = document.getElementById("question-image-file");
         let imageUrl = document.getElementById("question-image-url").value.trim() || null;
-        const content = document.getElementById("question-content").value.trim();
-
-        if (!examId) {
-          alert("Sesi ujian belum aktif. Silakan buka menu Bank Soal dan pilih ujian terlebih dahulu.");
-          return;
-        }
 
         const textInputs = document.querySelectorAll("#options-inputs-container .option-text-input");
         const keyInputs = document.querySelectorAll("#options-inputs-container .option-key-input");
 
         const optionsData = [];
         const correctKeys = [];
-
         textInputs.forEach((textInput, idx) => {
           const label = textInput.getAttribute("data-label");
           const val = textInput.value.trim();
           const isCorrect = keyInputs[idx].checked;
-
           if (val) {
             if (isCorrect) correctKeys.push(label);
-            optionsData.push({
-              option_label: label,
-              content: val,
-              is_correct: isCorrect
-            });
+            optionsData.push({ option_label: label, content: val, is_correct: isCorrect });
           }
         });
 
-        if (optionsData.length < 2) {
-          formAlert.className = "alert alert-error";
-          formAlert.innerText = "Soal harus memiliki minimal 2 pilihan jawaban (misal A dan B).";
-          formAlert.classList.remove("d-none");
-          return;
+        if (optionsData.length < 2 || correctKeys.length === 0) {
+          return alert("Pastikan minimal 2 opsi terisi dan minimal 1 kunci jawaban dipilih.");
         }
-
-        if (correctKeys.length === 0) {
-          formAlert.className = "alert alert-error";
-          formAlert.innerText = "Tentukan minimal satu kunci jawaban yang benar.";
-          formAlert.classList.remove("d-none");
-          return;
-        }
-
-        btnSave.disabled = true;
-        btnSave.innerText = "Menyimpan & Menyesuaikan Nomor...";
 
         try {
           await this.shiftQuestionsUp(examId, originalNumber);
-
-          if (fileInput && fileInput.files && fileInput.files[0]) {
+          if (fileInput && fileInput.files[0]) {
             imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
           }
 
           const client = getSupabaseClient();
-          const { data: newQuestion, error: qErr } = await client
-            .from('questions')
-            .insert({
-              exam_id: examId,
-              stimulus_group_id: stimulusId,
-              original_number: originalNumber,
-              question_type: questionType,
-              points: points,
-              image_url: imageUrl,
-              content: content,
-              correct_keys: correctKeys,
-              group_id: null
-            })
-            .select()
-            .single();
+          const { data: newQ, error: qErr } = await client.from('questions').insert({
+            exam_id: examId,
+            stimulus_group_id: stimulusId,
+            original_number: originalNumber,
+            question_type: questionType,
+            points: points,
+            image_url: imageUrl,
+            content: content,
+            correct_keys: correctKeys
+          }).select().single();
 
           if (qErr) throw qErr;
 
           const optionsPayload = optionsData.map(opt => ({
-            question_id: newQuestion.id,
+            question_id: newQ.id,
             option_label: opt.option_label,
             content: opt.content,
             is_correct: opt.is_correct
           }));
 
-          const { error: optErr } = await client
-            .from('options')
-            .insert(optionsPayload);
-
-          if (optErr) throw optErr;
-
-          formAlert.className = "alert alert-success";
-          formAlert.innerText = `Soal No. ${originalNumber} berhasil disimpan!`;
-          formAlert.classList.remove("d-none");
+          await client.from('options').insert(optionsPayload);
 
           document.getElementById("question-content").value = "";
-          document.getElementById("question-image-url").value = "";
-          if (fileInput) fileInput.value = "";
-          if (previewBox) previewBox.style.display = "none";
-          textInputs.forEach(input => input.value = "");
-          keyInputs.forEach((input, idx) => input.checked = (idx === 0));
-
+          textInputs.forEach(i => i.value = "");
           document.getElementById("question-number").value = originalNumber + 1;
-
-          if (this.targetStimulusId && stimulusSelectEl) {
-            stimulusSelectEl.value = this.targetStimulusId;
-          }
-
           await this.loadBankSoalContent(examId);
+          alert("Soal berhasil disimpan!");
         } catch (err) {
-          formAlert.className = "alert alert-error";
-          formAlert.innerText = `Gagal menyimpan butir soal: ${err.message}`;
-          formAlert.classList.remove("d-none");
-        } finally {
-          btnSave.disabled = false;
-          btnSave.innerText = "Simpan Butir Soal";
+          alert(`Gagal: ${err.message}`);
         }
       });
     }
@@ -2184,262 +1630,98 @@ const GuruModule = {
 
   async openEditQuestionModal(questionId, examId) {
     const modal = document.getElementById("modal-edit-question");
-    const alertEl = document.getElementById("edit-q-form-alert");
-    const optionsContainer = document.getElementById("edit-options-container");
-    const typeSelect = document.getElementById("edit-q-type");
-    const keyInstruction = document.getElementById("edit-key-instruction");
-    const editPreviewBox = document.getElementById("edit-math-preview-box");
-    const editPreviewContent = document.getElementById("edit-math-preview-content");
-    const fileInput = document.getElementById("edit-q-image-file");
-
-    alertEl.classList.add("d-none");
-    if (fileInput) fileInput.value = "";
-    optionsContainer.innerHTML = '<p class="text-muted">Memuat opsi jawaban...</p>';
     modal.classList.remove("d-none");
-
     await this.loadStimulusDropdown(examId, "edit-q-stimulus-id");
 
     const client = getSupabaseClient();
     try {
-      const { data: q, error: qErr } = await client
-        .from('questions')
-        .select(`
-          id,
-          exam_id,
-          stimulus_group_id,
-          original_number,
-          question_type,
-          points,
-          image_url,
-          content,
-          options (
-            id,
-            option_label,
-            content,
-            is_correct
-          )
-        `)
-        .eq('id', questionId)
-        .single();
-
-      if (qErr) throw qErr;
+      const { data: q } = await client.from('questions').select(`
+        id, exam_id, stimulus_group_id, original_number, question_type, points, image_url, content,
+        options ( id, option_label, content, is_correct )
+      `).eq('id', questionId).single();
 
       document.getElementById("edit-q-id").value = q.id;
       document.getElementById("edit-q-exam-id").value = q.exam_id;
       document.getElementById("edit-q-stimulus-id").value = q.stimulus_group_id || "";
       document.getElementById("edit-q-number").value = q.original_number || 1;
-      typeSelect.value = q.question_type || "pg";
+      document.getElementById("edit-q-type").value = q.question_type || "pg";
       document.getElementById("edit-q-points").value = q.points || 1.0;
       document.getElementById("edit-q-image-url").value = q.image_url || "";
       document.getElementById("edit-q-content").value = q.content || "";
 
-      if (editPreviewBox && editPreviewContent) {
-        if (q.content && q.content.trim()) {
-          editPreviewBox.style.display = "block";
-          editPreviewContent.innerText = q.content;
-          this.renderMath(editPreviewContent);
-        } else {
-          editPreviewBox.style.display = "none";
-        }
-      }
-
       const isPgk = q.question_type === 'pgk';
-      keyInstruction.innerText = isPgk 
-        ? "Centang kotak untuk kunci jawaban benar (PG Kompleks)." 
-        : "Pilih 1 radio button untuk kunci jawaban benar.";
-
-      const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
       const existingOptionsMap = {};
-      (q.options || []).forEach(opt => {
-        existingOptionsMap[opt.option_label] = opt;
-      });
+      (q.options || []).forEach(opt => existingOptionsMap[opt.option_label] = opt);
 
       let optionsHtml = '';
-      labels.forEach(lbl => {
+      ['A', 'B', 'C', 'D', 'E', 'F'].forEach(lbl => {
         const opt = existingOptionsMap[lbl] || { id: '', content: '', is_correct: false };
-        const inputType = isPgk ? 'checkbox' : 'radio';
-        const checkedAttr = opt.is_correct ? 'checked' : '';
-        const nameAttr = isPgk ? '' : 'name="edit_correct_key"';
-
         optionsHtml += `
           <div style="display: flex; align-items: center; gap: 10px;">
-            <input type="${inputType}" ${nameAttr} class="edit-option-key" value="${lbl}" ${checkedAttr} title="Tandai Benar">
+            <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="edit_correct_key"'} class="edit-option-key" value="${lbl}" ${opt.is_correct ? 'checked' : ''}>
             <strong style="width: 25px;">${lbl}.</strong>
-            <input type="text" class="edit-option-text" data-label="${lbl}" data-option-id="${opt.id}" value="${opt.content || ''}" placeholder="Teks pilihan ${lbl}..." style="flex-grow: 1;">
+            <input type="text" class="edit-option-text" data-label="${lbl}" value="${opt.content || ''}" placeholder="Teks pilihan ${lbl}..." style="flex-grow: 1;">
           </div>
         `;
       });
 
-      optionsContainer.innerHTML = optionsHtml;
+      document.getElementById("edit-options-container").innerHTML = optionsHtml;
     } catch (err) {
-      alertEl.className = "alert alert-error";
-      alertEl.innerText = `Gagal membaca detail soal: ${err.message}`;
-      alertEl.classList.remove("d-none");
+      alert(`Gagal: ${err.message}`);
     }
   },
 
   setupEditQuestionEventListeners() {
     const modal = document.getElementById("modal-edit-question");
-    const btnClose = document.getElementById("btn-close-modal-edit-q");
-    const btnCancel = document.getElementById("btn-cancel-edit-q");
-    const form = document.getElementById("form-edit-question");
-    const typeSelect = document.getElementById("edit-q-type");
-    const keyInstruction = document.getElementById("edit-key-instruction");
-    const alertEl = document.getElementById("edit-q-form-alert");
-    const btnUpdate = document.getElementById("btn-update-question");
-
-    const editQuestionInput = document.getElementById("edit-q-content");
-    const editPreviewBox = document.getElementById("edit-math-preview-box");
-    const editPreviewContent = document.getElementById("edit-math-preview-content");
-
-    if (editQuestionInput && editPreviewBox && editPreviewContent) {
-      editQuestionInput.addEventListener("input", (e) => {
-        const val = e.target.value.trim();
-        if (val) {
-          editPreviewBox.style.display = "block";
-          editPreviewContent.innerText = val;
-          this.renderMath(editPreviewContent);
-        } else {
-          editPreviewBox.style.display = "none";
-        }
-      });
-    }
-
     const closeModal = () => modal.classList.add("d-none");
+    document.getElementById("btn-close-modal-edit-q")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-edit-q")?.addEventListener("click", closeModal);
 
-    if (btnClose) btnClose.addEventListener("click", closeModal);
-    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+    document.getElementById("form-edit-question")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const questionId = document.getElementById("edit-q-id").value;
+      const examId = document.getElementById("edit-q-exam-id").value;
+      const stimulusId = document.getElementById("edit-q-stimulus-id").value || null;
+      const originalNumber = parseInt(document.getElementById("edit-q-number").value, 10);
+      const questionType = document.getElementById("edit-q-type").value;
+      const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
+      const content = document.getElementById("edit-q-content").value.trim();
 
-    if (modal) {
-      modal.addEventListener("click", (e) => {
-        if (e.target === modal) closeModal();
-      });
-    }
+      const textInputs = document.querySelectorAll(".edit-option-text");
+      const keyInputs = document.querySelectorAll(".edit-option-key");
+      const optionsToSave = [];
+      const correctKeys = [];
 
-    if (typeSelect) {
-      typeSelect.addEventListener("change", (e) => {
-        const isPgk = e.target.value === 'pgk';
-        const keys = document.querySelectorAll(".edit-option-key");
-        keys.forEach(k => {
-          k.type = isPgk ? 'checkbox' : 'radio';
-          if (!isPgk) {
-            k.name = "edit_correct_key";
-          } else {
-            k.removeAttribute("name");
-          }
-        });
-
-        if (keyInstruction) {
-          keyInstruction.innerText = isPgk 
-            ? "Centang kotak untuk kunci jawaban benar (PG Kompleks)." 
-            : "Pilih 1 radio button untuk kunci jawaban benar.";
+      textInputs.forEach((txt, idx) => {
+        const label = txt.getAttribute("data-label");
+        const val = txt.value.trim();
+        const isCorrect = keyInputs[idx].checked;
+        if (val) {
+          if (isCorrect) correctKeys.push(label);
+          optionsToSave.push({ question_id: questionId, option_label: label, content: val, is_correct: isCorrect });
         }
       });
-    }
 
-    if (form) {
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        alertEl.classList.add("d-none");
+      const client = getSupabaseClient();
+      try {
+        await client.from('questions').update({
+          stimulus_group_id: stimulusId,
+          original_number: originalNumber,
+          question_type: questionType,
+          points: points,
+          content: content,
+          correct_keys: correctKeys
+        }).eq('id', questionId);
 
-        const questionId = document.getElementById("edit-q-id").value;
-        const examId = document.getElementById("edit-q-exam-id").value;
-        const stimulusId = document.getElementById("edit-q-stimulus-id").value || null;
-        const originalNumber = parseInt(document.getElementById("edit-q-number").value, 10);
-        const questionType = document.getElementById("edit-q-type").value;
-        const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
-        const fileInput = document.getElementById("edit-q-image-file");
-        let imageUrl = document.getElementById("edit-q-image-url").value.trim() || null;
-        const content = document.getElementById("edit-q-content").value.trim();
+        await client.from('options').delete().eq('question_id', questionId);
+        await client.from('options').insert(optionsToSave);
 
-        const textInputs = document.querySelectorAll(".edit-option-text");
-        const keyInputs = document.querySelectorAll(".edit-option-key");
-
-        const optionsToSave = [];
-        const correctKeys = [];
-
-        textInputs.forEach((txt, idx) => {
-          const label = txt.getAttribute("data-label");
-          const val = txt.value.trim();
-          const isCorrect = keyInputs[idx].checked;
-
-          if (val) {
-            if (isCorrect) correctKeys.push(label);
-            optionsToSave.push({
-              id: txt.getAttribute("data-option-id") || null,
-              question_id: questionId,
-              option_label: label,
-              content: val,
-              is_correct: isCorrect
-            });
-          }
-        });
-
-        if (optionsToSave.length < 2) {
-          alertEl.className = "alert alert-error";
-          alertEl.innerText = "Soal harus memiliki minimal 2 pilihan jawaban.";
-          alertEl.classList.remove("d-none");
-          return;
-        }
-
-        if (correctKeys.length === 0) {
-          alertEl.className = "alert alert-error";
-          alertEl.innerText = "Tentukan minimal satu kunci jawaban yang benar.";
-          alertEl.classList.remove("d-none");
-          return;
-        }
-
-        btnUpdate.disabled = true;
-        btnUpdate.innerText = "Memperbarui...";
-
-        try {
-          if (fileInput && fileInput.files && fileInput.files[0]) {
-            imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
-          }
-
-          const client = getSupabaseClient();
-          const { error: qUpdateErr } = await client
-            .from('questions')
-            .update({
-              stimulus_group_id: stimulusId,
-              original_number: originalNumber,
-              question_type: questionType,
-              points: points,
-              image_url: imageUrl,
-              content: content,
-              correct_keys: correctKeys
-            })
-            .eq('id', questionId);
-
-          if (qUpdateErr) throw qUpdateErr;
-
-          await client.from('options').delete().eq('question_id', questionId);
-
-          const newOptionsPayload = optionsToSave.map(opt => ({
-            question_id: questionId,
-            option_label: opt.option_label,
-            content: opt.content,
-            is_correct: opt.is_correct
-          }));
-
-          const { error: optInsertErr } = await client
-            .from('options')
-            .insert(newOptionsPayload);
-
-          if (optInsertErr) throw optInsertErr;
-
-          closeModal();
-          await this.loadBankSoalContent(examId);
-        } catch (err) {
-          alertEl.className = "alert alert-error";
-          alertEl.innerText = `Gagal memperbarui soal: ${err.message}`;
-          alertEl.classList.remove("d-none");
-        } finally {
-          btnUpdate.disabled = false;
-          btnUpdate.innerText = "Simpan Perubahan";
-        }
-      });
-    }
+        closeModal();
+        await this.loadBankSoalContent(examId);
+      } catch (err) {
+        alert(`Gagal: ${err.message}`);
+      }
+    });
   },
 
   async loadQuickStats() {
@@ -2447,29 +1729,15 @@ const GuruModule = {
     if (!client || !this.currentTeacher) return;
 
     try {
-      const { count: classCount } = await client
-        .from('classes')
-        .select('*', { count: 'exact', head: true })
-        .eq('teacher_id', this.currentTeacher.id);
+      const { count: classCount } = await client.from('classes').select('*', { count: 'exact', head: true }).eq('teacher_id', this.currentTeacher.id);
+      const { count: studentCount } = await client.from('students').select('*', { count: 'exact', head: true });
+      const { count: examCount } = await client.from('exams').select('*', { count: 'exact', head: true }).eq('teacher_id', this.currentTeacher.id);
 
-      const { count: studentCount } = await client
-        .from('students')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: examCount } = await client
-        .from('exams')
-        .select('*', { count: 'exact', head: true })
-        .eq('teacher_id', this.currentTeacher.id);
-
-      const statClassesEl = document.getElementById("stat-classes");
-      const statStudentsEl = document.getElementById("stat-students");
-      const statExamsEl = document.getElementById("stat-exams");
-
-      if (statClassesEl) statClassesEl.innerText = classCount || 0;
-      if (statStudentsEl) statStudentsEl.innerText = studentCount || 0;
-      if (statExamsEl) statExamsEl.innerText = examCount || 0;
+      document.getElementById("stat-classes").innerText = classCount || 0;
+      document.getElementById("stat-students").innerText = studentCount || 0;
+      document.getElementById("stat-exams").innerText = examCount || 0;
     } catch (err) {
-      console.warn("Gagal memuat statistik awal:", err);
+      console.warn("Gagal stats:", err);
     }
   }
 };
