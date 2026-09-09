@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU, BANK SOAL STATS, REKAP NILAI & SPREADSHEET (LENGKAP)
+// MODUL DASHBOARD GURU: SISWA PER KELAS, IMPORT EXCEL SISWA, BANK SOAL & SPREADSHEET
 // ==========================================================================
 
 const GuruModule = {
@@ -10,7 +10,9 @@ const GuruModule = {
   selectedExamTitle: '',
   targetStimulusId: null,
   targetStimulusTitle: '',
+  selectedStudentClassId: null,
   parsedExcelQuestions: [],
+  parsedExcelStudents: [],
 
   renderMath(containerElement) {
     if (typeof renderMathInElement === 'function' && containerElement) {
@@ -39,82 +41,43 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  async getSuggestedQuestionNumber(examId, stimulusId = null) {
-    if (!examId) return 1;
-    const client = getSupabaseClient();
-    try {
-      if (stimulusId) {
-        const { data: stimQ } = await client.from('questions').select('original_number').eq('exam_id', examId).eq('stimulus_group_id', stimulusId).order('original_number', { ascending: false }).limit(1);
-        if (stimQ && stimQ.length > 0 && stimQ[0].original_number) return stimQ[0].original_number + 1;
-      }
-      const { data: maxQ } = await client.from('questions').select('original_number').eq('exam_id', examId).order('original_number', { ascending: false }).limit(1);
-      if (maxQ && maxQ.length > 0 && maxQ[0].original_number) return maxQ[0].original_number + 1;
-      return 1;
-    } catch {
-      return 1;
-    }
-  },
-
-  async shiftQuestionsUp(examId, targetNumber) {
-    const client = getSupabaseClient();
-    try {
-      const { data: colliding } = await client.from('questions').select('id, original_number').eq('exam_id', examId).gte('original_number', targetNumber).order('original_number', { ascending: false });
-      if (colliding && colliding.length > 0) {
-        for (const q of colliding) {
-          await client.from('questions').update({ original_number: q.original_number + 1 }).eq('id', q.id);
-        }
-      }
-    } catch (err) {
-      console.warn("Gagal shift nomor:", err);
-    }
-  },
-
-  async renumberAllQuestions(examId) {
-    if (!examId || !confirm("Rapikan seluruh urutan nomor soal dari 1 s.d. selesai?")) return;
-    const client = getSupabaseClient();
-    try {
-      const { data: allQ } = await client.from('questions').select('id, stimulus_group_id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
-      if (!allQ || allQ.length === 0) return;
-
-      const ordered = [];
-      const visited = new Set();
-      for (const q of allQ) {
-        if (!q.stimulus_group_id) {
-          ordered.push(q);
-        } else if (!visited.has(q.stimulus_group_id)) {
-          visited.add(q.stimulus_group_id);
-          const group = allQ.filter(item => item.stimulus_group_id === q.stimulus_group_id);
-          ordered.push(...group);
-        }
-      }
-
-      for (let i = 0; i < ordered.length; i++) {
-        await client.from('questions').update({ original_number: i + 1 }).eq('id', ordered[i].id);
-      }
-
-      alert("Urutan nomor berhasil dirapikan!");
-      await this.loadBankSoalContent(examId);
-    } catch (err) {
-      alert(`Gagal: ${err.message}`);
-    }
-  },
-
-  downloadExcelTemplate() {
+  // Download Template Excel Siswa
+  downloadStudentExcelTemplate() {
     if (typeof XLSX === 'undefined') return alert("Pustaka SheetJS belum termuat.");
     const templateData = [
-      { nomor: 1, judul_stimulus: '', isi_stimulus: '', tipe: 'pg', poin: 1.0, soal: 'Ibukota Indonesia adalah...', opsi_a: 'Jakarta', opsi_b: 'Surabaya', opsi_c: 'Bandung', opsi_d: 'Medan', opsi_e: '', opsi_f: '', kunci: 'A', gambar_url: '' },
-      { nomor: 2, judul_stimulus: 'Teks Mangrove', isi_stimulus: 'Mangrove meredam abrasi pantai...', tipe: 'pgk', poin: 2.0, soal: 'Manakah peran mangrove? (PGK 6 Opsi)', opsi_a: 'Meredam abrasi', opsi_b: 'Habitat ikan', opsi_c: 'Batu bara', opsi_d: 'Penyaring sedimen', opsi_e: 'Peneduh pesisir', opsi_f: 'Kayu bakar komersial', kunci: 'A,B,D,E', gambar_url: '' }
+      { nomor_absen: 1, nama_siswa: 'Ahmad Maulana', nisn: '10293847' },
+      { nomor_absen: 2, nama_siswa: 'Budi Santoso', nisn: '10293848' },
+      { nomor_absen: 3, nama_siswa: 'Citra Dewi', nisn: '10293849' }
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template Soal");
-    XLSX.writeFile(wb, "template_soal_akm.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Template Siswa");
+    XLSX.writeFile(wb, "template_siswa.xlsx");
   },
 
-  setupImportExcelEventListeners() {
-    document.getElementById("btn-download-template")?.addEventListener("click", () => this.downloadExcelTemplate());
+  // Setup Event Listener Import Siswa Excel
+  setupImportStudentEventListeners() {
+    const btnDownload = document.getElementById("btn-download-student-template");
+    const btnOpenModal = document.getElementById("btn-open-import-student-modal");
+    const modal = document.getElementById("modal-import-student");
+    const closeModal = () => modal.classList.add("d-none");
 
-    const fileInput = document.getElementById("excel-file-input");
+    btnDownload?.addEventListener("click", () => this.downloadStudentExcelTemplate());
+    btnOpenModal?.addEventListener("click", () => {
+      if (!this.selectedStudentClassId) return alert("Pilih kelas terlebih dahulu di dropdown atas!");
+      const cls = this.classesList.find(c => c.id === this.selectedStudentClassId);
+      document.getElementById("import-student-class-display").innerText = cls ? cls.class_name : '-';
+      document.getElementById("excel-student-file-input").value = "";
+      document.getElementById("import-student-preview-area").classList.add("d-none");
+      document.getElementById("import-student-alert").classList.add("d-none");
+      document.getElementById("btn-commit-import-student").disabled = true;
+      modal.classList.remove("d-none");
+    });
+
+    document.getElementById("btn-close-modal-import-student")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-import-student")?.addEventListener("click", closeModal);
+
+    const fileInput = document.getElementById("excel-student-file-input");
     fileInput?.addEventListener("change", (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -125,88 +88,59 @@ const GuruModule = {
           const data = new Uint8Array(evt.target.result);
           const wb = XLSX.read(data, { type: 'array' });
           const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-          this.parsedExcelQuestions = [];
-          let tableRows = '';
+          this.parsedExcelStudents = [];
+          let rowsHtml = '';
 
           raw.forEach((r, idx) => {
-            const num = r.nomor || (idx + 1);
-            const type = (r.tipe || 'pg').toLowerCase().trim();
-            const points = parseFloat(r.poin) || 1.0;
-            const content = (r.soal || '').trim();
-            const rawKey = String(r.kunci || '').toUpperCase().trim();
-            const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+            const absen = parseInt(r.nomor_absen || r.absen || (idx + 1), 10);
+            const nama = (r.nama_siswa || r.nama || '').trim();
+            const nisn = (r.nisn || r.nis || '').toString().trim();
 
-            const options = [];
-            ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
-              const text = r[`opsi_${lbl}`] ? String(r[`opsi_${lbl}`]).trim() : '';
-              if (text) {
-                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: correctKeys.includes(lbl.toUpperCase()) });
-              }
-            });
-
-            if (content && options.length >= 2) {
-              this.parsedExcelQuestions.push({
-                original_number: num,
-                stimulus_title: r.judul_stimulus ? String(r.judul_stimulus).trim() : null,
-                stimulus_content: r.isi_stimulus ? String(r.isi_stimulus).trim() : '',
-                question_type: type,
-                points: points,
-                content: content,
-                correct_keys: correctKeys,
-                options: options
-              });
-
-              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${correctKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+            if (nama) {
+              this.parsedExcelStudents.push({ attendance_number: absen, full_name: nama, student_number: nisn || null });
+              rowsHtml += `<tr><td style="text-align:center;"><strong>${absen}</strong></td><td>${nama}</td><td>${nisn || '-'}</td></tr>`;
             }
           });
 
-          document.getElementById("import-summary-text").innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Soal Siap Diimpor`;
-          document.getElementById("import-preview-body").innerHTML = tableRows;
-          document.getElementById("import-preview-area").classList.remove("d-none");
+          document.getElementById("import-student-summary-text").innerText = `Pratinjau: ${this.parsedExcelStudents.length} Siswa Terbaca`;
+          document.getElementById("import-student-preview-body").innerHTML = rowsHtml;
+          document.getElementById("import-student-preview-area").classList.remove("d-none");
+          document.getElementById("btn-commit-import-student").disabled = (this.parsedExcelStudents.length === 0);
         } catch (err) {
-          alert(`Gagal baca Excel: ${err.message}`);
+          alert(`Gagal membaca berkas siswa: ${err.message}`);
         }
       };
       reader.readAsArrayBuffer(file);
     });
 
-    document.getElementById("btn-commit-import")?.addEventListener("click", async () => {
-      const examId = document.getElementById("import-exam-select").value;
-      if (!examId) return alert("Pilih sesi ujian terlebih dahulu.");
+    document.getElementById("btn-commit-import-student")?.addEventListener("click", async () => {
+      if (!this.selectedStudentClassId || this.parsedExcelStudents.length === 0) return;
+      const btn = document.getElementById("btn-commit-import-student");
+      btn.disabled = true;
+      btn.innerText = "Menyimpan...";
 
       const client = getSupabaseClient();
       try {
-        const stimMap = {};
-        for (const q of this.parsedExcelQuestions) {
-          let stimId = null;
-          if (q.stimulus_title) {
-            if (!stimMap[q.stimulus_title]) {
-              const { data: s } = await client.from('stimulus_groups').insert({ exam_id: examId, title: q.stimulus_title, content: q.stimulus_content }).select().single();
-              stimMap[q.stimulus_title] = s.id;
-            }
-            stimId = stimMap[q.stimulus_title];
-          }
+        const payload = this.parsedExcelStudents.map(s => ({
+          class_id: this.selectedStudentClassId,
+          attendance_number: s.attendance_number,
+          full_name: s.full_name,
+          student_number: s.student_number || `S-${Date.now()}-${s.attendance_number}`,
+          is_active: true
+        }));
 
-          const { data: insertedQ } = await client.from('questions').insert({
-            exam_id: examId,
-            stimulus_group_id: stimId,
-            original_number: q.original_number,
-            question_type: q.question_type,
-            points: q.points,
-            content: q.content,
-            correct_keys: q.correct_keys
-          }).select().single();
+        const { error } = await client.from('students').insert(payload);
+        if (error) throw error;
 
-          const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
-          await client.from('options').insert(opts);
-        }
-
-        alert("Sukses mengimpor seluruh butir soal!");
-        document.getElementById("import-preview-area").classList.add("d-none");
-        document.getElementById("excel-file-input").value = "";
-        await this.loadBankSoalContent(examId);
+        alert(`Berhasil mengimpor ${payload.length} siswa ke dalam kelas!`);
+        closeModal();
+        await this.loadStudentsTableByClass(this.selectedStudentClassId);
+        await this.loadQuickStats();
       } catch (err) {
-        alert(`Gagal impor: ${err.message}`);
+        alert(`Gagal import siswa: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🚀 Simpan Semua Siswa";
       }
     });
   },
@@ -220,13 +154,13 @@ const GuruModule = {
     this.setupNavigation();
     await this.ensureDefaultClass();
     await this.loadClassesDropdown();
-    await this.loadStudentsTable();
     await this.loadClassesTable();
     await this.loadExamsTable();
     await this.loadQuickStats();
     await this.loadBankSoalExamFilter();
 
     this.setupStudentEventListeners();
+    this.setupImportStudentEventListeners();
     this.setupClassEventListeners();
     this.setupExamEventListeners();
     this.setupBankSoalEventListeners();
@@ -265,7 +199,10 @@ const GuruModule = {
         document.getElementById(targetId)?.classList.remove("d-none");
         document.getElementById("current-menu-title").innerText = link.innerText;
 
-        if (targetId === "panel-siswa") this.loadStudentsTable();
+        if (targetId === "panel-siswa") {
+          await this.loadClassesDropdown();
+          if (this.selectedStudentClassId) await this.loadStudentsTableByClass(this.selectedStudentClassId);
+        }
         else if (targetId === "panel-kelas") this.loadClassesTable();
         else if (targetId === "panel-ujian") this.loadExamsTable();
         else if (targetId === "panel-bank-soal") this.loadBankSoalExamFilter();
@@ -294,72 +231,135 @@ const GuruModule = {
     let optionsHtml = '<option value="">-- Pilih Kelas --</option>';
     this.classesList.forEach(c => optionsHtml += `<option value="${c.id}">${c.class_name}</option>`);
 
-    ['student-class-id', 'edit-student-class-id', 'exam-class-id'].forEach(id => {
+    ['student-class-filter', 'edit-student-class-id', 'exam-class-id'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = optionsHtml;
     });
+
+    // Otomatis pilih kelas pertama di menu siswa
+    const filterStudentClass = document.getElementById("student-class-filter");
+    if (filterStudentClass && this.classesList.length > 0) {
+      if (!this.selectedStudentClassId || !this.classesList.find(c => c.id === this.selectedStudentClassId)) {
+        this.selectedStudentClassId = this.classesList[0].id;
+      }
+      filterStudentClass.value = this.selectedStudentClassId;
+      await this.loadStudentsTableByClass(this.selectedStudentClassId);
+    }
   },
 
-  async loadStudentsTable() {
-    const client = getSupabaseClient();
+  // MEMUAT SISWA BERDASARKAN KELAS TERTENTU
+  async loadStudentsTableByClass(classId) {
     const tableBody = document.getElementById("students-table-body");
+    const titleTable = document.getElementById("title-students-table");
+    const titleAdd = document.getElementById("title-add-student");
     if (!tableBody) return;
 
-    const { data: students } = await client.from('students').select('id, student_number, full_name, is_active, class_id, classes(class_name)').order('student_number', { ascending: true });
+    if (!classId) {
+      tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Silakan pilih kelas terlebih dahulu.</td></tr>';
+      return;
+    }
+
+    const cls = this.classesList.find(c => c.id === classId);
+    const className = cls ? cls.class_name : 'Kelas';
+    if (titleTable) titleTable.innerText = `Daftar Siswa Kelas ${className}`;
+    if (titleAdd) titleAdd.innerText = `Tambah Siswa Baru ke Kelas ${className}`;
+
+    tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Memuat data siswa kelas...</td></tr>';
+
+    const client = getSupabaseClient();
+    const { data: students, error } = await client
+      .from('students')
+      .select('id, attendance_number, student_number, full_name, is_active, class_id')
+      .eq('class_id', classId)
+      .order('attendance_number', { ascending: true });
+
+    if (error) {
+      tableBody.innerHTML = `<tr><td colspan="6" class="text-center" style="color:var(--danger-color);">${error.message}</td></tr>`;
+      return;
+    }
 
     let rowsHtml = '';
-    (students || []).forEach((s, idx) => {
+    (students || []).forEach((s) => {
       rowsHtml += `
         <tr>
-          <td>${idx + 1}</td>
-          <td><strong>${s.classes ? s.classes.class_name : '-'}</strong></td>
-          <td>${s.student_number}</td>
-          <td>${s.full_name}</td>
+          <td style="text-align: center;"><strong style="color: var(--primary-color); font-size: 1.05rem;">${s.attendance_number || '-'}</strong></td>
+          <td><strong>${s.full_name}</strong></td>
+          <td>${s.student_number || '-'}</td>
+          <td>${className}</td>
           <td><span class="badge ${s.is_active ? 'badge-success' : 'badge-danger'}">${s.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStudent('${s.id}', '${s.class_id}', '${s.full_name}', '${s.student_number}')">Edit</button>
+            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStudent('${s.id}', '${s.class_id}', '${s.full_name}', '${s.student_number}', ${s.attendance_number})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStudent('${s.id}', '${s.full_name}')">Hapus</button>
           </td>
         </tr>
       `;
     });
-    tableBody.innerHTML = rowsHtml || '<tr><td colspan="6" class="text-center text-muted">Belum ada siswa.</td></tr>';
+    tableBody.innerHTML = rowsHtml || `<tr><td colspan="6" class="text-center text-muted">Belum ada siswa di kelas ${className}. Tambahkan di atas atau gunakan tombol Import Siswa.</td></tr>`;
   },
 
   setupStudentEventListeners() {
+    // Filter dropdown pemilihan kelas di menu siswa
+    document.getElementById("student-class-filter")?.addEventListener("change", async (e) => {
+      this.selectedStudentClassId = e.target.value;
+      await this.loadStudentsTableByClass(this.selectedStudentClassId);
+    });
+
+    document.getElementById("btn-refresh-students")?.addEventListener("click", () => {
+      if (this.selectedStudentClassId) this.loadStudentsTableByClass(this.selectedStudentClassId);
+    });
+
+    // Form Tambah Siswa Manual
     document.getElementById("form-add-student")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const classId = document.getElementById("student-class-id").value;
+      if (!this.selectedStudentClassId) return alert("Pilih kelas terlebih dahulu!");
+
+      const absen = parseInt(document.getElementById("student-attendance-num-input").value, 10);
       const fullName = document.getElementById("student-full-name").value.trim();
-      const studentNumber = document.getElementById("student-number").value.trim();
+      const studentNumber = document.getElementById("student-number").value.trim() || `S-${Date.now()}`;
 
       const client = getSupabaseClient();
-      await client.from('students').insert({ class_id: classId, full_name: fullName, student_number: studentNumber, is_active: true });
+      await client.from('students').insert({
+        class_id: this.selectedStudentClassId,
+        attendance_number: absen,
+        full_name: fullName,
+        student_number: studentNumber,
+        is_active: true
+      });
+
       e.target.reset();
-      await this.loadStudentsTable();
+      await this.loadStudentsTableByClass(this.selectedStudentClassId);
       await this.loadQuickStats();
     });
 
+    // Form Edit Siswa
     document.getElementById("btn-cancel-edit-student")?.addEventListener("click", () => document.getElementById("modal-edit-student").classList.add("d-none"));
     document.getElementById("form-edit-student")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const id = document.getElementById("edit-student-id").value;
       const classId = document.getElementById("edit-student-class-id").value;
+      const absen = parseInt(document.getElementById("edit-student-attendance-num").value, 10);
       const fullName = document.getElementById("edit-student-full-name").value.trim();
       const studentNumber = document.getElementById("edit-student-number").value.trim();
 
       const client = getSupabaseClient();
-      await client.from('students').update({ class_id: classId, full_name: fullName, student_number: studentNumber }).eq('id', id);
+      await client.from('students').update({
+        class_id: classId,
+        attendance_number: absen,
+        full_name: fullName,
+        student_number: studentNumber
+      }).eq('id', id);
+
       document.getElementById("modal-edit-student").classList.add("d-none");
-      await this.loadStudentsTable();
+      await this.loadStudentsTableByClass(this.selectedStudentClassId);
     });
   },
 
-  openEditStudent(id, classId, fullName, studentNumber) {
+  openEditStudent(id, classId, fullName, studentNumber, absen) {
     document.getElementById("edit-student-id").value = id;
     document.getElementById("edit-student-class-id").value = classId;
+    document.getElementById("edit-student-attendance-num").value = absen || 1;
     document.getElementById("edit-student-full-name").value = fullName;
-    document.getElementById("edit-student-number").value = studentNumber;
+    document.getElementById("edit-student-number").value = studentNumber || '';
     document.getElementById("modal-edit-student").classList.remove("d-none");
   },
 
@@ -367,7 +367,7 @@ const GuruModule = {
     if (!confirm(`Hapus data siswa "${fullName}"?`)) return;
     const client = getSupabaseClient();
     await client.from('students').delete().eq('id', studentId);
-    await this.loadStudentsTable();
+    if (this.selectedStudentClassId) await this.loadStudentsTableByClass(this.selectedStudentClassId);
     await this.loadQuickStats();
   },
 
@@ -441,7 +441,6 @@ const GuruModule = {
     return token;
   },
 
-  // MEMUAT TABEL UJIAN BESERTA TOMBOL "⚙️ ATUR"
   async loadExamsTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("exams-table-body");
@@ -475,7 +474,6 @@ const GuruModule = {
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
   },
 
-  // MODAL EDIT PENGATURAN UJIAN (ACAK & ANTI-CURANG)
   openEditExamSettingsModal(examId) {
     const exam = this.examsList.find(e => e.id === examId);
     if (!exam) return;
@@ -486,8 +484,6 @@ const GuruModule = {
     document.getElementById("edit-exam-randomize-options").checked = !!exam.randomize_options;
     document.getElementById("edit-exam-anti-cheat").checked = (exam.anti_cheat !== false);
     document.getElementById("edit-exam-max-violations").value = exam.max_violations || 3;
-    document.getElementById("edit-exam-settings-alert").classList.add("d-none");
-
     document.getElementById("modal-edit-exam-settings").classList.remove("d-none");
   },
 
@@ -506,7 +502,6 @@ const GuruModule = {
       document.getElementById("exam-token").value = this.generateExamToken();
     });
 
-    // Form Buat Ujian
     document.getElementById("form-create-exam")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = document.getElementById("exam-title").value.trim();
@@ -542,7 +537,6 @@ const GuruModule = {
       await this.loadQuickStats();
     });
 
-    // Modal Edit Pengaturan Ujian
     const modalEditSettings = document.getElementById("modal-edit-exam-settings");
     const closeEditSettings = () => modalEditSettings.classList.add("d-none");
     document.getElementById("btn-close-modal-edit-exam-settings")?.addEventListener("click", closeEditSettings);
@@ -555,30 +549,21 @@ const GuruModule = {
       const randomizeOpt = document.getElementById("edit-exam-randomize-options").checked;
       const antiCheat = document.getElementById("edit-exam-anti-cheat").checked;
       const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
-      const btnSave = document.getElementById("btn-save-edit-exam-settings");
-
-      btnSave.disabled = true;
-      btnSave.innerText = "Menyimpan...";
 
       const client = getSupabaseClient();
       try {
-        const { error } = await client.from('exams').update({
+        await client.from('exams').update({
           randomize_questions: randomizeQ,
           randomize_options: randomizeOpt,
           anti_cheat: antiCheat,
           max_violations: maxViolations
         }).eq('id', examId);
 
-        if (error) throw error;
-
         closeEditSettings();
         await this.loadExamsTable();
         alert("Pengaturan keamanan & pengacakan berhasil diperbarui!");
       } catch (err) {
         alert(`Gagal: ${err.message}`);
-      } finally {
-        btnSave.disabled = false;
-        btnSave.innerText = "Simpan Pengaturan";
       }
     });
   },
@@ -642,7 +627,6 @@ const GuruModule = {
     });
   },
 
-  // MEMUAT BANK SOAL & MENGHITUNG STATISTIK SOAL SECARA REAL-TIME
   async loadBankSoalContent(examId) {
     const container = document.getElementById("bank-soal-list-container");
     const statsContainer = document.getElementById("bank-stats-container");
@@ -652,7 +636,6 @@ const GuruModule = {
     const { data: stimulusGroups } = await client.from('stimulus_groups').select('*').eq('exam_id', examId);
     const { data: questions } = await client.from('questions').select('*, options(*)').eq('exam_id', examId).order('original_number', { ascending: true });
 
-    // Statistik Jumlah Soal Real-Time
     if (statsContainer) {
       statsContainer.classList.remove("d-none");
       const totalQ = questions ? questions.length : 0;
@@ -934,9 +917,8 @@ const GuruModule = {
   },
 
   // =========================================================================
-  // SEKSI REKAP NILAI, ANALISIS BUTIR SOAL, & INTEGRASI SPREADSHEET
+  // SEKSI REKAP NILAI & SPREADSHEET (DENGAN NOMOR ABSEN)
   // =========================================================================
-
   getAppsScriptTemplate() {
     return `function doPost(e) {
   try {
@@ -949,6 +931,7 @@ const GuruModule = {
       sheetNilai = ss.insertSheet("Rekap Nilai");
       sheetNilai.appendRow([
         "Waktu Submit", 
+        "No. Absen",
         "Nama Siswa", 
         "NISN", 
         "Kelas", 
@@ -960,11 +943,12 @@ const GuruModule = {
         "Status Pengerjaan",
         "Pelanggaran"
       ]);
-      sheetNilai.getRange("A1:K1").setFontWeight("bold").setBackground("#e0e7ff");
+      sheetNilai.getRange("A1:L1").setFontWeight("bold").setBackground("#e0e7ff");
     }
     
     sheetNilai.appendRow([
       data.submitted_at || new Date().toLocaleString("id-ID"),
+      data.attendance_number || "-",
       data.student_name,
       data.student_number,
       data.class_name,
@@ -977,11 +961,11 @@ const GuruModule = {
       (data.violation_count || 0) + " kali"
     ]);
     
-    // 2. SHEET ANALISIS BUTIR SOAL (URUT NO. 1 S.D. N ASLI BANK SOAL)
+    // 2. SHEET ANALISIS BUTIR SOAL
     var sheetAnalisis = ss.getSheetByName("Analisis Soal");
     if (!sheetAnalisis) {
       sheetAnalisis = ss.insertSheet("Analisis Soal");
-      var headers = ["Nama Siswa", "NISN", "Kelas", "Nilai", "Status"];
+      var headers = ["No. Absen", "Nama Siswa", "Kelas", "Nilai", "Status"];
       for (var i = 1; i <= data.total_questions; i++) {
         headers.push("No. " + i);
       }
@@ -990,8 +974,8 @@ const GuruModule = {
     }
     
     var rowAnalisis = [
+      data.attendance_number || "-",
       data.student_name, 
-      data.student_number, 
       data.class_name, 
       data.final_score, 
       data.submission_type === 'forced_cheat' ? 'CURANG' : 'MURNI'
@@ -1044,7 +1028,7 @@ const GuruModule = {
     document.getElementById("btn-copy-apps-script")?.addEventListener("click", () => {
       const code = this.getAppsScriptTemplate();
       navigator.clipboard.writeText(code).then(() => {
-        alert("Kode Google Apps Script berhasil disalin! Buka Google Spreadsheet -> Ekstensi -> Apps Script, lalu tempel kode ini.");
+        alert("Kode Google Apps Script berhasil disalin!");
       });
     });
   },
@@ -1074,10 +1058,9 @@ const GuruModule = {
         btnSaveUrl.disabled = true;
         btnSaveUrl.innerText = "Menyimpan...";
         try {
-          const { error } = await client.from('exams').update({ spreadsheet_url: urlVal || null }).eq('id', examId);
-          if (error) throw error;
+          await client.from('exams').update({ spreadsheet_url: urlVal || null }).eq('id', examId);
           alertEl.className = "alert alert-success";
-          alertEl.innerText = "Tautan Google Spreadsheet berhasil disimpan untuk sesi ujian ini!";
+          alertEl.innerText = "Tautan Google Spreadsheet berhasil disimpan!";
           alertEl.classList.remove("d-none");
         } catch (err) {
           alertEl.className = "alert alert-error";
@@ -1092,18 +1075,18 @@ const GuruModule = {
 
     const { data: attempts } = await client
       .from('exam_attempts')
-      .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, full_name, student_number, classes(class_name))')
+      .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, attendance_number, full_name, student_number, classes(class_name))')
       .eq('exam_id', examId)
       .order('score', { ascending: false });
 
     const tbodyHasil = document.getElementById("hasil-table-body");
     let rowsHtml = '';
-    (attempts || []).forEach((att, idx) => {
+    (attempts || []).forEach((att) => {
       const st = att.students || {};
       const isCheat = att.submission_type === 'forced_cheat';
       rowsHtml += `
         <tr style="${isCheat ? 'background: #fff1f2;' : ''}">
-          <td>${idx + 1}</td>
+          <td style="text-align: center;"><strong style="color: var(--primary-color);">${st.attendance_number || '-'}</strong></td>
           <td><strong>${st.full_name || '-'}</strong></td>
           <td>${st.student_number || '-'}</td>
           <td>${st.classes ? st.classes.class_name : '-'}</td>
@@ -1116,17 +1099,16 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // Matriks Analisis Butir Soal (DIPETAKAN KETAT MENURUT ORIGINAL_NUMBER DARI BANK SOAL)
     const { data: questions } = await client.from('questions').select('id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
     const theadAnalisis = document.getElementById("analisis-table-header");
     const tbodyAnalisis = document.getElementById("analisis-table-body");
 
     if (!questions || questions.length === 0 || !attempts || attempts.length === 0) {
-      if (tbodyAnalisis) tbodyAnalisis.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada data jawaban untuk dianalisis.</td></tr>';
+      if (tbodyAnalisis) tbodyAnalisis.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada data jawaban untuk dianalisis.</td></tr>';
       return;
     }
 
-    let headerHtml = '<tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th>';
+    let headerHtml = '<tr><th style="text-align:center;">No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th>';
     questions.forEach((q) => headerHtml += `<th style="text-align:center;">No.${q.original_number}</th>`);
     headerHtml += '</tr>';
     if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
@@ -1146,6 +1128,7 @@ const GuruModule = {
       const isCheat = att.submission_type === 'forced_cheat';
       matrixHtml += `
         <tr style="${isCheat ? 'background: #fff1f2;' : ''}">
+          <td style="text-align: center;"><strong>${st.attendance_number || '-'}</strong></td>
           <td><strong>${st.full_name || '-'}</strong></td>
           <td>${st.classes ? st.classes.class_name : '-'}</td>
           <td><strong>${att.score}</strong></td>
@@ -1166,12 +1149,10 @@ const GuruModule = {
     });
     if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
 
-    // Tombol Sinkronisasi Ulang Semua Data ke Spreadsheet
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
         if (!targetUrl) return alert("Silakan tempel dan simpan URL Web App Spreadsheet terlebih dahulu.");
-
         if (!confirm(`Kirim ulang ${attempts.length} data pengerjaan siswa ke Spreadsheet?`)) return;
 
         btnSyncAll.disabled = true;
@@ -1193,6 +1174,7 @@ const GuruModule = {
             const payload = {
               student_name: st.full_name,
               student_number: st.student_number,
+              attendance_number: st.attendance_number || "-",
               class_name: st.classes ? st.classes.class_name : '-',
               exam_title: examInfo.title,
               subject: examInfo.subject,
