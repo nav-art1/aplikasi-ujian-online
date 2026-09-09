@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA, ANTI-CURANG, & WEBHOOK SPREADSHEET
+// MODUL PENGERJAAN UJIAN: PENGACAKAN TIAP LOGIN & SINKRONISASI SPREADSHEET URUT
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -57,7 +57,7 @@ const ExamRunnerModule = {
   },
 
   initAntiCheat() {
-    // Patuhi sakelar ON / OFF yang ditentukan oleh guru
+    // Patuhi sakelar ON/OFF yang ditentukan guru
     if (!this.session.exam.anti_cheat) return;
 
     this.isCheatGuardActive = true;
@@ -66,7 +66,7 @@ const ExamRunnerModule = {
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && this.isCheatGuardActive) {
-        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (pindah tab atau membuka aplikasi lain)!");
+        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (membuka tab lain atau aplikasi lain)!");
       }
     });
 
@@ -159,12 +159,14 @@ const ExamRunnerModule = {
 
       qData.forEach(q => q.options = optionsMap[q.id] || []);
 
+      // Pengacakan Soal Setiap Kali Siswa Login (Kelompok stimulus tetap terkunci bersama)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsPreservingStimulus(qData);
       } else {
         this.questions = qData;
       }
 
+      // Pengacakan Opsi Pilihan
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
@@ -390,9 +392,8 @@ const ExamRunnerModule = {
       let maxPossibleScore = 0;
       let correctCount = 0;
       const studentAnswersPayload = [];
-      const itemAnalysisData = [];
 
-      this.questions.forEach((q, idx) => {
+      this.questions.forEach((q) => {
         const qPoints = parseFloat(q.points) || 1.0;
         maxPossibleScore += qPoints;
 
@@ -419,17 +420,11 @@ const ExamRunnerModule = {
           is_correct: isCorrect,
           score_earned: scoreEarned
         });
-
-        itemAnalysisData.push({
-          question_number: idx + 1,
-          selected_keys: selectedKeys,
-          is_correct: isCorrect
-        });
       });
 
       const finalPercentage = maxPossibleScore > 0 ? Math.round((totalEarnedScore / maxPossibleScore) * 100) : 0;
 
-      // 1. Simpan ke Supabase (exam_attempts)
+      // 1. Simpan Attempt ke Supabase
       const { data: attemptData, error: attErr } = await client
         .from('exam_attempts')
         .insert({
@@ -448,7 +443,7 @@ const ExamRunnerModule = {
 
       if (attErr) throw attErr;
 
-      // 2. Simpan Detail Jawaban (student_answers)
+      // 2. Simpan Jawaban Siswa
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -460,9 +455,28 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Kirim Otomatis ke Google Spreadsheet jika URL disetel oleh Guru
+      // 3. SUSUN DATA SPREADSHEET URUT SESUAI ORIGINAL_NUMBER DARI BANK SOAL (BUKAN URUTAN ACAK TAMPILAN SISWA)
       if (this.session.exam.spreadsheet_url) {
         try {
+          const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
+          
+          const itemAnalysisData = sortedOriginalQuestions.map(q => {
+            const userAns = this.userAnswers[q.id] || { keys: [] };
+            const selectedKeys = userAns.keys || [];
+            const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
+            const userKeysSorted = [...selectedKeys].map(k => String(k).toUpperCase().trim()).sort();
+            const trueKeysSorted = [...trueKeys].sort();
+
+            const isCorrect = (userKeysSorted.length === trueKeysSorted.length) &&
+              userKeysSorted.every((val, index) => val === trueKeysSorted[index]);
+
+            return {
+              question_number: q.original_number,
+              selected_keys: selectedKeys,
+              is_correct: isCorrect
+            };
+          });
+
           const payload = {
             student_name: this.session.student.full_name,
             student_number: this.session.student.student_number,
