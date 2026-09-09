@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA DENGAN STATUS PENYERAHAN ANTI-CURANG
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA, ANTI-CURANG, & WEBHOOK SPREADSHEET
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -16,7 +16,7 @@ const ExamRunnerModule = {
   maxViolations: 3,
   isCheatGuardActive: false,
   initialWindowHeight: window.innerHeight,
-  isForcedSubmission: false, // Menandai jika siswa dipaksa submit karena curang
+  isForcedSubmission: false,
 
   renderMath(element) {
     if (typeof renderMathInElement === 'function' && element) {
@@ -37,7 +37,7 @@ const ExamRunnerModule = {
   async init() {
     this.session = StudentAuthModule.getActiveSession();
     if (!this.session || !this.session.student || !this.session.exam) {
-      alert("Sesi ujian tidak valid atau telah berakhir. Silakan login kembali.");
+      alert("Sesi ujian tidak valid. Silakan login kembali.");
       window.location.href = "index.html";
       return;
     }
@@ -57,6 +57,7 @@ const ExamRunnerModule = {
   },
 
   initAntiCheat() {
+    // Patuhi pengaturan ON/OFF dari guru
     if (!this.session.exam.anti_cheat) return;
 
     this.isCheatGuardActive = true;
@@ -65,7 +66,7 @@ const ExamRunnerModule = {
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && this.isCheatGuardActive) {
-        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (membuka tab atau aplikasi lain)!");
+        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (pindah tab atau membuka aplikasi lain)!");
       }
     });
 
@@ -79,7 +80,6 @@ const ExamRunnerModule = {
 
     window.addEventListener("resize", () => {
       if (!this.isCheatGuardActive) return;
-
       const currentHeight = window.innerHeight;
       const heightDrop = (this.initialWindowHeight - currentHeight) / this.initialWindowHeight;
 
@@ -87,7 +87,7 @@ const ExamRunnerModule = {
       const isTyping = (activeTag === 'input' || activeTag === 'textarea');
 
       if (heightDrop > 0.38 && !isTyping) {
-        this.handleViolation("Terdeteksi perubahan ukuran layar drastis (Layar Belah / Jendela Mengambang tidak diizinkan)!");
+        this.handleViolation("Terdeteksi perubahan ukuran layar (Layar Belah / Jendela Mengambang tidak diizinkan)!");
       }
     });
   },
@@ -99,11 +99,11 @@ const ExamRunnerModule = {
     const sisa = this.maxViolations - this.violationCount;
 
     if (sisa > 0) {
-      alert(`⚠️ PERINGATAN KECURANGAN (${this.violationCount}/${this.maxViolations})\n\n${reason}\n\nSisa toleransi: ${sisa} kali lagi. Jika batas habis, ujian Anda otomatis dikunci dan dicatat curang!`);
+      alert(`⚠️ PERINGATAN KECURANGAN (${this.violationCount}/${this.maxViolations})\n\n${reason}\n\nSisa toleransi: ${sisa} kali lagi. Jika batas habis, ujian Anda otomatis dikunci dan dikumpulkan ke guru!`);
     } else {
       this.isCheatGuardActive = false;
       this.isForcedSubmission = true;
-      alert(`🚨 BATAS PELANGGARAN TERLAMPAUI!\n\nAnda telah melanggar aturan ujian sebanyak ${this.maxViolations} kali. Sistem mengunci lembar ujian dan mencatat penyerahan ini sebagai pelanggaran.`);
+      alert(`🚨 BATAS PELANGGARAN TERLAMPAUI!\n\nAnda melanggar aturan ujian sebanyak ${this.maxViolations} kali. Lembar ujian dikunci dan dikumpulkan paksa.`);
       this.finishExam(true, true);
     }
   },
@@ -116,9 +116,7 @@ const ExamRunnerModule = {
       const q = this.questions[this.currentIndex];
       if (!q) return;
 
-      if (!this.userAnswers[q.id]) {
-        this.userAnswers[q.id] = { keys: [], isDoubt: false };
-      }
+      if (!this.userAnswers[q.id]) this.userAnswers[q.id] = { keys: [], isDoubt: false };
       this.userAnswers[q.id].isDoubt = e.target.checked;
       this.saveLocalAnswers();
       this.renderGridNumbers();
@@ -139,45 +137,19 @@ const ExamRunnerModule = {
     const examId = this.session.exam.id;
 
     try {
-      const { data: stimuli } = await client
-        .from('stimulus_groups')
-        .select('*')
-        .eq('exam_id', examId);
-
-      (stimuli || []).forEach(s => {
-        this.stimuliMap[s.id] = s;
-      });
+      const { data: stimuli } = await client.from('stimulus_groups').select('*').eq('exam_id', examId);
+      (stimuli || []).forEach(s => this.stimuliMap[s.id] = s);
 
       const { data: qData, error: qErr } = await client
         .from('questions')
-        .select(`
-          id,
-          original_number,
-          stimulus_group_id,
-          question_type,
-          points,
-          image_url,
-          content,
-          correct_keys
-        `)
+        .select('id, original_number, stimulus_group_id, question_type, points, image_url, content, correct_keys')
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
 
       if (qErr) throw qErr;
 
-      if (!qData || qData.length === 0) {
-        alert("Belum ada butir soal pada ujian ini. Silakan hubungi guru pengawas.");
-        window.location.href = "konfirmasi.html";
-        return;
-      }
-
       const questionIds = qData.map(q => q.id);
-      const { data: allOptions, error: optErr } = await client
-        .from('options')
-        .select('id, question_id, option_label, content')
-        .in('question_id', questionIds);
-
-      if (optErr) throw optErr;
+      const { data: allOptions } = await client.from('options').select('id, question_id, option_label, content').in('question_id', questionIds);
 
       const optionsMap = {};
       (allOptions || []).forEach(opt => {
@@ -185,9 +157,7 @@ const ExamRunnerModule = {
         optionsMap[opt.question_id].push(opt);
       });
 
-      qData.forEach(q => {
-        q.options = optionsMap[q.id] || [];
-      });
+      qData.forEach(q => q.options = optionsMap[q.id] || []);
 
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsPreservingStimulus(qData);
@@ -197,16 +167,13 @@ const ExamRunnerModule = {
 
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
-          if (q.options && q.options.length > 0) {
-            q.options = this.shuffleArray([...q.options]);
-          }
+          if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
         });
       }
 
       this.renderCurrentQuestion();
       this.renderGridNumbers();
     } catch (err) {
-      console.error("Gagal memuat butir soal ujian:", err);
       alert(`Gagal mengambil data soal: ${err.message}`);
     }
   },
@@ -214,7 +181,6 @@ const ExamRunnerModule = {
   shuffleQuestionsPreservingStimulus(questionsList) {
     const units = [];
     const visitedStim = new Set();
-
     questionsList.forEach(q => {
       if (!q.stimulus_group_id) {
         units.push([q]);
@@ -224,9 +190,7 @@ const ExamRunnerModule = {
         units.push(group);
       }
     });
-
-    const shuffledUnits = this.shuffleArray(units);
-    return shuffledUnits.flat();
+    return this.shuffleArray(units).flat();
   },
 
   shuffleArray(array) {
@@ -248,16 +212,6 @@ const ExamRunnerModule = {
         const stim = this.stimuliMap[q.stimulus_group_id];
         document.getElementById("stimulus-title").innerText = stim.title || "Wacana Stimulus";
         document.getElementById("stimulus-content").innerText = stim.content || "";
-        
-        const stimImgWrap = document.getElementById("stimulus-image-wrap");
-        const stimImg = document.getElementById("stimulus-image");
-        if (stim.image_url) {
-          stimImg.src = stim.image_url;
-          stimImgWrap.style.display = "block";
-        } else {
-          stimImgWrap.style.display = "none";
-        }
-
         stimContainer.classList.remove("d-none");
         this.renderMath(stimContainer);
       } else {
@@ -265,102 +219,54 @@ const ExamRunnerModule = {
       }
     }
 
-    const numEl = document.getElementById("display-q-number");
-    const typeEl = document.getElementById("display-q-type");
-    const pointsEl = document.getElementById("display-q-points");
+    document.getElementById("display-q-number").innerText = `Soal No. ${this.currentIndex + 1}`;
+    document.getElementById("display-q-type").innerText = q.question_type === 'pgk' ? 'PG Kompleks' : 'Pilihan Ganda';
+    document.getElementById("display-q-points").innerText = `(${q.points || 1} Poin)`;
+
     const contentEl = document.getElementById("display-q-content");
-
-    if (numEl) numEl.innerText = `Soal No. ${this.currentIndex + 1}`;
-    const typeLabel = q.question_type === 'pgk' ? 'PG Kompleks' : 'Pilihan Ganda';
-    if (typeEl) typeEl.innerText = typeLabel;
-    if (pointsEl) pointsEl.innerText = `(${q.points || 1} Poin)`;
-
-    if (contentEl) {
-      contentEl.innerText = q.content || "";
-      this.renderMath(contentEl);
-    }
-
-    const imgWrap = document.getElementById("display-q-image-wrap");
-    const imgEl = document.getElementById("display-q-image");
-    if (imgWrap && imgEl) {
-      if (q.image_url) {
-        imgEl.src = q.image_url;
-        imgWrap.style.display = "block";
-      } else {
-        imgWrap.style.display = "none";
-      }
-    }
+    contentEl.innerText = q.content || "";
+    this.renderMath(contentEl);
 
     const optionsContainer = document.getElementById("display-options-list");
-    if (optionsContainer) {
-      const isPgk = q.question_type === 'pgk';
-      const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
-      const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
+    const isPgk = q.question_type === 'pgk';
+    const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
+    const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
 
-      if (opts.length === 0) {
-        optionsContainer.innerHTML = '<div class="alert alert-error">Pilihan jawaban belum tersedia pada butir soal ini. Hubungi pengawas.</div>';
-      } else {
-        let optionsHtml = '';
-        opts.forEach(opt => {
-          const isChecked = currentAns.keys.includes(opt.option_label);
-          const inputType = isPgk ? 'checkbox' : 'radio';
-          const nameAttr = isPgk ? '' : 'name="active_exam_option"';
-          const selectedClass = isChecked ? 'selected' : '';
+    let optionsHtml = '';
+    opts.forEach(opt => {
+      const isChecked = currentAns.keys.includes(opt.option_label);
+      optionsHtml += `
+        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${opt.option_label}">
+          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${opt.option_label}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${opt.option_label}', ${isPgk})">
+          <div style="flex-grow: 1;">
+            <strong>${opt.option_label}.</strong> <span class="math-opt-text">${opt.content}</span>
+          </div>
+        </label>
+      `;
+    });
+    optionsContainer.innerHTML = optionsHtml;
+    this.renderMath(optionsContainer);
 
-          optionsHtml += `
-            <label class="option-item ${selectedClass}" data-key="${opt.option_label}">
-              <input type="${inputType}" ${nameAttr} value="${opt.option_label}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${opt.option_label}', ${isPgk})">
-              <div style="flex-grow: 1;">
-                <strong>${opt.option_label}.</strong> <span class="math-opt-text">${opt.content}</span>
-              </div>
-            </label>
-          `;
-        });
+    document.getElementById("check-doubt").checked = !!currentAns.isDoubt;
+    document.getElementById("btn-prev-question").style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
 
-        optionsContainer.innerHTML = optionsHtml;
-        this.renderMath(optionsContainer);
-      }
-    }
-
-    const currentAnsObj = this.userAnswers[q.id] || { keys: [], isDoubt: false };
-    const checkDoubtEl = document.getElementById("check-doubt");
-    if (checkDoubtEl) checkDoubtEl.checked = !!currentAnsObj.isDoubt;
-
-    const btnPrev = document.getElementById("btn-prev-question");
-    if (btnPrev) btnPrev.style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
-    
     const isLast = this.currentIndex === this.questions.length - 1;
-    const btnNext = document.getElementById("btn-next-question");
-    const btnFinish = document.getElementById("btn-finish-exam");
-
-    if (btnNext && btnFinish) {
-      if (isLast) {
-        btnNext.classList.add("d-none");
-        btnFinish.classList.remove("d-none");
-      } else {
-        btnNext.classList.remove("d-none");
-        btnFinish.classList.add("d-none");
-      }
-    }
+    document.getElementById("btn-next-question")?.classList.toggle("d-none", isLast);
+    document.getElementById("btn-finish-exam")?.classList.toggle("d-none", !isLast);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   },
 
   handleOptionSelect(questionId, optionKey, isPgk) {
-    if (!this.userAnswers[questionId]) {
-      this.userAnswers[questionId] = { keys: [], isDoubt: false };
-    }
+    if (!this.userAnswers[questionId]) this.userAnswers[questionId] = { keys: [], isDoubt: false };
 
     if (!isPgk) {
       this.userAnswers[questionId].keys = [optionKey];
     } else {
       const keys = this.userAnswers[questionId].keys || [];
-      const index = keys.indexOf(optionKey);
-      if (index > -1) {
-        keys.splice(index, 1);
-      } else {
-        keys.push(optionKey);
-      }
+      const idx = keys.indexOf(optionKey);
+      if (idx > -1) keys.splice(idx, 1);
+      else keys.push(optionKey);
       this.userAnswers[questionId].keys = keys.sort();
     }
 
@@ -377,21 +283,15 @@ const ExamRunnerModule = {
     this.questions.forEach((q, idx) => {
       const ans = this.userAnswers[q.id];
       let statusClass = '';
-      if (ans && ans.isDoubt) {
-        statusClass = 'doubt';
-      } else if (ans && ans.keys && ans.keys.length > 0) {
-        statusClass = 'answered';
-      }
-
-      const activeClass = (idx === this.currentIndex) ? 'active' : '';
+      if (ans && ans.isDoubt) statusClass = 'doubt';
+      else if (ans && ans.keys && ans.keys.length > 0) statusClass = 'answered';
 
       gridHtml += `
-        <button type="button" class="btn-num ${statusClass} ${activeClass}" onclick="ExamRunnerModule.jumpToQuestion(${idx})">
+        <button type="button" class="btn-num ${statusClass} ${idx === this.currentIndex ? 'active' : ''}" onclick="ExamRunnerModule.jumpToQuestion(${idx})">
           ${idx + 1}
         </button>
       `;
     });
-
     container.innerHTML = gridHtml;
   },
 
@@ -426,7 +326,6 @@ const ExamRunnerModule = {
     }
 
     const timerEl = document.getElementById("timer-display");
-
     const updateTimer = () => {
       const now = Date.now();
       const diffSec = Math.max(0, Math.floor((endTime - now) / 1000));
@@ -436,20 +335,14 @@ const ExamRunnerModule = {
       const minutes = Math.floor((diffSec % 3600) / 60);
       const seconds = diffSec % 60;
 
-      const hStr = String(hours).padStart(2, '0');
-      const mStr = String(minutes).padStart(2, '0');
-      const sStr = String(seconds).padStart(2, '0');
-
       if (timerEl) {
-        timerEl.innerText = `⏱️ ${hStr}:${mStr}:${sStr}`;
-        if (diffSec <= 300) {
-          timerEl.classList.add("warning");
-        }
+        timerEl.innerText = `⏱️ ${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+        if (diffSec <= 300) timerEl.classList.add("warning");
       }
 
       if (diffSec <= 0) {
         clearInterval(this.timerInterval);
-        alert("Waktu ujian habis! Jawaban Anda akan dikumpulkan secara otomatis.");
+        alert("Waktu ujian habis! Jawaban Anda akan dikumpulkan otomatis.");
         this.finishExam(true, false);
       }
     };
@@ -467,28 +360,21 @@ const ExamRunnerModule = {
     const storageKey = `answers_${this.session.exam.id}_${this.session.student.id}`;
     const raw = sessionStorage.getItem(storageKey);
     if (raw) {
-      try {
-        this.userAnswers = JSON.parse(raw);
-      } catch {
-        this.userAnswers = {};
-      }
+      try { this.userAnswers = JSON.parse(raw); } catch { this.userAnswers = {}; }
     }
   },
 
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
-      let confirmMsg = "Apakah Anda yakin ingin menyelesaikan dan mengumpulkan ujian ini?";
-      if (unansweredCount > 0) {
-        confirmMsg = `Masih ada ${unansweredCount} butir soal yang belum Anda jawab!\n\nTetap kumpulkan ujian sekarang?`;
-      }
-      if (!confirm(confirmMsg)) return;
+      let msg = "Kumpulkan dan selesaikan ujian ini sekarang?";
+      if (unansweredCount > 0) msg = `Masih ada ${unansweredCount} soal yang belum dijawab! Tetap kumpulkan?`;
+      if (!confirm(msg)) return;
     }
 
     this.isCheatGuardActive = false;
     clearInterval(this.timerInterval);
-    const timerStorageKey = `timer_end_${this.session.exam.id}_${this.session.student.id}`;
-    localStorage.removeItem(timerStorageKey);
+    localStorage.removeItem(`timer_end_${this.session.exam.id}_${this.session.student.id}`);
 
     const btnFinish = document.getElementById("btn-finish-exam");
     if (btnFinish) {
@@ -497,15 +383,16 @@ const ExamRunnerModule = {
     }
 
     const finalSubmissionType = isCheatForced ? 'forced_cheat' : 'normal';
-
     const client = getSupabaseClient();
+
     try {
       let totalEarnedScore = 0;
       let maxPossibleScore = 0;
       let correctCount = 0;
       const studentAnswersPayload = [];
+      const itemAnalysisData = [];
 
-      this.questions.forEach(q => {
+      this.questions.forEach((q, idx) => {
         const qPoints = parseFloat(q.points) || 1.0;
         maxPossibleScore += qPoints;
 
@@ -532,14 +419,18 @@ const ExamRunnerModule = {
           is_correct: isCorrect,
           score_earned: scoreEarned
         });
+
+        itemAnalysisData.push({
+          question_number: idx + 1,
+          selected_keys: selectedKeys,
+          is_correct: isCorrect
+        });
       });
 
-      const finalPercentage = maxPossibleScore > 0 
-        ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
-        : 0;
+      const finalPercentage = maxPossibleScore > 0 ? Math.round((totalEarnedScore / maxPossibleScore) * 100) : 0;
 
-      // Simpan ke exam_attempts termasuk submission_type & violation_count
-      const { data: attemptData, error: attemptErr } = await client
+      // 1. Simpan ke Supabase (exam_attempts)
+      const { data: attemptData, error: attErr } = await client
         .from('exam_attempts')
         .insert({
           exam_id: this.session.exam.id,
@@ -555,9 +446,9 @@ const ExamRunnerModule = {
         .select()
         .single();
 
-      if (attemptErr) throw attemptErr;
+      if (attErr) throw attErr;
 
-      // Simpan jawaban siswa
+      // 2. Simpan Detail Jawaban (student_answers)
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -566,11 +457,39 @@ const ExamRunnerModule = {
           is_correct: a.is_correct,
           score_earned: a.score_earned
         }));
-
         await client.from('student_answers').insert(answersData);
       }
 
-      // Simpan ringkasan untuk selesai.html
+      // 3. Kirim Otomatis ke Google Spreadsheet jika URL disetel oleh Guru
+      if (this.session.exam.spreadsheet_url) {
+        try {
+          const payload = {
+            student_name: this.session.student.full_name,
+            student_number: this.session.student.student_number,
+            class_name: this.session.student.class_name,
+            exam_title: this.session.exam.title,
+            subject: this.session.exam.subject,
+            submitted_at: new Date().toLocaleString("id-ID"),
+            total_questions: this.questions.length,
+            correct_count: correctCount,
+            final_score: finalPercentage,
+            submission_type: finalSubmissionType,
+            violation_count: this.violationCount,
+            item_analysis: itemAnalysisData
+          };
+
+          fetch(this.session.exam.spreadsheet_url, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).catch(err => console.warn("Spreadsheet Notice:", err));
+        } catch (e) {
+          console.warn("Gagal sinkron spreadsheet:", e);
+        }
+      }
+
+      // 4. Buka halaman selesai.html
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
@@ -585,14 +504,10 @@ const ExamRunnerModule = {
       };
 
       sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
-
-      const answersStorageKey = `answers_${this.session.exam.id}_${this.session.student.id}`;
-      sessionStorage.removeItem(answersStorageKey);
-
+      sessionStorage.removeItem(`answers_${this.session.exam.id}_${this.session.student.id}`);
       window.location.href = "selesai.html";
     } catch (err) {
-      console.error("Gagal menyimpan hasil ujian:", err);
-      alert(`Terjadi kendala saat mengirim jawaban: ${err.message}`);
+      alert(`Kendala pengiriman jawaban: ${err.message}`);
       if (btnFinish) {
         btnFinish.disabled = false;
         btnFinish.innerText = "Coba Kumpulkan Lagi";
