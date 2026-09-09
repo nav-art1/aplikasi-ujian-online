@@ -1,6 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: PENGACAKAN PER TIPE SOAL (PG DENGAN PG, PGK DENGAN PGK)
-// DAN SINKRONISASI SPREADSHEET URUT ASLI NO. 1 S.D. SELESAI
+// MODUL PENGERJAAN UJIAN: PENGACAKAN PER TIPE SOAL & PENGIRIMAN NOMOR ABSEN
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -48,7 +47,7 @@ const ExamRunnerModule = {
     const titleEl = document.getElementById("header-exam-title");
     const studentInfoEl = document.getElementById("header-student-info");
     if (titleEl) titleEl.innerText = `${this.session.exam.title} (${this.session.exam.subject || '-'})`;
-    if (studentInfoEl) studentInfoEl.innerText = `${this.session.student.full_name} (${this.session.student.class_name})`;
+    if (studentInfoEl) studentInfoEl.innerText = `[Absen ${this.session.student.attendance_number || '-'}] ${this.session.student.full_name} (${this.session.student.class_name})`;
 
     this.setupEvents();
     this.restoreLocalAnswers();
@@ -159,14 +158,14 @@ const ExamRunnerModule = {
 
       qData.forEach(q => q.options = optionsMap[q.id] || []);
 
-      // PENGACAKAN SOAL PER TIPE SOAL (PG DENGAN PG, PGK DENGAN PGK)
+      // Pengacakan Soal per Tipe Soal (PG acak PG, PGK acak PGK)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsByType(qData);
       } else {
         this.questions = qData;
       }
 
-      // Pengacakan Opsi Jawaban (A s.d. F)
+      // Pengacakan Opsi
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
@@ -180,11 +179,7 @@ const ExamRunnerModule = {
     }
   },
 
-  // =========================================================================
-  // FUNGSI PENGACAKAN BERDASARKAN TIPE SOAL DENGAN MENGUNCI KELOMPOK STIMULUS
-  // =========================================================================
   shuffleQuestionsByType(questionsList) {
-    // 1. Pisahkan soal berdasarkan question_type
     const pgQuestions = questionsList.filter(q => (q.question_type || 'pg').toLowerCase() === 'pg');
     const pgkQuestions = questionsList.filter(q => (q.question_type || '').toLowerCase() === 'pgk');
     const otherQuestions = questionsList.filter(q => {
@@ -192,18 +187,15 @@ const ExamRunnerModule = {
       return t !== 'pg' && t !== 'pgk';
     });
 
-    // 2. Acak masing-masing grup secara terisolasi dengan menjaga keutuhan stimulus
     const shuffledPg = this.shuffleQuestionsPreservingStimulus(pgQuestions);
     const shuffledPgk = this.shuffleQuestionsPreservingStimulus(pgkQuestions);
     const shuffledOther = this.shuffleQuestionsPreservingStimulus(otherQuestions);
 
-    // 3. Gabungkan kembali urutannya: Blok PG di awal, dilanjutkan Blok PGK
     return [...shuffledPg, ...shuffledPgk, ...shuffledOther];
   },
 
   shuffleQuestionsPreservingStimulus(subList) {
     if (!subList || subList.length === 0) return [];
-    
     const units = [];
     const visitedStim = new Set();
 
@@ -217,8 +209,7 @@ const ExamRunnerModule = {
       }
     });
 
-    const shuffledUnits = this.shuffleArray(units);
-    return shuffledUnits.flat();
+    return this.shuffleArray(units).flat();
   },
 
   shuffleArray(array) {
@@ -502,7 +493,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. SUSUN DATA SPREADSHEET SESUAI URUTAN ASLI BANK SOAL (ORIGINAL_NUMBER)
+      // 3. SUSUN DATA SPREADSHEET URUT NO. 1 S.D. N ASLI DARI BANK SOAL
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -527,6 +518,7 @@ const ExamRunnerModule = {
           const payload = {
             student_name: this.session.student.full_name,
             student_number: this.session.student.student_number,
+            attendance_number: this.session.student.attendance_number || "-",
             class_name: this.session.student.class_name,
             exam_title: this.session.exam.title,
             subject: this.session.exam.subject,
@@ -554,6 +546,7 @@ const ExamRunnerModule = {
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
+        attendance_number: this.session.student.attendance_number,
         exam_title: this.session.exam.title,
         subject: this.session.exam.subject,
         total_questions: this.questions.length,
