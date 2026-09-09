@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL OTENTIKASI SISWA & PARAMETER UJIAN
+// MODUL OTENTIKASI SISWA & PARAMETER UJIAN LENGKAP
 // ==========================================================================
 
 const StudentAuthModule = {
