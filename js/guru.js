@@ -441,6 +441,7 @@ const GuruModule = {
     return token;
   },
 
+  // MEMUAT TABEL UJIAN BESERTA TOMBOL "⚙️ ATUR"
   async loadExamsTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("exams-table-body");
@@ -464,6 +465,7 @@ const GuruModule = {
           <td>${antiCheatBadge}</td>
           <td><span class="badge ${ex.is_active ? 'badge-success' : 'badge-danger'}">${ex.is_active ? 'Aktif' : 'Tutup'}</span></td>
           <td>
+            <button class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak & Anti-Curang" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
             <button class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
             <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
           </td>
@@ -471,6 +473,22 @@ const GuruModule = {
       `;
     });
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
+  },
+
+  // MODAL EDIT PENGATURAN UJIAN (ACAK & ANTI-CURANG)
+  openEditExamSettingsModal(examId) {
+    const exam = this.examsList.find(e => e.id === examId);
+    if (!exam) return;
+
+    document.getElementById("edit-exam-id").value = exam.id;
+    document.getElementById("edit-exam-title-display").innerText = `${exam.title} (${exam.subject || '-'})`;
+    document.getElementById("edit-exam-randomize-questions").checked = !!exam.randomize_questions;
+    document.getElementById("edit-exam-randomize-options").checked = !!exam.randomize_options;
+    document.getElementById("edit-exam-anti-cheat").checked = (exam.anti_cheat !== false);
+    document.getElementById("edit-exam-max-violations").value = exam.max_violations || 3;
+    document.getElementById("edit-exam-settings-alert").classList.add("d-none");
+
+    document.getElementById("modal-edit-exam-settings").classList.remove("d-none");
   },
 
   setupExamEventListeners() {
@@ -488,6 +506,7 @@ const GuruModule = {
       document.getElementById("exam-token").value = this.generateExamToken();
     });
 
+    // Form Buat Ujian
     document.getElementById("form-create-exam")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = document.getElementById("exam-title").value.trim();
@@ -521,6 +540,46 @@ const GuruModule = {
       await this.loadExamsTable();
       await this.loadBankSoalExamFilter();
       await this.loadQuickStats();
+    });
+
+    // Modal Edit Pengaturan Ujian
+    const modalEditSettings = document.getElementById("modal-edit-exam-settings");
+    const closeEditSettings = () => modalEditSettings.classList.add("d-none");
+    document.getElementById("btn-close-modal-edit-exam-settings")?.addEventListener("click", closeEditSettings);
+    document.getElementById("btn-cancel-edit-exam-settings")?.addEventListener("click", closeEditSettings);
+
+    document.getElementById("form-edit-exam-settings")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const examId = document.getElementById("edit-exam-id").value;
+      const randomizeQ = document.getElementById("edit-exam-randomize-questions").checked;
+      const randomizeOpt = document.getElementById("edit-exam-randomize-options").checked;
+      const antiCheat = document.getElementById("edit-exam-anti-cheat").checked;
+      const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
+      const btnSave = document.getElementById("btn-save-edit-exam-settings");
+
+      btnSave.disabled = true;
+      btnSave.innerText = "Menyimpan...";
+
+      const client = getSupabaseClient();
+      try {
+        const { error } = await client.from('exams').update({
+          randomize_questions: randomizeQ,
+          randomize_options: randomizeOpt,
+          anti_cheat: antiCheat,
+          max_violations: maxViolations
+        }).eq('id', examId);
+
+        if (error) throw error;
+
+        closeEditSettings();
+        await this.loadExamsTable();
+        alert("Pengaturan keamanan & pengacakan berhasil diperbarui!");
+      } catch (err) {
+        alert(`Gagal: ${err.message}`);
+      } finally {
+        btnSave.disabled = false;
+        btnSave.innerText = "Simpan Pengaturan";
+      }
     });
   },
 
@@ -583,6 +642,7 @@ const GuruModule = {
     });
   },
 
+  // MEMUAT BANK SOAL & MENGHITUNG STATISTIK SOAL SECARA REAL-TIME
   async loadBankSoalContent(examId) {
     const container = document.getElementById("bank-soal-list-container");
     const statsContainer = document.getElementById("bank-stats-container");
@@ -1121,7 +1181,6 @@ const GuruModule = {
           for (const att of attempts) {
             const st = att.students || {};
             const itemAnalysis = [];
-            // Pastikan data yang dikirim ke spreadsheet urut no. 1 s.d. N asli
             questions.forEach((q) => {
               const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
               itemAnalysis.push({
