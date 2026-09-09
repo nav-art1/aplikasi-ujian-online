@@ -82,9 +82,9 @@
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
               <li>Buat rombel di menu <strong>Kelas</strong> dan tambahkan daftar siswa di <strong>Siswa</strong>.</li>
-              <li>Atur jadwal, token, opsi acak, proteksi anti-curang, dan tautan Spreadsheet di menu <strong>Ujian</strong>.</li>
+              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>.</li>
               <li>Input butir soal di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Excel</strong>.</li>
-              <li>Pantau nilai dan analisis butir soal di menu <strong>Hasil & Analisis Soal</strong>.</li>
+              <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memantau nilai, mengunduh script integrasi Google Spreadsheet, serta menganalisis jawaban per butir soal.</li>
             </ol>
           </div>
         </section>
@@ -119,7 +119,7 @@
           </div>
         </section>
 
-        <!-- MODAL BUAT UJIAN (LENGKAP: ANTI-CURANG & SPREADSHEET URL) -->
+        <!-- MODAL BUAT UJIAN BARU -->
         <div id="modal-create-exam" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -162,12 +162,6 @@
                   <input type="text" id="exam-token" required maxlength="10" placeholder="Contoh: IPA7A" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px;">
                   <button type="button" class="btn btn-secondary" id="btn-generate-token">Acak</button>
                 </div>
-              </div>
-
-              <div class="form-group">
-                <label for="exam-spreadsheet-url">URL Web App Google Spreadsheet (Opsional)</label>
-                <input type="url" id="exam-spreadsheet-url" placeholder="https://script.google.com/macros/s/.../exec">
-                <small class="text-muted">Hasil nilai dan analisis butir soal siswa akan otomatis terkirim ke spreadsheet ini.</small>
               </div>
 
               <!-- PENGATURAN KEAMANAN & SAKELAR ANTI-CURANG -->
@@ -574,19 +568,57 @@
           </div>
         </div>
 
-        <!-- SEKSI 8: REKAPITULASI NILAI & ANALISIS BUTIR SOAL -->
+        <!-- SEKSI 8: REKAPITULASI NILAI, ANALISIS BUTIR SOAL & INTEGRASI SPREADSHEET -->
         <section id="panel-hasil" class="menu-panel d-none">
           <div class="card">
             <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
               <span class="card-title">Rekapitulasi Nilai & Analisis Butir Soal</span>
-              <button class="btn btn-secondary btn-sm" id="btn-refresh-hasil">Segarkan Data</button>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-hasil">🔄 Segarkan Data</button>
             </div>
 
-            <div style="display: flex; gap: 15px; align-items: center; max-width: 500px; margin-bottom: 15px;">
-              <label for="hasil-exam-filter" style="font-weight: 600; white-space: nowrap;">Pilih Ujian:</label>
+            <!-- FILTER PILIH UJIAN -->
+            <div style="display: flex; gap: 15px; align-items: center; max-width: 550px; margin-bottom: 20px;">
+              <label for="hasil-exam-filter" style="font-weight: 700; white-space: nowrap;">Pilih Sesi Ujian:</label>
               <select id="hasil-exam-filter" style="flex-grow: 1;">
                 <option value="">-- Pilih Sesi Ujian --</option>
               </select>
+            </div>
+
+            <!-- KARTU INTEGRASI & DOWNLOAD KODE APPS SCRIPT SPREADSHEET -->
+            <div id="spreadsheet-integration-card" class="d-none" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                <div>
+                  <h4 style="margin: 0; color: #166534; font-size: 1.05rem;">📊 Integrasi Google Spreadsheet Otomatis</h4>
+                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Tautkan Web App Google Apps Script agar rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda.</p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-download-apps-script">📥 Unduh Script (.js)</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-apps-script">📋 Salin Kode Script</button>
+                </div>
+              </div>
+
+              <!-- PANDUAN RINGKAS 5 LANGKAH -->
+              <details style="background: #ffffff; border: 1px solid #dcfce7; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem; color: var(--text-main);">
+                <summary style="font-weight: 700; cursor: pointer; color: #166534;">📖 Petunjuk Pasang di Google Spreadsheet (Klik untuk membuka)</summary>
+                <ol style="margin: 8px 0 0 18px; line-height: 1.6;">
+                  <li>Buat Google Spreadsheet baru di Google Drive Anda.</li>
+                  <li>Klik menu <strong>Ekstensi</strong> &rarr; <strong>Apps Script</strong>, lalu tempelkan kode yang disalin/diunduh.</li>
+                  <li>Klik tombol biru <strong>Deploy (Terapkan)</strong> &rarr; <strong>New deployment (Penerapan baru)</strong> &rarr; pilih roda gigi <strong>Web app</strong>.</li>
+                  <li>Atur <em>Execute as</em>: <strong>Me</strong>, dan <em>Who has access</em>: <strong>Anyone (Siapa saja)</strong> &rarr; klik <strong>Deploy</strong>.</li>
+                  <li>Salin <strong>Web App URL</strong> yang dihasilkan (awalan: <code>https://script.google.com/macros/s/.../exec</code>) lalu tempelkan pada kolom di bawah ini.</li>
+                </ol>
+              </details>
+
+              <!-- FORM INPUT LINK SPREADSHEET WEB APP -->
+              <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex-grow: 1; min-width: 280px;">
+                  <label for="input-spreadsheet-url" style="font-size: 0.85rem; font-weight: 700; color: #166534; display: block; margin-bottom: 4px;">Tempel URL Web App Google Spreadsheet di Sini:</label>
+                  <input type="url" id="input-spreadsheet-url" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; font-size: 0.9rem;">
+                </div>
+                <button type="button" class="btn btn-primary" id="btn-save-spreadsheet-url">💾 Simpan Tautan</button>
+                <button type="button" class="btn btn-success" id="btn-sync-all-spreadsheet" style="background-color: #15803d;">🚀 Kirim Ulang Semua Nilai ke Spreadsheet</button>
+              </div>
+              <div id="spreadsheet-alert" class="alert d-none" style="margin-top: 10px; margin-bottom: 0;"></div>
             </div>
 
             <h4 style="margin: 20px 0 10px 0;">1. Rekapitulasi Nilai Siswa</h4>
@@ -614,10 +646,10 @@
             <div class="table-responsive" style="overflow-x: auto;">
               <table class="data-table" id="analisis-soal-table">
                 <thead id="analisis-table-header">
-                  <tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th></tr>
+                  <tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th></tr>
                 </thead>
                 <tbody id="analisis-table-body">
-                  <tr><td colspan="3" class="text-center text-muted">Pilih ujian untuk memuat analisis butir soal.</td></tr>
+                  <tr><td colspan="4" class="text-center text-muted">Pilih ujian untuk memuat analisis butir soal.</td></tr>
                 </tbody>
               </table>
             </div>
