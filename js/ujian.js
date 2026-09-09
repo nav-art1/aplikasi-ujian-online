@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA & DETEKSI ANTI-CURANG AKTIF
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA DENGAN STATUS PENYERAHAN ANTI-CURANG
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -12,11 +12,11 @@ const ExamRunnerModule = {
   remainingSeconds: 0,
   startTimeIso: null,
 
-  // Variabel State Anti-Curang
   violationCount: 0,
   maxViolations: 3,
   isCheatGuardActive: false,
   initialWindowHeight: window.innerHeight,
+  isForcedSubmission: false, // Menandai jika siswa dipaksa submit karena curang
 
   renderMath(element) {
     if (typeof renderMathInElement === 'function' && element) {
@@ -53,12 +53,9 @@ const ExamRunnerModule = {
     this.restoreLocalAnswers();
     await this.loadExamContent();
     this.initTimer();
-    this.initAntiCheat(); // Mengaktifkan proteksi anti-curang
+    this.initAntiCheat();
   },
 
-  // ---------------------------------------------------------
-  // MODUL DETEKSI ANTI-KECURANGAN
-  // ---------------------------------------------------------
   initAntiCheat() {
     if (!this.session.exam.anti_cheat) return;
 
@@ -66,14 +63,12 @@ const ExamRunnerModule = {
     this.maxViolations = this.session.exam.max_violations || 3;
     this.violationCount = 0;
 
-    // 1. Deteksi Pindah Tab / Buka Aplikasi Lain
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && this.isCheatGuardActive) {
-        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (membuka tab lain atau aplikasi lain)!");
+        this.handleViolation("Anda terdeteksi meninggalkan halaman ujian (membuka tab atau aplikasi lain)!");
       }
     });
 
-    // 2. Deteksi Kehilangan Fokus Jendela Browser
     window.addEventListener("blur", () => {
       setTimeout(() => {
         if (!document.hasFocus() && this.isCheatGuardActive) {
@@ -82,14 +77,12 @@ const ExamRunnerModule = {
       }, 500);
     });
 
-    // 3. Deteksi Layar Belah (Split Screen) & Jendela Mengambang (Floating Window)
     window.addEventListener("resize", () => {
       if (!this.isCheatGuardActive) return;
 
       const currentHeight = window.innerHeight;
       const heightDrop = (this.initialWindowHeight - currentHeight) / this.initialWindowHeight;
 
-      // Cek apakah resize terjadi karena keyboard virtual HP terbuka
       const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
       const isTyping = (activeTag === 'input' || activeTag === 'textarea');
 
@@ -106,11 +99,12 @@ const ExamRunnerModule = {
     const sisa = this.maxViolations - this.violationCount;
 
     if (sisa > 0) {
-      alert(`⚠️ PERINGATAN KECURANGAN (${this.violationCount}/${this.maxViolations})\n\n${reason}\n\nSisa toleransi pelanggaran: ${sisa} kali lagi. Jika batas terlampaui, ujian Anda akan otomatis dikunci dan dikumpulkan ke server!`);
+      alert(`⚠️ PERINGATAN KECURANGAN (${this.violationCount}/${this.maxViolations})\n\n${reason}\n\nSisa toleransi: ${sisa} kali lagi. Jika batas habis, ujian Anda otomatis dikunci dan dicatat curang!`);
     } else {
       this.isCheatGuardActive = false;
-      alert(`🚨 BATAS PELANGGARAN TERLAMPAUI!\n\nAnda telah melanggar aturan ujian sebanyak ${this.maxViolations} kali. Sistem mengunci dan mengumpulkan ujian Anda secara otomatis.`);
-      this.finishExam(true); // Kumpulkan paksa
+      this.isForcedSubmission = true;
+      alert(`🚨 BATAS PELANGGARAN TERLAMPAUI!\n\nAnda telah melanggar aturan ujian sebanyak ${this.maxViolations} kali. Sistem mengunci lembar ujian dan mencatat penyerahan ini sebagai pelanggaran.`);
+      this.finishExam(true, true);
     }
   },
 
@@ -137,7 +131,7 @@ const ExamRunnerModule = {
       if (e.target === drawer) drawer.classList.add("d-none");
     });
 
-    document.getElementById("btn-finish-exam")?.addEventListener("click", () => this.finishExam(false));
+    document.getElementById("btn-finish-exam")?.addEventListener("click", () => this.finishExam(false, false));
   },
 
   async loadExamContent() {
@@ -456,7 +450,7 @@ const ExamRunnerModule = {
       if (diffSec <= 0) {
         clearInterval(this.timerInterval);
         alert("Waktu ujian habis! Jawaban Anda akan dikumpulkan secara otomatis.");
-        this.finishExam(true);
+        this.finishExam(true, false);
       }
     };
 
@@ -481,7 +475,7 @@ const ExamRunnerModule = {
     }
   },
 
-  async finishExam(isAuto = false) {
+  async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
       let confirmMsg = "Apakah Anda yakin ingin menyelesaikan dan mengumpulkan ujian ini?";
@@ -491,7 +485,6 @@ const ExamRunnerModule = {
       if (!confirm(confirmMsg)) return;
     }
 
-    // Matikan pengawas anti-curang dan timer
     this.isCheatGuardActive = false;
     clearInterval(this.timerInterval);
     const timerStorageKey = `timer_end_${this.session.exam.id}_${this.session.student.id}`;
@@ -502,6 +495,8 @@ const ExamRunnerModule = {
       btnFinish.disabled = true;
       btnFinish.innerText = "Mengirim Jawaban...";
     }
+
+    const finalSubmissionType = isCheatForced ? 'forced_cheat' : 'normal';
 
     const client = getSupabaseClient();
     try {
@@ -543,7 +538,7 @@ const ExamRunnerModule = {
         ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
         : 0;
 
-      // Simpan attempt ke Supabase beserta jumlah pelanggaran (violation_count)
+      // Simpan ke exam_attempts termasuk submission_type & violation_count
       const { data: attemptData, error: attemptErr } = await client
         .from('exam_attempts')
         .insert({
@@ -552,6 +547,7 @@ const ExamRunnerModule = {
           score: finalPercentage,
           total_points: totalEarnedScore,
           violation_count: this.violationCount,
+          submission_type: finalSubmissionType,
           started_at: this.startTimeIso,
           submitted_at: new Date().toISOString(),
           status: 'completed'
@@ -574,7 +570,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // Simpan data ringkasan untuk halaman selesai.html
+      // Simpan ringkasan untuk selesai.html
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
@@ -584,6 +580,7 @@ const ExamRunnerModule = {
         correct_count: correctCount,
         final_score: finalPercentage,
         violation_count: this.violationCount,
+        submission_type: finalSubmissionType,
         submitted_at: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
 
