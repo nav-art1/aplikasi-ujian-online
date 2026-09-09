@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL LOGIKA PENGERJAAN UJIAN SISWA & SINKRONISASI DATABASE (CHECKPOINT 29)
+// MODUL LOGIKA PENGERJAAN UJIAN SISWA (FIX PILIHAN GANDA & FALLBACK OPTIONS)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -38,8 +38,10 @@ const ExamRunnerModule = {
 
     this.startTimeIso = new Date().toISOString();
 
-    document.getElementById("header-exam-title").innerText = `${this.session.exam.title} (${this.session.exam.subject || '-'})`;
-    document.getElementById("header-student-info").innerText = `${this.session.student.full_name} (${this.session.student.class_name})`;
+    const titleEl = document.getElementById("header-exam-title");
+    const studentInfoEl = document.getElementById("header-student-info");
+    if (titleEl) titleEl.innerText = `${this.session.exam.title} (${this.session.exam.subject || '-'})`;
+    if (studentInfoEl) studentInfoEl.innerText = `${this.session.student.full_name} (${this.session.student.class_name})`;
 
     this.setupEvents();
     this.restoreLocalAnswers();
@@ -48,29 +50,40 @@ const ExamRunnerModule = {
   },
 
   setupEvents() {
-    document.getElementById("btn-prev-question").addEventListener("click", () => this.navigate(-1));
-    document.getElementById("btn-next-question").addEventListener("click", () => this.navigate(1));
-    
-    document.getElementById("check-doubt").addEventListener("change", (e) => {
-      const q = this.questions[this.currentIndex];
-      if (!q) return;
-
-      if (!this.userAnswers[q.id]) {
-        this.userAnswers[q.id] = { keys: [], isDoubt: false };
-      }
-      this.userAnswers[q.id].isDoubt = e.target.checked;
-      this.saveLocalAnswers();
-      this.renderGridNumbers();
-    });
-
+    const btnPrev = document.getElementById("btn-prev-question");
+    const btnNext = document.getElementById("btn-next-question");
+    const checkDoubt = document.getElementById("check-doubt");
     const drawer = document.getElementById("drawer-grid");
-    document.getElementById("btn-toggle-grid").addEventListener("click", () => drawer.classList.remove("d-none"));
-    document.getElementById("btn-close-grid").addEventListener("click", () => drawer.classList.add("d-none"));
-    drawer.addEventListener("click", (e) => {
-      if (e.target === drawer) drawer.classList.add("d-none");
-    });
+    const btnToggleGrid = document.getElementById("btn-toggle-grid");
+    const btnCloseGrid = document.getElementById("btn-close-grid");
+    const btnFinish = document.getElementById("btn-finish-exam");
 
-    document.getElementById("btn-finish-exam").addEventListener("click", () => this.finishExam(false));
+    if (btnPrev) btnPrev.addEventListener("click", () => this.navigate(-1));
+    if (btnNext) btnNext.addEventListener("click", () => this.navigate(1));
+    
+    if (checkDoubt) {
+      checkDoubt.addEventListener("change", (e) => {
+        const q = this.questions[this.currentIndex];
+        if (!q) return;
+
+        if (!this.userAnswers[q.id]) {
+          this.userAnswers[q.id] = { keys: [], isDoubt: false };
+        }
+        this.userAnswers[q.id].isDoubt = e.target.checked;
+        this.saveLocalAnswers();
+        this.renderGridNumbers();
+      });
+    }
+
+    if (btnToggleGrid && drawer) btnToggleGrid.addEventListener("click", () => drawer.classList.remove("d-none"));
+    if (btnCloseGrid && drawer) btnCloseGrid.addEventListener("click", () => drawer.classList.add("d-none"));
+    if (drawer) {
+      drawer.addEventListener("click", (e) => {
+        if (e.target === drawer) drawer.classList.add("d-none");
+      });
+    }
+
+    if (btnFinish) btnFinish.addEventListener("click", () => this.finishExam(false));
   },
 
   async loadExamContent() {
@@ -78,6 +91,7 @@ const ExamRunnerModule = {
     const examId = this.session.exam.id;
 
     try {
+      // 1. Ambil data stimulus
       const { data: stimuli } = await client
         .from('stimulus_groups')
         .select('*')
@@ -87,6 +101,7 @@ const ExamRunnerModule = {
         this.stimuliMap[s.id] = s;
       });
 
+      // 2. Ambil butir soal
       const { data: qData, error: qErr } = await client
         .from('questions')
         .select(`
@@ -100,6 +115,7 @@ const ExamRunnerModule = {
           correct_keys,
           options (
             id,
+            question_id,
             option_label,
             content
           )
@@ -115,15 +131,41 @@ const ExamRunnerModule = {
         return;
       }
 
+      // 3. Cadangan (Fallback): jika relasi options di atas menghasilkan array kosong, ambil langsung dari tabel options
+      let allNeedFallback = qData.some(q => !q.options || q.options.length === 0);
+      if (allNeedFallback) {
+        const questionIds = qData.map(q => q.id);
+        const { data: directOptions, error: optErr } = await client
+          .from('options')
+          .select('id, question_id, option_label, content')
+          .in('question_id', questionIds);
+
+        if (!optErr && directOptions && directOptions.length > 0) {
+          const optMap = {};
+          directOptions.forEach(opt => {
+            if (!optMap[opt.question_id]) optMap[opt.question_id] = [];
+            optMap[opt.question_id].push(opt);
+          });
+
+          qData.forEach(q => {
+            if (!q.options || q.options.length === 0) {
+              q.options = optMap[q.id] || [];
+            }
+          });
+        }
+      }
+
+      // 4. Pengacakan soal jika diaktifkan (tetap menjaga kelompok stimulus)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsPreservingStimulus(qData);
       } else {
         this.questions = qData;
       }
 
+      // 5. Pengacakan opsi jika diaktifkan
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
-          if (q.options) {
+          if (q.options && q.options.length > 0) {
             q.options = this.shuffleArray([...q.options]);
           }
         });
@@ -164,85 +206,116 @@ const ExamRunnerModule = {
   },
 
   renderCurrentQuestion() {
-    if (this.questions.length === 0) return;
+    if (!this.questions || this.questions.length === 0) return;
     const q = this.questions[this.currentIndex];
+    if (!q) return;
 
+    // 1. Render Blok Stimulus
     const stimContainer = document.getElementById("stimulus-block-container");
-    if (q.stimulus_group_id && this.stimuliMap[q.stimulus_group_id]) {
-      const stim = this.stimuliMap[q.stimulus_group_id];
-      document.getElementById("stimulus-title").innerText = stim.title || "Wacana Stimulus";
-      document.getElementById("stimulus-content").innerText = stim.content || "";
-      
-      const stimImgWrap = document.getElementById("stimulus-image-wrap");
-      const stimImg = document.getElementById("stimulus-image");
-      if (stim.image_url) {
-        stimImg.src = stim.image_url;
-        stimImgWrap.style.display = "block";
-      } else {
-        stimImgWrap.style.display = "none";
-      }
+    if (stimContainer) {
+      if (q.stimulus_group_id && this.stimuliMap[q.stimulus_group_id]) {
+        const stim = this.stimuliMap[q.stimulus_group_id];
+        document.getElementById("stimulus-title").innerText = stim.title || "Wacana Stimulus";
+        document.getElementById("stimulus-content").innerText = stim.content || "";
+        
+        const stimImgWrap = document.getElementById("stimulus-image-wrap");
+        const stimImg = document.getElementById("stimulus-image");
+        if (stim.image_url) {
+          stimImg.src = stim.image_url;
+          stimImgWrap.style.display = "block";
+        } else {
+          stimImgWrap.style.display = "none";
+        }
 
-      stimContainer.classList.remove("d-none");
-      this.renderMath(stimContainer);
-    } else {
-      stimContainer.classList.add("d-none");
+        stimContainer.classList.remove("d-none");
+        this.renderMath(stimContainer);
+      } else {
+        stimContainer.classList.add("d-none");
+      }
     }
 
-    document.getElementById("display-q-number").innerText = `Soal No. ${this.currentIndex + 1}`;
-    const typeLabel = q.question_type === 'pg' ? 'Pilihan Ganda' : 'PG Kompleks';
-    document.getElementById("display-q-type").innerText = typeLabel;
-    document.getElementById("display-q-points").innerText = `(${q.points || 1} Poin)`;
-
+    // 2. Render Teks Pertanyaan & Poin
+    const numEl = document.getElementById("display-q-number");
+    const typeEl = document.getElementById("display-q-type");
+    const pointsEl = document.getElementById("display-q-points");
     const contentEl = document.getElementById("display-q-content");
-    contentEl.innerText = q.content || "";
-    this.renderMath(contentEl);
+
+    if (numEl) numEl.innerText = `Soal No. ${this.currentIndex + 1}`;
+    const typeLabel = q.question_type === 'pgk' ? 'PG Kompleks' : 'Pilihan Ganda';
+    if (typeEl) typeEl.innerText = typeLabel;
+    if (pointsEl) pointsEl.innerText = `(${q.points || 1} Poin)`;
+
+    if (contentEl) {
+      contentEl.innerText = q.content || "";
+      this.renderMath(contentEl);
+    }
 
     const imgWrap = document.getElementById("display-q-image-wrap");
     const imgEl = document.getElementById("display-q-image");
-    if (q.image_url) {
-      imgEl.src = q.image_url;
-      imgWrap.style.display = "block";
-    } else {
-      imgWrap.style.display = "none";
+    if (imgWrap && imgEl) {
+      if (q.image_url) {
+        imgEl.src = q.image_url;
+        imgWrap.style.display = "block";
+      } else {
+        imgWrap.style.display = "none";
+      }
     }
 
+    // 3. Render Pilihan Ganda (Opsi A s.d. F)
     const optionsContainer = document.getElementById("display-options-list");
-    const isPgk = q.question_type === 'pgk';
-    const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
+    if (optionsContainer) {
+      const isPgk = q.question_type === 'pgk';
+      const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
+      
+      // Ambil opsi yang tersedia dan urutkan
+      const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
 
-    let optionsHtml = '';
-    (q.options || []).forEach(opt => {
-      const isChecked = currentAns.keys.includes(opt.option_label);
-      const inputType = isPgk ? 'checkbox' : 'radio';
-      const nameAttr = isPgk ? '' : 'name="active_exam_option"';
-      const selectedClass = isChecked ? 'selected' : '';
+      if (opts.length === 0) {
+        optionsContainer.innerHTML = '<div class="alert alert-error">Pilihan jawaban belum tersedia pada butir soal ini. Hubungi pengawas.</div>';
+      } else {
+        let optionsHtml = '';
+        opts.forEach(opt => {
+          const isChecked = currentAns.keys.includes(opt.option_label);
+          const inputType = isPgk ? 'checkbox' : 'radio';
+          const nameAttr = isPgk ? '' : 'name="active_exam_option"';
+          const selectedClass = isChecked ? 'selected' : '';
 
-      optionsHtml += `
-        <label class="option-item ${selectedClass}" data-key="${opt.option_label}">
-          <input type="${inputType}" ${nameAttr} value="${opt.option_label}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${opt.option_label}', ${isPgk})">
-          <div style="flex-grow: 1;">
-            <strong>${opt.option_label}.</strong> <span class="math-opt-text">${opt.content}</span>
-          </div>
-        </label>
-      `;
-    });
+          optionsHtml += `
+            <label class="option-item ${selectedClass}" data-key="${opt.option_label}">
+              <input type="${inputType}" ${nameAttr} value="${opt.option_label}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${opt.option_label}', ${isPgk})">
+              <div style="flex-grow: 1;">
+                <strong>${opt.option_label}.</strong> <span class="math-opt-text">${opt.content}</span>
+              </div>
+            </label>
+          `;
+        });
 
-    optionsContainer.innerHTML = optionsHtml;
-    this.renderMath(optionsContainer);
+        optionsContainer.innerHTML = optionsHtml;
+        this.renderMath(optionsContainer);
+      }
+    }
 
-    document.getElementById("check-doubt").checked = currentAns.isDoubt;
-    document.getElementById("btn-prev-question").style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
+    // 4. Status Ragu-Ragu
+    const currentAnsObj = this.userAnswers[q.id] || { keys: [], isDoubt: false };
+    const checkDoubtEl = document.getElementById("check-doubt");
+    if (checkDoubtEl) checkDoubtEl.checked = !!currentAnsObj.isDoubt;
+
+    // 5. Visibilitas Tombol Navigasi
+    const btnPrev = document.getElementById("btn-prev-question");
+    if (btnPrev) btnPrev.style.visibility = (this.currentIndex === 0) ? 'hidden' : 'visible';
     
     const isLast = this.currentIndex === this.questions.length - 1;
     const btnNext = document.getElementById("btn-next-question");
     const btnFinish = document.getElementById("btn-finish-exam");
 
-    if (isLast) {
-      btnNext.classList.add("d-none");
-      btnFinish.classList.remove("d-none");
-    } else {
-      btnNext.classList.remove("d-none");
-      btnFinish.classList.add("d-none");
+    if (btnNext && btnFinish) {
+      if (isLast) {
+        btnNext.classList.add("d-none");
+        btnFinish.classList.remove("d-none");
+      } else {
+        btnNext.classList.remove("d-none");
+        btnFinish.classList.add("d-none");
+      }
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -254,9 +327,11 @@ const ExamRunnerModule = {
     }
 
     if (!isPgk) {
+      // Pilihan ganda biasa (1 pilihan)
       this.userAnswers[questionId].keys = [optionKey];
     } else {
-      const keys = this.userAnswers[questionId].keys;
+      // PG Kompleks (multi pilihan)
+      const keys = this.userAnswers[questionId].keys || [];
       const index = keys.indexOf(optionKey);
       if (index > -1) {
         keys.splice(index, 1);
@@ -311,7 +386,8 @@ const ExamRunnerModule = {
       this.currentIndex = index;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
-      document.getElementById("drawer-grid").classList.add("d-none");
+      const drawer = document.getElementById("drawer-grid");
+      if (drawer) drawer.classList.add("d-none");
     }
   },
 
@@ -342,10 +418,11 @@ const ExamRunnerModule = {
       const mStr = String(minutes).padStart(2, '0');
       const sStr = String(seconds).padStart(2, '0');
 
-      timerEl.innerText = `⏱️ ${hStr}:${mStr}:${sStr}`;
-
-      if (diffSec <= 300) {
-        timerEl.classList.add("warning");
+      if (timerEl) {
+        timerEl.innerText = `⏱️ ${hStr}:${mStr}:${sStr}`;
+        if (diffSec <= 300) {
+          timerEl.classList.add("warning");
+        }
       }
 
       if (diffSec <= 0) {
@@ -376,7 +453,6 @@ const ExamRunnerModule = {
     }
   },
 
-  // Finalisasi Ujian, Kalkulasi Skor, & Simpan ke Supabase
   async finishExam(isAuto = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -399,7 +475,6 @@ const ExamRunnerModule = {
 
     const client = getSupabaseClient();
     try {
-      // 1. Kalkulasi Penilaian
       let totalEarnedScore = 0;
       let maxPossibleScore = 0;
       let correctCount = 0;
@@ -412,12 +487,10 @@ const ExamRunnerModule = {
         const userAns = this.userAnswers[q.id] || { keys: [] };
         const selectedKeys = userAns.keys || [];
 
-        // Kunci benar dari database (array)
         const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
         const userKeysSorted = [...selectedKeys].map(k => String(k).toUpperCase().trim()).sort();
         const trueKeysSorted = [...trueKeys].sort();
 
-        // Cek kecocokan kunci
         const isCorrect = (userKeysSorted.length === trueKeysSorted.length) &&
           userKeysSorted.every((val, index) => val === trueKeysSorted[index]);
 
@@ -436,12 +509,11 @@ const ExamRunnerModule = {
         });
       });
 
-      // Konversi nilai skala 0 - 100
       const finalPercentage = maxPossibleScore > 0 
         ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
         : 0;
 
-      // 2. Simpan Rekaman ke Tabel exam_attempts
+      // Simpan ke exam_attempts
       const { data: attemptData, error: attemptErr } = await client
         .from('exam_attempts')
         .insert({
@@ -458,7 +530,7 @@ const ExamRunnerModule = {
 
       if (attemptErr) throw attemptErr;
 
-      // 3. Simpan Detail Jawaban ke Tabel student_answers
+      // Simpan ke student_answers
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -468,14 +540,10 @@ const ExamRunnerModule = {
           score_earned: a.score_earned
         }));
 
-        const { error: ansInsertErr } = await client
-          .from('student_answers')
-          .insert(answersData);
-
-        if (ansInsertErr) throw ansInsertErr;
+        await client.from('student_answers').insert(answersData);
       }
 
-      // 4. Simpan ringkasan untuk selesai.html
+      // Simpan ringkasan untuk selesai.html
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
@@ -489,14 +557,13 @@ const ExamRunnerModule = {
 
       sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
 
-      // Hapus data sesi pengerjaan lokal
       const answersStorageKey = `answers_${this.session.exam.id}_${this.session.student.id}`;
       sessionStorage.removeItem(answersStorageKey);
 
       window.location.href = "selesai.html";
     } catch (err) {
       console.error("Gagal menyimpan hasil ujian:", err);
-      alert(`Terjadi kendala saat mengirim jawaban: ${err.message}. Hubungi guru pengawas.`);
+      alert(`Terjadi kendala saat mengirim jawaban: ${err.message}`);
       if (btnFinish) {
         btnFinish.disabled = false;
         btnFinish.innerText = "Coba Kumpulkan Lagi";
