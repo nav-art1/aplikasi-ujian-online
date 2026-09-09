@@ -6,6 +6,9 @@
   <title>Panel Guru - Aplikasi Ujian Online</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  
+  <!-- Pustaka XLSX diletakkan di HEAD agar selalu siap saat halaman berinteraksi -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
   <!-- 1. LOGIN GURU -->
@@ -409,7 +412,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 4: TAMBAH SOAL (DENGAN DROPDOWN PILIH UJIAN LANGSUNG) -->
+        <!-- SEKSI 4: TAMBAH SOAL -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
@@ -417,7 +420,6 @@
               <button type="button" class="btn btn-secondary btn-sm" id="btn-back-to-bank">&larr; Kembali ke Bank Soal</button>
             </div>
 
-            <!-- PILIHAN SESI UJIAN LANGSUNG -->
             <div style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
               <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                 <label for="question-exam-select" style="font-weight: 700; color: #3730a3; white-space: nowrap;">🎯 Target Sesi Ujian:</label>
@@ -800,7 +802,6 @@
   <!-- SCRIPT -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="js/supabase.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/auth.js"></script>
