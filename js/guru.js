@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU, REKAP NILAI, & ANALISIS BUTIR SOAL LENGKAP
+// MODUL DASHBOARD GURU, BANK SOAL STATS, REKAP NILAI & SPREADSHEET (LENGKAP)
 // ==========================================================================
 
 const GuruModule = {
@@ -585,11 +585,33 @@ const GuruModule = {
 
   async loadBankSoalContent(examId) {
     const container = document.getElementById("bank-soal-list-container");
+    const statsContainer = document.getElementById("bank-stats-container");
     if (!container || !examId) return;
 
     const client = getSupabaseClient();
     const { data: stimulusGroups } = await client.from('stimulus_groups').select('*').eq('exam_id', examId);
     const { data: questions } = await client.from('questions').select('*, options(*)').eq('exam_id', examId).order('original_number', { ascending: true });
+
+    // Statistik Jumlah Soal Real-Time
+    if (statsContainer) {
+      statsContainer.classList.remove("d-none");
+      const totalQ = questions ? questions.length : 0;
+      const totalStim = stimulusGroups ? stimulusGroups.length : 0;
+      let pgCount = 0;
+      let pgkCount = 0;
+      let totalPoints = 0;
+
+      (questions || []).forEach(q => {
+        if (q.question_type === 'pgk') pgkCount++;
+        else pgCount++;
+        totalPoints += parseFloat(q.points) || 1.0;
+      });
+
+      document.getElementById("stat-bank-total-questions").innerText = totalQ;
+      document.getElementById("stat-bank-types-detail").innerText = `(${pgCount} Pilihan Ganda | ${pgkCount} PGK)`;
+      document.getElementById("stat-bank-total-stimulus").innerText = totalStim;
+      document.getElementById("stat-bank-total-points").innerText = totalPoints.toFixed(1).replace(/\.0$/, '');
+    }
 
     let contentHtml = '';
     (stimulusGroups || []).forEach(stim => {
@@ -619,7 +641,7 @@ const GuruModule = {
       `;
     }
 
-    container.innerHTML = contentHtml || '<p class="text-muted text-center" style="padding: 20px;">Belum ada butir soal.</p>';
+    container.innerHTML = contentHtml || '<p class="text-muted text-center" style="padding: 20px;">Belum ada butir soal pada ujian ini.</p>';
     this.renderMath(container);
   },
 
@@ -852,7 +874,7 @@ const GuruModule = {
   },
 
   // =========================================================================
-  // SEKSI REKAP NILAI, ANALISIS BUTIR SOAL, & INTEGRASI SPREADSHEET (LENGKAP)
+  // SEKSI REKAP NILAI, ANALISIS BUTIR SOAL, & INTEGRASI SPREADSHEET
   // =========================================================================
 
   getAppsScriptTemplate() {
@@ -895,7 +917,7 @@ const GuruModule = {
       (data.violation_count || 0) + " kali"
     ]);
     
-    // 2. SHEET ANALISIS BUTIR SOAL
+    // 2. SHEET ANALISIS BUTIR SOAL (URUT NO. 1 S.D. N ASLI BANK SOAL)
     var sheetAnalisis = ss.getSheetByName("Analisis Soal");
     if (!sheetAnalisis) {
       sheetAnalisis = ss.insertSheet("Analisis Soal");
@@ -948,7 +970,6 @@ const GuruModule = {
       if (sel.value) this.loadHasilAndAnalisis(sel.value);
     });
 
-    // Download Kode File Script (.js)
     document.getElementById("btn-download-apps-script")?.addEventListener("click", () => {
       const code = this.getAppsScriptTemplate();
       const blob = new Blob([code], { type: 'text/javascript' });
@@ -960,7 +981,6 @@ const GuruModule = {
       URL.revokeObjectURL(url);
     });
 
-    // Salin Kode ke Clipboard
     document.getElementById("btn-copy-apps-script")?.addEventListener("click", () => {
       const code = this.getAppsScriptTemplate();
       navigator.clipboard.writeText(code).then(() => {
@@ -982,15 +1002,12 @@ const GuruModule = {
     }
 
     const client = getSupabaseClient();
-
-    // 1. Ambil info ujian untuk cek spreadsheet_url
     const { data: examInfo } = await client.from('exams').select('*').eq('id', examId).single();
     if (integrationCard) {
       integrationCard.classList.remove("d-none");
       if (inputUrl) inputUrl.value = examInfo.spreadsheet_url || '';
     }
 
-    // Tombol Simpan URL Spreadsheet
     if (btnSaveUrl) {
       btnSaveUrl.onclick = async () => {
         const urlVal = inputUrl.value.trim();
@@ -1013,7 +1030,6 @@ const GuruModule = {
       };
     }
 
-    // 2. Ambil data nilai dan pengerjaan siswa
     const { data: attempts } = await client
       .from('exam_attempts')
       .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, full_name, student_number, classes(class_name))')
@@ -1040,7 +1056,7 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // 3. Matriks Analisis Butir Soal
+    // Matriks Analisis Butir Soal (DIPETAKAN KETAT MENURUT ORIGINAL_NUMBER DARI BANK SOAL)
     const { data: questions } = await client.from('questions').select('id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
     const theadAnalisis = document.getElementById("analisis-table-header");
     const tbodyAnalisis = document.getElementById("analisis-table-body");
@@ -1051,7 +1067,7 @@ const GuruModule = {
     }
 
     let headerHtml = '<tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th>';
-    questions.forEach((q, i) => headerHtml += `<th style="text-align:center;">No.${i + 1}</th>`);
+    questions.forEach((q) => headerHtml += `<th style="text-align:center;">No.${q.original_number}</th>`);
     headerHtml += '</tr>';
     if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
 
@@ -1090,7 +1106,7 @@ const GuruModule = {
     });
     if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
 
-    // 4. Tombol Sinkronisasi Ulang Semua Data ke Spreadsheet
+    // Tombol Sinkronisasi Ulang Semua Data ke Spreadsheet
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
@@ -1105,10 +1121,11 @@ const GuruModule = {
           for (const att of attempts) {
             const st = att.students || {};
             const itemAnalysis = [];
-            questions.forEach((q, idx) => {
+            // Pastikan data yang dikirim ke spreadsheet urut no. 1 s.d. N asli
+            questions.forEach((q) => {
               const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
               itemAnalysis.push({
-                question_number: idx + 1,
+                question_number: q.original_number,
                 selected_keys: a ? a.selected_keys : [],
                 is_correct: a ? a.is_correct : false
               });
