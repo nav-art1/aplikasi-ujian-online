@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: SISWA PER KELAS, IMPORT EXCEL SISWA, BANK SOAL & SPREADSHEET
+// MODUL DASHBOARD GURU: PERBAIKAN DOWNLOAD TEMPLATE SOAL & IMPORT EXCEL
 // ==========================================================================
 
 const GuruModule = {
@@ -41,21 +41,208 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  // Download Template Excel Siswa
-  downloadStudentExcelTemplate() {
-    if (typeof XLSX === 'undefined') return alert("Pustaka SheetJS belum termuat.");
-    const templateData = [
-      { nomor_absen: 1, nama_siswa: 'Ahmad Maulana', nisn: '10293847' },
-      { nomor_absen: 2, nama_siswa: 'Budi Santoso', nisn: '10293848' },
-      { nomor_absen: 3, nama_siswa: 'Citra Dewi', nisn: '10293849' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template Siswa");
-    XLSX.writeFile(wb, "template_siswa.xlsx");
+  // FUNGSI UNDUH TEMPLATE SOAL VIA BLOB
+  downloadExcelTemplate() {
+    if (typeof XLSX === 'undefined') {
+      alert("Pustaka SheetJS (XLSX) belum selesai dimuat di halaman. Mohon periksa koneksi internet Anda.");
+      return;
+    }
+
+    try {
+      const templateData = [
+        {
+          nomor: 1,
+          judul_stimulus: "",
+          isi_stimulus: "",
+          tipe: "pg",
+          poin: 1.0,
+          soal: "Ibukota negara Indonesia saat ini adalah...",
+          opsi_a: "Jakarta",
+          opsi_b: "Surabaya",
+          opsi_c: "Bandung",
+          opsi_d: "Medan",
+          opsi_e: "",
+          opsi_f: "",
+          kunci: "A",
+          gambar_url: ""
+        },
+        {
+          nomor: 2,
+          judul_stimulus: "Teks Ekosistem Mangrove",
+          isi_stimulus: "Hutan mangrove merupakan ekosistem pesisir penting yang mencegah abrasi dan menjadi habitat ikan.",
+          tipe: "pgk",
+          poin: 2.0,
+          soal: "Berdasarkan teks, manakah peran utama hutan mangrove? (Pilihan Ganda Kompleks)",
+          opsi_a: "Meredam gelombang tsunami",
+          opsi_b: "Tempat pemijahan udang dan kepiting",
+          opsi_c: "Tambang batu bara lepas pantai",
+          opsi_d: "Mencegah abrasi daratan",
+          opsi_e: "Peneduh kawasan pantai",
+          opsi_f: "",
+          kunci: "A,B,D",
+          gambar_url: ""
+        }
+      ];
+
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template Soal");
+
+      // Gunakan write binary buffer agar download pasti jalan tanpa terblokir popup blocker browser
+      const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "template_soal_ujian.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Gagal mengunduh template soal: ${err.message}`);
+    }
   },
 
-  // Setup Event Listener Import Siswa Excel
+  // FUNGSI UNDUH TEMPLATE SISWA VIA BLOB
+  downloadStudentExcelTemplate() {
+    if (typeof XLSX === 'undefined') {
+      alert("Pustaka SheetJS belum selesai dimuat.");
+      return;
+    }
+
+    try {
+      const templateData = [
+        { nomor_absen: 1, nama_siswa: 'Ahmad Maulana', nisn: '10293847' },
+        { nomor_absen: 2, nama_siswa: 'Budi Santoso', nisn: '10293848' },
+        { nomor_absen: 3, nama_siswa: 'Citra Dewi', nisn: '10293849' }
+      ];
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template Siswa");
+
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "template_siswa.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Gagal mengunduh template siswa: ${err.message}`);
+    }
+  },
+
+  setupImportExcelEventListeners() {
+    // Tombol Download Template Soal
+    const btnDownload = document.getElementById("btn-download-template");
+    if (btnDownload) {
+      btnDownload.onclick = (e) => {
+        e.preventDefault();
+        this.downloadExcelTemplate();
+      };
+    }
+
+    const fileInput = document.getElementById("excel-file-input");
+    fileInput?.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          this.parsedExcelQuestions = [];
+          let tableRows = '';
+
+          raw.forEach((r, idx) => {
+            const num = r.nomor || (idx + 1);
+            const type = (r.tipe || 'pg').toLowerCase().trim();
+            const points = parseFloat(r.poin) || 1.0;
+            const content = (r.soal || '').trim();
+            const rawKey = String(r.kunci || '').toUpperCase().trim();
+            const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+
+            const options = [];
+            ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
+              const text = r[`opsi_${lbl}`] ? String(r[`opsi_${lbl}`]).trim() : '';
+              if (text) {
+                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: correctKeys.includes(lbl.toUpperCase()) });
+              }
+            });
+
+            if (content && options.length >= 2) {
+              this.parsedExcelQuestions.push({
+                original_number: num,
+                stimulus_title: r.judul_stimulus ? String(r.judul_stimulus).trim() : null,
+                stimulus_content: r.isi_stimulus ? String(r.isi_stimulus).trim() : '',
+                question_type: type,
+                points: points,
+                content: content,
+                correct_keys: correctKeys,
+                options: options
+              });
+
+              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${correctKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+            }
+          });
+
+          document.getElementById("import-summary-text").innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Soal Siap Diimpor`;
+          document.getElementById("import-preview-body").innerHTML = tableRows;
+          document.getElementById("import-preview-area").classList.remove("d-none");
+        } catch (err) {
+          alert(`Gagal baca Excel: ${err.message}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById("btn-commit-import")?.addEventListener("click", async () => {
+      const examId = document.getElementById("import-exam-select").value;
+      if (!examId) return alert("Pilih sesi ujian terlebih dahulu.");
+
+      const client = getSupabaseClient();
+      try {
+        const stimMap = {};
+        for (const q of this.parsedExcelQuestions) {
+          let stimId = null;
+          if (q.stimulus_title) {
+            if (!stimMap[q.stimulus_title]) {
+              const { data: s } = await client.from('stimulus_groups').insert({ exam_id: examId, title: q.stimulus_title, content: q.stimulus_content }).select().single();
+              stimMap[q.stimulus_title] = s.id;
+            }
+            stimId = stimMap[q.stimulus_title];
+          }
+
+          const { data: insertedQ } = await client.from('questions').insert({
+            exam_id: examId,
+            stimulus_group_id: stimId,
+            original_number: q.original_number,
+            question_type: q.question_type,
+            points: q.points,
+            content: q.content,
+            correct_keys: correctKeys
+          }).select().single();
+
+          const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
+          await client.from('options').insert(opts);
+        }
+
+        alert("Sukses mengimpor seluruh butir soal!");
+        document.getElementById("import-preview-area").classList.add("d-none");
+        document.getElementById("excel-file-input").value = "";
+        await this.loadBankSoalContent(examId);
+      } catch (err) {
+        alert(`Gagal impor: ${err.message}`);
+      }
+    });
+  },
+
   setupImportStudentEventListeners() {
     const btnDownload = document.getElementById("btn-download-student-template");
     const btnOpenModal = document.getElementById("btn-open-import-student-modal");
@@ -236,7 +423,6 @@ const GuruModule = {
       if (el) el.innerHTML = optionsHtml;
     });
 
-    // Otomatis pilih kelas pertama di menu siswa
     const filterStudentClass = document.getElementById("student-class-filter");
     if (filterStudentClass && this.classesList.length > 0) {
       if (!this.selectedStudentClassId || !this.classesList.find(c => c.id === this.selectedStudentClassId)) {
@@ -247,7 +433,6 @@ const GuruModule = {
     }
   },
 
-  // MEMUAT SISWA BERDASARKAN KELAS TERTENTU
   async loadStudentsTableByClass(classId) {
     const tableBody = document.getElementById("students-table-body");
     const titleTable = document.getElementById("title-students-table");
@@ -298,7 +483,6 @@ const GuruModule = {
   },
 
   setupStudentEventListeners() {
-    // Filter dropdown pemilihan kelas di menu siswa
     document.getElementById("student-class-filter")?.addEventListener("change", async (e) => {
       this.selectedStudentClassId = e.target.value;
       await this.loadStudentsTableByClass(this.selectedStudentClassId);
@@ -308,7 +492,6 @@ const GuruModule = {
       if (this.selectedStudentClassId) this.loadStudentsTableByClass(this.selectedStudentClassId);
     });
 
-    // Form Tambah Siswa Manual
     document.getElementById("form-add-student")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!this.selectedStudentClassId) return alert("Pilih kelas terlebih dahulu!");
@@ -331,7 +514,6 @@ const GuruModule = {
       await this.loadQuickStats();
     });
 
-    // Form Edit Siswa
     document.getElementById("btn-cancel-edit-student")?.addEventListener("click", () => document.getElementById("modal-edit-student").classList.add("d-none"));
     document.getElementById("form-edit-student")?.addEventListener("submit", async (e) => {
       e.preventDefault();
