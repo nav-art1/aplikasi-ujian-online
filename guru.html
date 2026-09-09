@@ -81,7 +81,7 @@
           <div class="card">
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
-              <li>Atur jadwal, token, opsi acak, dan sakelar anti-curang di menu <strong>Ujian</strong>.</li>
+              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Anda juga dapat mengeditnya sewaktu-waktu dengan tombol <strong>⚙️ Atur</strong>.</li>
               <li>Input butir pertanyaan di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Excel</strong>.</li>
               <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memasang Google Spreadsheet dan memantau matriks per butir soal.</li>
             </ol>
@@ -118,7 +118,7 @@
           </div>
         </section>
 
-        <!-- MODAL BUAT UJIAN BARU DENGAN SAKELAR ANTI-CURANG JELAS -->
+        <!-- MODAL BUAT UJIAN BARU -->
         <div id="modal-create-exam" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -201,6 +201,60 @@
           </div>
         </div>
 
+        <!-- MODAL EDIT PENGATURAN UJIAN (EDIT ANTI-CURANG & ACAK) -->
+        <div id="modal-edit-exam-settings" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 540px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">⚙️ Edit Pengaturan Keamanan Ujian</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-edit-exam-settings">X</button>
+            </div>
+            <form id="form-edit-exam-settings">
+              <input type="hidden" id="edit-exam-id">
+
+              <div style="background: #eef2ff; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #c7d2fe;">
+                <strong id="edit-exam-title-display" style="color: var(--primary-color); font-size: 1rem;">-</strong>
+              </div>
+
+              <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 16px;">
+                <div style="font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; color: var(--text-main);">Pengacakan:</div>
+                
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; font-size: 0.9rem;">
+                  <input type="checkbox" id="edit-exam-randomize-questions">
+                  Acak urutan butir soal per siswa
+                </label>
+                
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
+                  <input type="checkbox" id="edit-exam-randomize-options">
+                  Acak pilihan jawaban (opsi A s.d. F)
+                </label>
+              </div>
+
+              <div style="background: #fff1f2; padding: 14px; border-radius: 8px; border: 1px solid #fecdd3; margin-bottom: 20px;">
+                <div style="font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; color: #9f1239;">Proteksi Anti-Kecurangan:</div>
+
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95rem; color: #b91c1c; font-weight: 700;">
+                  <input type="checkbox" id="edit-exam-anti-cheat">
+                  Status Proteksi Anti-Curang (ON / OFF)
+                </label>
+                <small class="text-muted" style="display: block; margin-left: 24px; margin-top: 4px;">Jika aktif, siswa dilarang buka tab lain, split screen, dan layar mengambang.</small>
+
+                <div style="margin-top: 12px; margin-left: 24px; display: flex; align-items: center; gap: 8px;">
+                  <label for="edit-exam-max-violations" style="font-size: 0.85rem; color: #881337; font-weight: 600;">Batas Maksimal Pelanggaran:</label>
+                  <input type="number" id="edit-exam-max-violations" min="1" max="10" value="3" style="width: 65px; padding: 4px 8px; font-size: 0.9rem; font-weight: 700; text-align: center;">
+                  <span style="font-size: 0.85rem; color: #881337;">kali</span>
+                </div>
+              </div>
+
+              <div id="edit-exam-settings-alert" class="alert d-none"></div>
+
+              <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="btn-cancel-edit-exam-settings">Batal</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-edit-exam-settings">Simpan Pengaturan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <!-- SEKSI 3: BANK SOAL -->
         <section id="panel-bank-soal" class="menu-panel d-none">
           <div class="card">
@@ -219,7 +273,6 @@
               </select>
             </div>
 
-            <!-- KARTU STATISTIK SOAL -->
             <div id="bank-stats-container" class="d-none" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
               <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; text-align: center;">
                 <span style="font-size: 0.8rem; font-weight: 700; color: #3730a3; text-transform: uppercase;">Total Butir Soal</span>
@@ -609,7 +662,7 @@
               </select>
             </div>
 
-            <!-- KARTU INTEGRASI SPREADSHEET DENGAN DOWNLOAD KODE -->
+            <!-- KARTU INTEGRASI SPREADSHEET -->
             <div id="spreadsheet-integration-card" class="d-none" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                 <div>
@@ -622,7 +675,6 @@
                 </div>
               </div>
 
-              <!-- PANDUAN RINGKAS -->
               <details style="background: #ffffff; border: 1px solid #dcfce7; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem; color: var(--text-main);">
                 <summary style="font-weight: 700; cursor: pointer; color: #166534;">📖 Petunjuk Pasang di Google Spreadsheet (Klik untuk membuka)</summary>
                 <ol style="margin: 8px 0 0 18px; line-height: 1.6;">
@@ -634,7 +686,6 @@
                 </ol>
               </details>
 
-              <!-- INPUT LINK WEB APP SPREADSHEET -->
               <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
                 <div style="flex-grow: 1; min-width: 280px;">
                   <label for="input-spreadsheet-url" style="font-size: 0.85rem; font-weight: 700; color: #166534; display: block; margin-bottom: 4px;">Tempel URL Web App Google Spreadsheet di Sini:</label>
