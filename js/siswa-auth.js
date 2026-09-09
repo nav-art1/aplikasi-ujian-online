@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL OTENTIKASI SISWA & PARAMETER UJIAN LENGKAP
+// MODUL OTENTIKASI SISWA: LOGIN MENGGUNAKAN NOMOR ABSEN & TOKEN UJIAN
 // ==========================================================================
 
 const StudentAuthModule = {
@@ -22,13 +22,18 @@ const StudentAuthModule = {
   },
 
   async handleLogin() {
-    const nisnInput = document.getElementById("student-nisn");
+    const absenInput = document.getElementById("student-attendance-num");
     const tokenInput = document.getElementById("exam-token-input");
     const btnSubmit = document.getElementById("btn-submit-student-login");
     const alertEl = document.getElementById("student-login-alert");
 
-    const studentNumber = nisnInput.value.trim();
+    const attendanceNumber = parseInt(absenInput.value, 10);
     const token = tokenInput.value.trim().toUpperCase();
+
+    if (!attendanceNumber || attendanceNumber <= 0) {
+      this.showAlert("Silakan masukkan nomor absen yang valid.", "error");
+      return;
+    }
 
     alertEl.classList.add("d-none");
     btnSubmit.disabled = true;
@@ -42,6 +47,7 @@ const StudentAuthModule = {
     }
 
     try {
+      // 1. Ambil sesi ujian berdasarkan Token
       const { data: examData, error: examError } = await client
         .from('exams')
         .select('id, title, subject, duration_minutes, token, is_active, class_id, randomize_questions, randomize_options, anti_cheat, max_violations, spreadsheet_url, classes(class_name)')
@@ -51,7 +57,7 @@ const StudentAuthModule = {
       if (examError) throw examError;
 
       if (!examData) {
-        this.showAlert(`Token "${token}" tidak ditemukan.`, "error");
+        this.showAlert(`Token "${token}" tidak ditemukan. Pastikan token sesuai.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
@@ -64,40 +70,41 @@ const StudentAuthModule = {
         return;
       }
 
-      const { data: studentData, error: studentError } = await client
+      // 2. Ambil data siswa berdasarkan Nomor Absen di kelas target ujian tersebut
+      let studentQuery = client
         .from('students')
-        .select('id, student_number, full_name, class_id, is_active, classes(class_name)')
-        .eq('student_number', studentNumber)
-        .maybeSingle();
+        .select('id, attendance_number, student_number, full_name, class_id, is_active, classes(class_name)')
+        .eq('attendance_number', attendanceNumber);
+
+      if (examData.class_id) {
+        studentQuery = studentQuery.eq('class_id', examData.class_id);
+      }
+
+      const { data: studentData, error: studentError } = await studentQuery.maybeSingle();
 
       if (studentError) throw studentError;
 
       if (!studentData) {
-        this.showAlert(`Nomor siswa "${studentNumber}" tidak terdaftar.`, "error");
+        const className = examData.classes ? examData.classes.class_name : 'Kelas Terkait';
+        this.showAlert(`Siswa dengan nomor absen ${attendanceNumber} tidak terdaftar di ${className}. Periksa kembali nomor absen Anda.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
       if (!studentData.is_active) {
-        this.showAlert(`Akun "${studentData.full_name}" dinonaktifkan.`, "error");
+        this.showAlert(`Akun "${studentData.full_name}" dinonaktifkan. Hubungi pengawas.`, "error");
         btnSubmit.disabled = false;
         btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
         return;
       }
 
-      if (examData.class_id && studentData.class_id !== examData.class_id) {
-        const target = examData.classes ? examData.classes.class_name : 'Kelas Lain';
-        this.showAlert(`Ujian ini khusus untuk kelas ${target}.`, "error");
-        btnSubmit.disabled = false;
-        btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
-        return;
-      }
-
+      // 3. Simpan data sesi lengkap ke sessionStorage
       const sessionPayload = {
         student: {
           id: studentData.id,
-          student_number: studentData.student_number,
+          attendance_number: studentData.attendance_number,
+          student_number: studentData.student_number || '-',
           full_name: studentData.full_name,
           class_name: studentData.classes ? studentData.classes.class_name : '-'
         },
@@ -117,7 +124,7 @@ const StudentAuthModule = {
       };
 
       sessionStorage.setItem("exam_session_data", JSON.stringify(sessionPayload));
-      this.showAlert(`Data diverifikasi: ${studentData.full_name}. Mengalihkan...`, "success");
+      this.showAlert(`Identitas Terverifikasi: [Absen ${studentData.attendance_number}] ${studentData.full_name}. Mengalihkan...`, "success");
 
       setTimeout(() => {
         window.location.href = "konfirmasi.html";
