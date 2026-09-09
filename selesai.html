@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Ujian Selesai</title>
+  <title>Hasil Ujian Siswa</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
     html, body {
@@ -24,7 +24,7 @@
 
     .finish-card {
       width: 100%;
-      max-width: 480px;
+      max-width: 500px;
       background: #ffffff;
       border-radius: 12px;
       padding: 28px 24px;
@@ -33,17 +33,25 @@
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
     }
 
-    .success-icon {
-      width: 64px;
-      height: 64px;
-      background: #dcfce7;
-      color: var(--success-color);
+    .status-icon {
+      width: 68px;
+      height: 68px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 2rem;
+      font-size: 2.2rem;
       margin: 0 auto 16px auto;
+    }
+
+    .icon-normal {
+      background: #dcfce7;
+      color: var(--success-color);
+    }
+
+    .icon-cheat {
+      background: #fee2e2;
+      color: #b91c1c;
     }
 
     .score-badge {
@@ -52,18 +60,36 @@
       color: var(--primary-color);
       margin: 10px 0;
     }
+
+    .cheat-alert-box {
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 20px;
+      color: #9f1239;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      text-align: left;
+    }
   </style>
 </head>
 <body>
 
   <div class="finish-wrapper">
     <div class="finish-card">
-      <div class="success-icon">✓</div>
+      <div id="status-icon" class="status-icon icon-normal">✓</div>
       
-      <h2 style="color: var(--text-main); font-size: 1.35rem; font-weight: 800; margin-bottom: 6px;">Ujian Berhasil Dikumpulkan!</h2>
-      <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 20px;">Seluruh jawaban Anda telah tersimpan dengan aman di server.</p>
+      <h2 id="status-title" style="color: var(--text-main); font-size: 1.35rem; font-weight: 800; margin-bottom: 6px;">Ujian Selesai!</h2>
+      <p id="status-desc" class="text-muted" style="font-size: 0.85rem; margin-bottom: 16px;">Jawaban Anda telah tersimpan dengan aman di server.</p>
 
-      <!-- RINGKASAN HASIL -->
+      <!-- KOTAK PERINGATAN KECURANGAN JIKA DIKUMPULKAN PAKSA -->
+      <div id="cheat-alert-container" class="cheat-alert-box d-none">
+        <strong>⚠️ Catatan Pengawas:</strong>
+        <div>Ujian ini dihentikan dan dikumpulkan secara paksa oleh sistem karena Anda melewati batas toleransi aktivitas mencurigakan (membuka tab lain / aplikasi lain / layar belah). Kejadian ini telah dicatat pada sistem guru pengawas.</div>
+      </div>
+
+      <!-- RINGKASAN HASIL SISWA -->
       <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 20px; text-align: left;">
         <table style="width: 100%; font-size: 0.9rem; border-collapse: collapse;">
           <tr>
@@ -81,6 +107,10 @@
           <tr>
             <td style="padding: 4px 0; color: var(--text-muted);">Waktu Selesai</td>
             <td style="padding: 4px 0; font-weight: 600;" id="res-submitted-time">-</td>
+          </tr>
+          <tr>
+            <td style="padding: 4px 0; color: var(--text-muted);">Status Integritas</td>
+            <td style="padding: 4px 0; font-weight: 700;" id="res-integrity-status">-</td>
           </tr>
           <tr>
             <td style="padding: 4px 0; color: var(--text-muted);">Soal Dijawab Benar</td>
@@ -120,6 +150,31 @@
       document.getElementById("res-submitted-time").innerText = res.submitted_at || "-";
       document.getElementById("res-correct-count").innerText = `${res.correct_count} dari ${res.total_questions} Soal`;
       document.getElementById("res-final-score").innerText = res.final_score;
+
+      // Status Integritas & Indikator Visual
+      const isCheat = res.submission_type === 'forced_cheat';
+      const iconEl = document.getElementById("status-icon");
+      const titleEl = document.getElementById("status-title");
+      const descEl = document.getElementById("status-desc");
+      const cheatBox = document.getElementById("cheat-alert-container");
+      const integrityEl = document.getElementById("res-integrity-status");
+
+      if (isCheat) {
+        iconEl.className = "status-icon icon-cheat";
+        iconEl.innerText = "🚨";
+        titleEl.innerText = "Ujian Dikumpulkan Paksa!";
+        titleEl.style.color = "#b91c1c";
+        descEl.innerText = "Terdeteksi aktivitas pelanggaran yang melewati batas toleransi.";
+        cheatBox.classList.remove("d-none");
+        integrityEl.innerHTML = `<span class="badge badge-danger">Diskualifikasi / Terdeteksi Curang (${res.violation_count || 3}x Pelanggaran)</span>`;
+      } else {
+        iconEl.className = "status-icon icon-normal";
+        iconEl.innerText = "✓";
+        titleEl.innerText = "Ujian Selesai Normal";
+        titleEl.style.color = "var(--text-main)";
+        descEl.innerText = "Pengerjaan selesai secara sah tanpa pelanggaran.";
+        integrityEl.innerHTML = `<span class="badge badge-success">Murni / Selesai Sah (0 Pelanggaran)</span>`;
+      }
 
       document.getElementById("btn-back-home").addEventListener("click", () => {
         sessionStorage.removeItem("exam_finish_result");
