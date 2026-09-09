@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: PERBAIKAN DOWNLOAD TEMPLATE SOAL & IMPORT EXCEL
+// MODUL DASHBOARD GURU: PERBAIKAN TOMBOL TAMBAH SOAL, BANK SOAL & EXCEL
 // ==========================================================================
 
 const GuruModule = {
@@ -41,10 +41,10 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  // FUNGSI UNDUH TEMPLATE SOAL VIA BLOB
+  // FUNGSI UNDUH TEMPLATE SOAL (BLOB EXPORT)
   downloadExcelTemplate() {
     if (typeof XLSX === 'undefined') {
-      alert("Pustaka SheetJS (XLSX) belum selesai dimuat di halaman. Mohon periksa koneksi internet Anda.");
+      alert("Pustaka SheetJS (XLSX) belum selesai dimuat. Silakan periksa koneksi internet Anda.");
       return;
     }
 
@@ -88,7 +88,6 @@ const GuruModule = {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Template Soal");
 
-      // Gunakan write binary buffer agar download pasti jalan tanpa terblokir popup blocker browser
       const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -104,7 +103,7 @@ const GuruModule = {
     }
   },
 
-  // FUNGSI UNDUH TEMPLATE SISWA VIA BLOB
+  // FUNGSI UNDUH TEMPLATE SISWA (BLOB EXPORT)
   downloadStudentExcelTemplate() {
     if (typeof XLSX === 'undefined') {
       alert("Pustaka SheetJS belum selesai dimuat.");
@@ -136,200 +135,64 @@ const GuruModule = {
     }
   },
 
-  setupImportExcelEventListeners() {
-    // Tombol Download Template Soal
-    const btnDownload = document.getElementById("btn-download-template");
-    if (btnDownload) {
-      btnDownload.onclick = (e) => {
-        e.preventDefault();
-        this.downloadExcelTemplate();
-      };
-    }
-
-    const fileInput = document.getElementById("excel-file-input");
-    fileInput?.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const wb = XLSX.read(data, { type: 'array' });
-          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-          this.parsedExcelQuestions = [];
-          let tableRows = '';
-
-          raw.forEach((r, idx) => {
-            const num = r.nomor || (idx + 1);
-            const type = (r.tipe || 'pg').toLowerCase().trim();
-            const points = parseFloat(r.poin) || 1.0;
-            const content = (r.soal || '').trim();
-            const rawKey = String(r.kunci || '').toUpperCase().trim();
-            const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
-
-            const options = [];
-            ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
-              const text = r[`opsi_${lbl}`] ? String(r[`opsi_${lbl}`]).trim() : '';
-              if (text) {
-                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: correctKeys.includes(lbl.toUpperCase()) });
-              }
-            });
-
-            if (content && options.length >= 2) {
-              this.parsedExcelQuestions.push({
-                original_number: num,
-                stimulus_title: r.judul_stimulus ? String(r.judul_stimulus).trim() : null,
-                stimulus_content: r.isi_stimulus ? String(r.isi_stimulus).trim() : '',
-                question_type: type,
-                points: points,
-                content: content,
-                correct_keys: correctKeys,
-                options: options
-              });
-
-              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${correctKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
-            }
-          });
-
-          document.getElementById("import-summary-text").innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Soal Siap Diimpor`;
-          document.getElementById("import-preview-body").innerHTML = tableRows;
-          document.getElementById("import-preview-area").classList.remove("d-none");
-        } catch (err) {
-          alert(`Gagal baca Excel: ${err.message}`);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    document.getElementById("btn-commit-import")?.addEventListener("click", async () => {
-      const examId = document.getElementById("import-exam-select").value;
-      if (!examId) return alert("Pilih sesi ujian terlebih dahulu.");
-
-      const client = getSupabaseClient();
-      try {
-        const stimMap = {};
-        for (const q of this.parsedExcelQuestions) {
-          let stimId = null;
-          if (q.stimulus_title) {
-            if (!stimMap[q.stimulus_title]) {
-              const { data: s } = await client.from('stimulus_groups').insert({ exam_id: examId, title: q.stimulus_title, content: q.stimulus_content }).select().single();
-              stimMap[q.stimulus_title] = s.id;
-            }
-            stimId = stimMap[q.stimulus_title];
-          }
-
-          const { data: insertedQ } = await client.from('questions').insert({
-            exam_id: examId,
-            stimulus_group_id: stimId,
-            original_number: q.original_number,
-            question_type: q.question_type,
-            points: q.points,
-            content: q.content,
-            correct_keys: correctKeys
-          }).select().single();
-
-          const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
-          await client.from('options').insert(opts);
-        }
-
-        alert("Sukses mengimpor seluruh butir soal!");
-        document.getElementById("import-preview-area").classList.add("d-none");
-        document.getElementById("excel-file-input").value = "";
-        await this.loadBankSoalContent(examId);
-      } catch (err) {
-        alert(`Gagal impor: ${err.message}`);
+  async getSuggestedQuestionNumber(examId, stimulusId = null) {
+    if (!examId) return 1;
+    const client = getSupabaseClient();
+    try {
+      if (stimulusId) {
+        const { data: stimQ } = await client.from('questions').select('original_number').eq('exam_id', examId).eq('stimulus_group_id', stimulusId).order('original_number', { ascending: false }).limit(1);
+        if (stimQ && stimQ.length > 0 && stimQ[0].original_number) return stimQ[0].original_number + 1;
       }
-    });
+      const { data: maxQ } = await client.from('questions').select('original_number').eq('exam_id', examId).order('original_number', { ascending: false }).limit(1);
+      if (maxQ && maxQ.length > 0 && maxQ[0].original_number) return maxQ[0].original_number + 1;
+      return 1;
+    } catch {
+      return 1;
+    }
   },
 
-  setupImportStudentEventListeners() {
-    const btnDownload = document.getElementById("btn-download-student-template");
-    const btnOpenModal = document.getElementById("btn-open-import-student-modal");
-    const modal = document.getElementById("modal-import-student");
-    const closeModal = () => modal.classList.add("d-none");
-
-    btnDownload?.addEventListener("click", () => this.downloadStudentExcelTemplate());
-    btnOpenModal?.addEventListener("click", () => {
-      if (!this.selectedStudentClassId) return alert("Pilih kelas terlebih dahulu di dropdown atas!");
-      const cls = this.classesList.find(c => c.id === this.selectedStudentClassId);
-      document.getElementById("import-student-class-display").innerText = cls ? cls.class_name : '-';
-      document.getElementById("excel-student-file-input").value = "";
-      document.getElementById("import-student-preview-area").classList.add("d-none");
-      document.getElementById("import-student-alert").classList.add("d-none");
-      document.getElementById("btn-commit-import-student").disabled = true;
-      modal.classList.remove("d-none");
-    });
-
-    document.getElementById("btn-close-modal-import-student")?.addEventListener("click", closeModal);
-    document.getElementById("btn-cancel-import-student")?.addEventListener("click", closeModal);
-
-    const fileInput = document.getElementById("excel-student-file-input");
-    fileInput?.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        try {
-          const data = new Uint8Array(evt.target.result);
-          const wb = XLSX.read(data, { type: 'array' });
-          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-          this.parsedExcelStudents = [];
-          let rowsHtml = '';
-
-          raw.forEach((r, idx) => {
-            const absen = parseInt(r.nomor_absen || r.absen || (idx + 1), 10);
-            const nama = (r.nama_siswa || r.nama || '').trim();
-            const nisn = (r.nisn || r.nis || '').toString().trim();
-
-            if (nama) {
-              this.parsedExcelStudents.push({ attendance_number: absen, full_name: nama, student_number: nisn || null });
-              rowsHtml += `<tr><td style="text-align:center;"><strong>${absen}</strong></td><td>${nama}</td><td>${nisn || '-'}</td></tr>`;
-            }
-          });
-
-          document.getElementById("import-student-summary-text").innerText = `Pratinjau: ${this.parsedExcelStudents.length} Siswa Terbaca`;
-          document.getElementById("import-student-preview-body").innerHTML = rowsHtml;
-          document.getElementById("import-student-preview-area").classList.remove("d-none");
-          document.getElementById("btn-commit-import-student").disabled = (this.parsedExcelStudents.length === 0);
-        } catch (err) {
-          alert(`Gagal membaca berkas siswa: ${err.message}`);
+  async shiftQuestionsUp(examId, targetNumber) {
+    const client = getSupabaseClient();
+    try {
+      const { data: colliding } = await client.from('questions').select('id, original_number').eq('exam_id', examId).gte('original_number', targetNumber).order('original_number', { ascending: false });
+      if (colliding && colliding.length > 0) {
+        for (const q of colliding) {
+          await client.from('questions').update({ original_number: q.original_number + 1 }).eq('id', q.id);
         }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    document.getElementById("btn-commit-import-student")?.addEventListener("click", async () => {
-      if (!this.selectedStudentClassId || this.parsedExcelStudents.length === 0) return;
-      const btn = document.getElementById("btn-commit-import-student");
-      btn.disabled = true;
-      btn.innerText = "Menyimpan...";
-
-      const client = getSupabaseClient();
-      try {
-        const payload = this.parsedExcelStudents.map(s => ({
-          class_id: this.selectedStudentClassId,
-          attendance_number: s.attendance_number,
-          full_name: s.full_name,
-          student_number: s.student_number || `S-${Date.now()}-${s.attendance_number}`,
-          is_active: true
-        }));
-
-        const { error } = await client.from('students').insert(payload);
-        if (error) throw error;
-
-        alert(`Berhasil mengimpor ${payload.length} siswa ke dalam kelas!`);
-        closeModal();
-        await this.loadStudentsTableByClass(this.selectedStudentClassId);
-        await this.loadQuickStats();
-      } catch (err) {
-        alert(`Gagal import siswa: ${err.message}`);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "🚀 Simpan Semua Siswa";
       }
-    });
+    } catch (err) {
+      console.warn("Gagal shift nomor:", err);
+    }
+  },
+
+  async renumberAllQuestions(examId) {
+    if (!examId || !confirm("Rapikan seluruh urutan nomor soal dari 1 s.d. selesai?")) return;
+    const client = getSupabaseClient();
+    try {
+      const { data: allQ } = await client.from('questions').select('id, stimulus_group_id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
+      if (!allQ || allQ.length === 0) return;
+
+      const ordered = [];
+      const visited = new Set();
+      for (const q of allQ) {
+        if (!q.stimulus_group_id) {
+          ordered.push(q);
+        } else if (!visited.has(q.stimulus_group_id)) {
+          visited.add(q.stimulus_group_id);
+          const group = allQ.filter(item => item.stimulus_group_id === q.stimulus_group_id);
+          ordered.push(...group);
+        }
+      }
+
+      for (let i = 0; i < ordered.length; i++) {
+        await client.from('questions').update({ original_number: i + 1 }).eq('id', ordered[i].id);
+      }
+
+      alert("Urutan nomor berhasil dirapikan!");
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert(`Gagal: ${err.message}`);
+    }
   },
 
   async initDashboard(teacherProfile) {
@@ -366,19 +229,6 @@ const GuruModule = {
         e.preventDefault();
         const targetId = link.getAttribute("data-target");
 
-        if (targetId === "panel-tambah-soal") {
-          const filter = document.getElementById("bank-exam-filter");
-          if (!this.selectedExamId && filter && filter.value) {
-            this.setExamActive(filter.value, filter.options[filter.selectedIndex].text);
-          }
-          if (!this.selectedExamId) {
-            alert("Silakan pilih sesi ujian terlebih dahulu.");
-            document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]')?.click();
-            return;
-          }
-          await this.syncActiveExamToQuestionForm();
-        }
-
         navLinks.forEach(l => l.classList.remove("active"));
         panels.forEach(p => p.classList.add("d-none"));
 
@@ -386,15 +236,20 @@ const GuruModule = {
         document.getElementById(targetId)?.classList.remove("d-none");
         document.getElementById("current-menu-title").innerText = link.innerText;
 
-        if (targetId === "panel-siswa") {
+        if (targetId === "panel-tambah-soal") {
+          await this.syncActiveExamToQuestionForm();
+        } else if (targetId === "panel-siswa") {
           await this.loadClassesDropdown();
           if (this.selectedStudentClassId) await this.loadStudentsTableByClass(this.selectedStudentClassId);
-        }
-        else if (targetId === "panel-kelas") this.loadClassesTable();
-        else if (targetId === "panel-ujian") this.loadExamsTable();
-        else if (targetId === "panel-bank-soal") this.loadBankSoalExamFilter();
-        else if (targetId === "panel-hasil") this.loadHasilExamFilter();
-        else if (targetId === "panel-import-excel") {
+        } else if (targetId === "panel-kelas") {
+          this.loadClassesTable();
+        } else if (targetId === "panel-ujian") {
+          this.loadExamsTable();
+        } else if (targetId === "panel-bank-soal") {
+          this.loadBankSoalExamFilter();
+        } else if (targetId === "panel-hasil") {
+          this.loadHasilExamFilter();
+        } else if (targetId === "panel-import-excel") {
           const sel = document.getElementById("import-exam-select");
           if (sel && this.selectedExamId) sel.value = this.selectedExamId;
         }
@@ -473,13 +328,13 @@ const GuruModule = {
           <td>${className}</td>
           <td><span class="badge ${s.is_active ? 'badge-success' : 'badge-danger'}">${s.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStudent('${s.id}', '${s.class_id}', '${s.full_name}', '${s.student_number}', ${s.attendance_number})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStudent('${s.id}', '${s.full_name}')">Hapus</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStudent('${s.id}', '${s.class_id}', '${s.full_name}', '${s.student_number}', ${s.attendance_number})">Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteStudent('${s.id}', '${s.full_name}')">Hapus</button>
           </td>
         </tr>
       `;
     });
-    tableBody.innerHTML = rowsHtml || `<tr><td colspan="6" class="text-center text-muted">Belum ada siswa di kelas ${className}. Tambahkan di atas atau gunakan tombol Import Siswa.</td></tr>`;
+    tableBody.innerHTML = rowsHtml || `<tr><td colspan="6" class="text-center text-muted">Belum ada siswa di kelas ${className}.</td></tr>`;
   },
 
   setupStudentEventListeners() {
@@ -553,6 +408,91 @@ const GuruModule = {
     await this.loadQuickStats();
   },
 
+  setupImportStudentEventListeners() {
+    document.getElementById("btn-download-student-template")?.addEventListener("click", () => this.downloadStudentExcelTemplate());
+    
+    document.getElementById("btn-open-import-student-modal")?.addEventListener("click", () => {
+      if (!this.selectedStudentClassId) return alert("Pilih kelas terlebih dahulu di dropdown atas!");
+      const cls = this.classesList.find(c => c.id === this.selectedStudentClassId);
+      document.getElementById("import-student-class-display").innerText = cls ? cls.class_name : '-';
+      document.getElementById("excel-student-file-input").value = "";
+      document.getElementById("import-student-preview-area").classList.add("d-none");
+      document.getElementById("import-student-alert").classList.add("d-none");
+      document.getElementById("btn-commit-import-student").disabled = true;
+      document.getElementById("modal-import-student").classList.remove("d-none");
+    });
+
+    const closeModal = () => document.getElementById("modal-import-student").classList.add("d-none");
+    document.getElementById("btn-close-modal-import-student")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-import-student")?.addEventListener("click", closeModal);
+
+    document.getElementById("excel-student-file-input")?.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          this.parsedExcelStudents = [];
+          let rowsHtml = '';
+
+          raw.forEach((r, idx) => {
+            const absen = parseInt(r.nomor_absen || r.absen || (idx + 1), 10);
+            const nama = (r.nama_siswa || r.nama || '').trim();
+            const nisn = (r.nisn || r.nis || '').toString().trim();
+
+            if (nama) {
+              this.parsedExcelStudents.push({ attendance_number: absen, full_name: nama, student_number: nisn || null });
+              rowsHtml += `<tr><td style="text-align:center;"><strong>${absen}</strong></td><td>${nama}</td><td>${nisn || '-'}</td></tr>`;
+            }
+          });
+
+          document.getElementById("import-student-summary-text").innerText = `Pratinjau: ${this.parsedExcelStudents.length} Siswa Terbaca`;
+          document.getElementById("import-student-preview-body").innerHTML = rowsHtml;
+          document.getElementById("import-student-preview-area").classList.remove("d-none");
+          document.getElementById("btn-commit-import-student").disabled = (this.parsedExcelStudents.length === 0);
+        } catch (err) {
+          alert(`Gagal membaca berkas siswa: ${err.message}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById("btn-commit-import-student")?.addEventListener("click", async () => {
+      if (!this.selectedStudentClassId || this.parsedExcelStudents.length === 0) return;
+      const btn = document.getElementById("btn-commit-import-student");
+      btn.disabled = true;
+      btn.innerText = "Menyimpan...";
+
+      const client = getSupabaseClient();
+      try {
+        const payload = this.parsedExcelStudents.map(s => ({
+          class_id: this.selectedStudentClassId,
+          attendance_number: s.attendance_number,
+          full_name: s.full_name,
+          student_number: s.student_number || `S-${Date.now()}-${s.attendance_number}`,
+          is_active: true
+        }));
+
+        const { error } = await client.from('students').insert(payload);
+        if (error) throw error;
+
+        alert(`Berhasil mengimpor ${payload.length} siswa ke dalam kelas!`);
+        closeModal();
+        await this.loadStudentsTableByClass(this.selectedStudentClassId);
+        await this.loadQuickStats();
+      } catch (err) {
+        alert(`Gagal import siswa: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🚀 Simpan Semua Siswa";
+      }
+    });
+  },
+
   async loadClassesTable() {
     const client = getSupabaseClient();
     const tableBody = document.getElementById("classes-table-body");
@@ -567,8 +507,8 @@ const GuruModule = {
           <td>-</td>
           <td>${new Date(c.created_at).toLocaleDateString('id-ID')}</td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditClass('${c.id}', '${c.class_name}')">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteClass('${c.id}', '${c.class_name}')">Hapus</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditClass('${c.id}', '${c.class_name}')">Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteClass('${c.id}', '${c.class_name}')">Hapus</button>
           </td>
         </tr>
       `;
@@ -646,9 +586,9 @@ const GuruModule = {
           <td>${antiCheatBadge}</td>
           <td><span class="badge ${ex.is_active ? 'badge-success' : 'badge-danger'}">${ex.is_active ? 'Aktif' : 'Tutup'}</span></td>
           <td>
-            <button class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak & Anti-Curang" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
-            <button class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
-            <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak & Anti-Curang" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
+            <button type="button" class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
           </td>
         </tr>
       `;
@@ -771,9 +711,22 @@ const GuruModule = {
     this.syncActiveExamToQuestionForm();
   },
 
+  // FUNGSI NAVIGASI TOMBOL BUAT SOAL DARI STIMULUS
+  goToAddQuestionWithStimulus(stimulusId, title = '') {
+    this.targetStimulusId = stimulusId;
+    this.targetStimulusTitle = title;
+    
+    // Buka tab Tambah Soal
+    const linkTambahSoal = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
+    if (linkTambahSoal) {
+      linkTambahSoal.click();
+    }
+  },
+
   async loadBankSoalExamFilter() {
     const filterSelect = document.getElementById("bank-exam-filter");
     const importSelect = document.getElementById("import-exam-select");
+    const questionExamSelect = document.getElementById("question-exam-select");
     const client = getSupabaseClient();
 
     const { data: exams } = await client.from('exams').select('id, title, subject').eq('teacher_id', this.currentTeacher.id).order('created_at', { ascending: false });
@@ -784,27 +737,44 @@ const GuruModule = {
 
     if (filterSelect) filterSelect.innerHTML = opts;
     if (importSelect) importSelect.innerHTML = opts;
+    if (questionExamSelect) questionExamSelect.innerHTML = opts;
 
     if (this.examsList.length > 0) {
-      const first = this.examsList[0];
-      if (filterSelect) filterSelect.value = first.id;
-      if (importSelect) importSelect.value = first.id;
-      this.setExamActive(first.id, `${first.title} (${first.subject || '-'})`);
-      await this.loadBankSoalContent(first.id);
+      if (!this.selectedExamId || !this.examsList.find(e => e.id === this.selectedExamId)) {
+        const first = this.examsList[0];
+        if (filterSelect) filterSelect.value = first.id;
+        if (importSelect) importSelect.value = first.id;
+        if (questionExamSelect) questionExamSelect.value = first.id;
+        this.setExamActive(first.id, `${first.title} (${first.subject || '-'})`);
+        await this.loadBankSoalContent(first.id);
+      } else {
+        if (filterSelect) filterSelect.value = this.selectedExamId;
+        if (importSelect) importSelect.value = this.selectedExamId;
+        if (questionExamSelect) questionExamSelect.value = this.selectedExamId;
+        await this.loadBankSoalContent(this.selectedExamId);
+      }
     }
   },
 
   setupBankSoalEventListeners() {
+    // Dropdown di Bank Soal
     document.getElementById("bank-exam-filter")?.addEventListener("change", (e) => {
-      this.setExamActive(e.target.value, e.target.options[e.target.selectedIndex]?.text || '');
-      this.loadBankSoalContent(e.target.value);
+      const val = e.target.value;
+      const txt = e.target.options[e.target.selectedIndex]?.text || '';
+      this.setExamActive(val, txt);
+      this.loadBankSoalContent(val);
     });
 
+    // Tombol "+ Buat Soal Baru" di Bank Soal
     document.getElementById("btn-goto-tambah-soal")?.addEventListener("click", () => {
-      document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]')?.click();
+      const linkTambahSoal = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
+      if (linkTambahSoal) {
+        linkTambahSoal.click();
+      }
     });
 
     document.getElementById("btn-renumber-questions")?.addEventListener("click", () => {
+      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu!");
       this.renumberAllQuestions(this.selectedExamId);
     });
   },
@@ -812,7 +782,13 @@ const GuruModule = {
   async loadBankSoalContent(examId) {
     const container = document.getElementById("bank-soal-list-container");
     const statsContainer = document.getElementById("bank-stats-container");
-    if (!container || !examId) return;
+    if (!container) return;
+
+    if (!examId) {
+      container.innerHTML = '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Silakan pilih salah satu ujian di atas.</p></div>';
+      if (statsContainer) statsContainer.classList.add("d-none");
+      return;
+    }
 
     const client = getSupabaseClient();
     const { data: stimulusGroups } = await client.from('stimulus_groups').select('*').eq('exam_id', examId);
@@ -843,14 +819,15 @@ const GuruModule = {
       const stimQs = (questions || []).filter(q => q.stimulus_group_id === stim.id);
       contentHtml += `
         <div class="card" style="border-left: 4px solid var(--primary-color); margin-bottom: 20px;">
-          <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px;">
+          <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <strong>Wacana: ${stim.title}</strong>
-            <div>
-              <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit</button>
-              <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus</button>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}', '${stim.title}')">+ Tambah Soal di Wacana Ini</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit</button>
+              <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus</button>
             </div>
           </div>
-          <p style="white-space: pre-line;">${stim.content || ''}</p>
+          <p style="white-space: pre-line; margin-bottom: 12px;">${stim.content || ''}</p>
           <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId)).join('')}</div>
         </div>
       `;
@@ -860,13 +837,13 @@ const GuruModule = {
     if (standalones.length > 0) {
       contentHtml += `
         <div class="card">
-          <div class="card-header"><span class="card-title">Soal Mandiri</span></div>
+          <div class="card-header"><span class="card-title">Soal Mandiri (${standalones.length} Soal)</span></div>
           <div style="display: flex; flex-direction: column; gap: 10px;">${standalones.map(q => this.renderQuestionItem(q, examId)).join('')}</div>
         </div>
       `;
     }
 
-    container.innerHTML = contentHtml || '<p class="text-muted text-center" style="padding: 20px;">Belum ada butir soal pada ujian ini.</p>';
+    container.innerHTML = contentHtml || '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Belum ada butir soal pada ujian ini. Klik "+ Buat Soal Baru" di atas untuk menambah soal.</p></div>';
     this.renderMath(container);
   },
 
@@ -877,16 +854,16 @@ const GuruModule = {
     });
 
     return `
-      <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px;">
-        <div style="display: flex; justify-content: space-between;">
+      <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
           <strong>No. ${q.original_number} (${q.question_type.toUpperCase()} - ${q.points} Poin)</strong>
           <div>
-            <button class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
           </div>
         </div>
         <p style="white-space: pre-line; margin: 8px 0;">${q.content}</p>
-        <div style="background: #f8fafc; padding: 8px; border-radius: 4px;">${opts}</div>
+        <div style="background: #f8fafc; padding: 8px; border-radius: 4px;">${opts || '<em class="text-muted">Pilihan jawaban belum diisi.</em>'}</div>
       </div>
     `;
   },
@@ -907,7 +884,7 @@ const GuruModule = {
 
   setupStimulusEventListeners() {
     document.getElementById("btn-open-modal-stimulus")?.addEventListener("click", () => {
-      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu.");
+      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu!");
       document.getElementById("form-create-stimulus").reset();
       document.getElementById("modal-create-stimulus").classList.remove("d-none");
     });
@@ -955,18 +932,65 @@ const GuruModule = {
     let opts = '<option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>';
     (groups || []).forEach(g => opts += `<option value="${g.id}">${g.title}</option>`);
     sel.innerHTML = opts;
+
+    if (this.targetStimulusId && selectId === "question-stimulus-id") {
+      sel.value = this.targetStimulusId;
+    }
   },
 
+  // SINKRONISASI DROPDOWN UJIAN DI HALAMAN INPUT TAMBAH SOAL
   async syncActiveExamToQuestionForm() {
-    document.getElementById("question-exam-id").value = this.selectedExamId || "";
-    document.getElementById("active-exam-title-display").innerText = this.selectedExamTitle || "-";
+    const examSelect = document.getElementById("question-exam-select");
+    const hiddenExamId = document.getElementById("question-exam-id");
+
+    if (examSelect && this.examsList.length > 0) {
+      let opts = '<option value="">-- Pilih Sesi Ujian --</option>';
+      this.examsList.forEach(e => opts += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`);
+      examSelect.innerHTML = opts;
+
+      if (this.selectedExamId) {
+        examSelect.value = this.selectedExamId;
+      } else {
+        this.selectedExamId = this.examsList[0].id;
+        this.selectedExamTitle = `${this.examsList[0].title} (${this.examsList[0].subject || '-'})`;
+        examSelect.value = this.selectedExamId;
+      }
+    }
+
+    if (hiddenExamId) hiddenExamId.value = this.selectedExamId || "";
+
     if (this.selectedExamId) {
       await this.loadStimulusDropdown(this.selectedExamId, "question-stimulus-id");
-      document.getElementById("question-number").value = await this.getSuggestedQuestionNumber(this.selectedExamId);
+      const numInput = document.getElementById("question-number");
+      if (numInput) {
+        numInput.value = await this.getSuggestedQuestionNumber(this.selectedExamId, this.targetStimulusId);
+      }
     }
   },
 
   setupQuestionFormEventListeners() {
+    // Tombol Kembali ke Bank Soal
+    document.getElementById("btn-back-to-bank")?.addEventListener("click", () => {
+      const bankLink = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
+      if (bankLink) bankLink.click();
+    });
+
+    // Dropdown Pemilihan Ujian di Formulir Tambah Soal
+    document.getElementById("question-exam-select")?.addEventListener("change", async (e) => {
+      const examId = e.target.value;
+      const title = e.target.options[e.target.selectedIndex]?.text || '';
+      this.selectedExamId = examId;
+      this.selectedExamTitle = title;
+      document.getElementById("question-exam-id").value = examId;
+      this.targetStimulusId = null;
+
+      if (examId) {
+        await this.loadStimulusDropdown(examId, "question-stimulus-id");
+        document.getElementById("question-number").value = await this.getSuggestedQuestionNumber(examId);
+      }
+    });
+
+    // Tipe Soal (Radio vs Checkbox)
     document.getElementById("question-type")?.addEventListener("change", (e) => {
       const isPgk = e.target.value === 'pgk';
       document.querySelectorAll("#options-inputs-container .option-key-input").forEach(i => {
@@ -976,14 +1000,24 @@ const GuruModule = {
       });
     });
 
+    // Submit Formulir Tambah Soal Manual (Dilengkapi try-catch menyeluruh)
     document.getElementById("form-create-question")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const examId = this.selectedExamId;
+      const examId = document.getElementById("question-exam-select")?.value || this.selectedExamId;
+      
+      if (!examId) {
+        alert("Silakan pilih Target Sesi Ujian di dropdown atas terlebih dahulu!");
+        return;
+      }
+
       const stimId = document.getElementById("question-stimulus-id").value || null;
       const num = parseInt(document.getElementById("question-number").value, 10);
       const type = document.getElementById("question-type").value;
       const points = parseFloat(document.getElementById("question-points").value) || 1.0;
       const content = document.getElementById("question-content").value.trim();
+      const btnSave = document.getElementById("btn-save-question");
+      const fileInput = document.getElementById("question-image-file");
+      let imageUrl = document.getElementById("question-image-url").value.trim() || null;
 
       const textInputs = document.querySelectorAll("#options-inputs-container .option-text-input");
       const keyInputs = document.querySelectorAll("#options-inputs-container .option-key-input");
@@ -1000,28 +1034,67 @@ const GuruModule = {
         }
       });
 
-      if (options.length < 2 || correctKeys.length === 0) return alert("Minimal 2 pilihan terisi dan 1 kunci jawaban dipilih.");
+      if (options.length < 2) {
+        alert("Pilihan jawaban minimal harus terisi 2 opsi (misal: A dan B)!");
+        return;
+      }
 
-      await this.shiftQuestionsUp(examId, num);
-      const client = getSupabaseClient();
-      const { data: newQ } = await client.from('questions').insert({
-        exam_id: examId,
-        stimulus_group_id: stimId,
-        original_number: num,
-        question_type: type,
-        points: points,
-        content: content,
-        correct_keys: correctKeys
-      }).select().single();
+      if (correctKeys.length === 0) {
+        alert("Pilih minimal 1 kunci jawaban benar dengan mencentang/mengklik lingkaran opsi!");
+        return;
+      }
 
-      const opts = options.map(o => ({ question_id: newQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
-      await client.from('options').insert(opts);
+      btnSave.disabled = true;
+      btnSave.innerText = "Menyimpan Soal...";
 
-      document.getElementById("question-content").value = "";
-      textInputs.forEach(i => i.value = "");
-      document.getElementById("question-number").value = num + 1;
-      alert("Butir soal berhasil disimpan!");
-      await this.loadBankSoalContent(examId);
+      try {
+        if (fileInput && fileInput.files[0]) {
+          imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
+        }
+
+        await this.shiftQuestionsUp(examId, num);
+
+        const client = getSupabaseClient();
+        const { data: newQ, error: qErr } = await client.from('questions').insert({
+          exam_id: examId,
+          stimulus_group_id: stimId,
+          original_number: num,
+          question_type: type,
+          points: points,
+          image_url: imageUrl,
+          content: content,
+          correct_keys: correctKeys
+        }).select().single();
+
+        if (qErr) throw qErr;
+
+        const opts = options.map(o => ({
+          question_id: newQ.id,
+          option_label: o.option_label,
+          content: o.content,
+          is_correct: o.is_correct
+        }));
+
+        const { error: optErr } = await client.from('options').insert(opts);
+        if (optErr) throw optErr;
+
+        // Reset Teks Soal & Opsi Jawaban
+        document.getElementById("question-content").value = "";
+        document.getElementById("question-image-url").value = "";
+        if (fileInput) fileInput.value = "";
+        textInputs.forEach(i => i.value = "");
+        document.getElementById("question-number").value = num + 1;
+
+        alert(`Butir Soal No. ${num} berhasil disimpan ke ujian!`);
+
+        // Segarkan data bank soal
+        await this.loadBankSoalContent(examId);
+      } catch (err) {
+        alert(`Gagal menyimpan butir soal: ${err.message}`);
+      } finally {
+        btnSave.disabled = false;
+        btnSave.innerText = "Simpan Butir Soal";
+      }
     });
   },
 
