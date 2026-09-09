@@ -203,7 +203,7 @@ const GuruModule = {
 
         alert("Sukses mengimpor seluruh butir soal!");
         document.getElementById("import-preview-area").classList.add("d-none");
-        fileInput.value = "";
+        document.getElementById("excel-file-input").value = "";
         await this.loadBankSoalContent(examId);
       } catch (err) {
         alert(`Gagal impor: ${err.message}`);
@@ -496,7 +496,6 @@ const GuruModule = {
       const classId = document.getElementById("exam-class-id").value;
       const duration = parseInt(document.getElementById("exam-duration").value, 10);
       const token = document.getElementById("exam-token").value.trim().toUpperCase();
-      const spreadsheetUrl = document.getElementById("exam-spreadsheet-url")?.value.trim() || null;
       const randomizeQ = document.getElementById("exam-randomize-questions").checked;
       const randomizeOpt = document.getElementById("exam-randomize-options").checked;
       const antiCheat = document.getElementById("exam-anti-cheat").checked;
@@ -511,7 +510,6 @@ const GuruModule = {
         description: desc,
         duration_minutes: duration,
         token: token,
-        spreadsheet_url: spreadsheetUrl,
         randomize_questions: randomizeQ,
         randomize_options: randomizeOpt,
         anti_cheat: antiCheat,
@@ -533,7 +531,7 @@ const GuruModule = {
   },
 
   async deleteExam(examId, title) {
-    if (!confirm(`Hapus ujian "${title}"?`)) return;
+    if (!confirm(`Hapus ujian "${title}"? Seluruh butir soal di dalamnya akan terhapus.`)) return;
     const client = getSupabaseClient();
     await client.from('exams').delete().eq('id', examId);
     await this.loadExamsTable();
@@ -854,8 +852,84 @@ const GuruModule = {
   },
 
   // =========================================================================
-  // SEKSI REKAP NILAI & ANALISIS BUTIR SOAL DI DASHBOARD GURU
+  // SEKSI REKAP NILAI, ANALISIS BUTIR SOAL, & INTEGRASI SPREADSHEET (LENGKAP)
   // =========================================================================
+
+  getAppsScriptTemplate() {
+    return `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 1. SHEET REKAP NILAI
+    var sheetNilai = ss.getSheetByName("Rekap Nilai");
+    if (!sheetNilai) {
+      sheetNilai = ss.insertSheet("Rekap Nilai");
+      sheetNilai.appendRow([
+        "Waktu Submit", 
+        "Nama Siswa", 
+        "NISN", 
+        "Kelas", 
+        "Mata Pelajaran", 
+        "Judul Ujian", 
+        "Jumlah Benar", 
+        "Total Soal", 
+        "Nilai Akhir",
+        "Status Pengerjaan",
+        "Pelanggaran"
+      ]);
+      sheetNilai.getRange("A1:K1").setFontWeight("bold").setBackground("#e0e7ff");
+    }
+    
+    sheetNilai.appendRow([
+      data.submitted_at || new Date().toLocaleString("id-ID"),
+      data.student_name,
+      data.student_number,
+      data.class_name,
+      data.subject,
+      data.exam_title,
+      data.correct_count,
+      data.total_questions,
+      data.final_score,
+      data.submission_type === 'forced_cheat' ? 'TERINDIKASI CURANG' : 'SELESAI MURNI',
+      (data.violation_count || 0) + " kali"
+    ]);
+    
+    // 2. SHEET ANALISIS BUTIR SOAL
+    var sheetAnalisis = ss.getSheetByName("Analisis Soal");
+    if (!sheetAnalisis) {
+      sheetAnalisis = ss.insertSheet("Analisis Soal");
+      var headers = ["Nama Siswa", "NISN", "Kelas", "Nilai", "Status"];
+      for (var i = 1; i <= data.total_questions; i++) {
+        headers.push("No. " + i);
+      }
+      sheetAnalisis.appendRow(headers);
+      sheetAnalisis.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#fef3c7");
+    }
+    
+    var rowAnalisis = [
+      data.student_name, 
+      data.student_number, 
+      data.class_name, 
+      data.final_score, 
+      data.submission_type === 'forced_cheat' ? 'CURANG' : 'MURNI'
+    ];
+
+    if (data.item_analysis && data.item_analysis.length > 0) {
+      data.item_analysis.forEach(function(item) {
+        var label = (item.selected_keys || []).join(",") || "-";
+        rowAnalisis.push(label + " (" + (item.is_correct ? "1" : "0") + ")");
+      });
+    }
+    sheetAnalisis.appendRow(rowAnalisis);
+    
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+  },
+
   async loadHasilExamFilter() {
     const sel = document.getElementById("hasil-exam-filter");
     if (!sel) return;
@@ -873,16 +947,76 @@ const GuruModule = {
     document.getElementById("btn-refresh-hasil")?.addEventListener("click", () => {
       if (sel.value) this.loadHasilAndAnalisis(sel.value);
     });
+
+    // Download Kode File Script (.js)
+    document.getElementById("btn-download-apps-script")?.addEventListener("click", () => {
+      const code = this.getAppsScriptTemplate();
+      const blob = new Blob([code], { type: 'text/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "Kode_Spreadsheet_Ujian.js";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Salin Kode ke Clipboard
+    document.getElementById("btn-copy-apps-script")?.addEventListener("click", () => {
+      const code = this.getAppsScriptTemplate();
+      navigator.clipboard.writeText(code).then(() => {
+        alert("Kode Google Apps Script berhasil disalin! Buka Google Spreadsheet -> Ekstensi -> Apps Script, lalu tempel kode ini.");
+      });
+    });
   },
 
   async loadHasilAndAnalisis(examId) {
-    if (!examId) return;
+    const integrationCard = document.getElementById("spreadsheet-integration-card");
+    const inputUrl = document.getElementById("input-spreadsheet-url");
+    const btnSaveUrl = document.getElementById("btn-save-spreadsheet-url");
+    const btnSyncAll = document.getElementById("btn-sync-all-spreadsheet");
+    const alertEl = document.getElementById("spreadsheet-alert");
+
+    if (!examId) {
+      if (integrationCard) integrationCard.classList.add("d-none");
+      return;
+    }
+
     const client = getSupabaseClient();
 
-    // 1. Rekap Nilai Siswa
+    // 1. Ambil info ujian untuk cek spreadsheet_url
+    const { data: examInfo } = await client.from('exams').select('*').eq('id', examId).single();
+    if (integrationCard) {
+      integrationCard.classList.remove("d-none");
+      if (inputUrl) inputUrl.value = examInfo.spreadsheet_url || '';
+    }
+
+    // Tombol Simpan URL Spreadsheet
+    if (btnSaveUrl) {
+      btnSaveUrl.onclick = async () => {
+        const urlVal = inputUrl.value.trim();
+        btnSaveUrl.disabled = true;
+        btnSaveUrl.innerText = "Menyimpan...";
+        try {
+          const { error } = await client.from('exams').update({ spreadsheet_url: urlVal || null }).eq('id', examId);
+          if (error) throw error;
+          alertEl.className = "alert alert-success";
+          alertEl.innerText = "Tautan Google Spreadsheet berhasil disimpan untuk sesi ujian ini!";
+          alertEl.classList.remove("d-none");
+        } catch (err) {
+          alertEl.className = "alert alert-error";
+          alertEl.innerText = `Gagal menyimpan: ${err.message}`;
+          alertEl.classList.remove("d-none");
+        } finally {
+          btnSaveUrl.disabled = false;
+          btnSaveUrl.innerText = "💾 Simpan Tautan";
+        }
+      };
+    }
+
+    // 2. Ambil data nilai dan pengerjaan siswa
     const { data: attempts } = await client
       .from('exam_attempts')
-      .select('id, score, violation_count, submission_type, submitted_at, students(id, full_name, student_number, classes(class_name))')
+      .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, full_name, student_number, classes(class_name))')
       .eq('exam_id', examId)
       .order('score', { ascending: false });
 
@@ -906,18 +1040,18 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // 2. Matriks Analisis Butir Soal
+    // 3. Matriks Analisis Butir Soal
     const { data: questions } = await client.from('questions').select('id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
     const theadAnalisis = document.getElementById("analisis-table-header");
     const tbodyAnalisis = document.getElementById("analisis-table-body");
 
     if (!questions || questions.length === 0 || !attempts || attempts.length === 0) {
-      if (tbodyAnalisis) tbodyAnalisis.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Belum ada data jawaban untuk dianalisis.</td></tr>';
+      if (tbodyAnalisis) tbodyAnalisis.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada data jawaban untuk dianalisis.</td></tr>';
       return;
     }
 
     let headerHtml = '<tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th>';
-    questions.forEach((q, i) => headerHtml += `<th>No.${i + 1}</th>`);
+    questions.forEach((q, i) => headerHtml += `<th style="text-align:center;">No.${i + 1}</th>`);
     headerHtml += '</tr>';
     if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
 
@@ -954,8 +1088,64 @@ const GuruModule = {
       });
       matrixHtml += '</tr>';
     });
-
     if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
+
+    // 4. Tombol Sinkronisasi Ulang Semua Data ke Spreadsheet
+    if (btnSyncAll) {
+      btnSyncAll.onclick = async () => {
+        const targetUrl = inputUrl.value.trim();
+        if (!targetUrl) return alert("Silakan tempel dan simpan URL Web App Spreadsheet terlebih dahulu.");
+
+        if (!confirm(`Kirim ulang ${attempts.length} data pengerjaan siswa ke Spreadsheet?`)) return;
+
+        btnSyncAll.disabled = true;
+        btnSyncAll.innerText = "Mengirim Data...";
+
+        try {
+          for (const att of attempts) {
+            const st = att.students || {};
+            const itemAnalysis = [];
+            questions.forEach((q, idx) => {
+              const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
+              itemAnalysis.push({
+                question_number: idx + 1,
+                selected_keys: a ? a.selected_keys : [],
+                is_correct: a ? a.is_correct : false
+              });
+            });
+
+            const payload = {
+              student_name: st.full_name,
+              student_number: st.student_number,
+              class_name: st.classes ? st.classes.class_name : '-',
+              exam_title: examInfo.title,
+              subject: examInfo.subject,
+              submitted_at: new Date(att.submitted_at).toLocaleString("id-ID"),
+              total_questions: questions.length,
+              correct_count: (allAnswers || []).filter(ans => ans.attempt_id === att.id && ans.is_correct).length,
+              final_score: att.score,
+              submission_type: att.submission_type,
+              violation_count: att.violation_count,
+              item_analysis: itemAnalysis
+            };
+
+            await fetch(targetUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
+
+          alert(`Berhasil mengirimkan ${attempts.length} data nilai ke Google Spreadsheet!`);
+        } catch (err) {
+          alert(`Kendala pengiriman: ${err.message}`);
+        } finally {
+          btnSyncAll.disabled = false;
+          btnSyncAll.innerText = "🚀 Kirim Ulang Semua Nilai ke Spreadsheet";
+        }
+      };
+    }
   },
 
   async loadQuickStats() {
