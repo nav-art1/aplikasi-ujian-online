@@ -57,7 +57,7 @@ const ExamRunnerModule = {
   },
 
   initAntiCheat() {
-    // Patuhi pengaturan ON/OFF dari guru
+    // Patuhi sakelar ON / OFF yang ditentukan oleh guru
     if (!this.session.exam.anti_cheat) return;
 
     this.isCheatGuardActive = true;
