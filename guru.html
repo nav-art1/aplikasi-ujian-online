@@ -81,9 +81,9 @@
           <div class="card">
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
-              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Anda juga dapat mengeditnya sewaktu-waktu dengan tombol <strong>⚙️ Atur</strong>.</li>
-              <li>Input butir pertanyaan di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Soal Excel</strong>.</li>
-              <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memasang Google Spreadsheet dan memantau matriks per butir soal.</li>
+              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Gunakan tombol <strong>⚙️ Atur</strong> untuk mengubah pengaturan kapan saja.</li>
+              <li>Input butir pertanyaan di menu <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Soal Excel</strong>.</li>
+              <li>Pantau nilai siswa dan dapatkan integrasi otomatis Google Spreadsheet di menu <strong>Hasil & Analisis Soal</strong>.</li>
             </ol>
           </div>
         </section>
@@ -163,7 +163,6 @@
                 </div>
               </div>
 
-              <!-- PENGATURAN SAKELAR ON/OFF ANTI-CURANG & ACAK SOAL -->
               <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
                 <div style="font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; color: var(--text-main);">🛡️ Pengaturan Keamanan & Pengacakan:</div>
                 
@@ -258,9 +257,9 @@
             <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
               <span class="card-title">Filter Bank Soal</span>
               <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-secondary btn-sm" id="btn-open-modal-stimulus">+ Buat Stimulus</button>
-                <button class="btn btn-warning btn-sm" id="btn-renumber-questions">⚡ Rapikan Nomor</button>
-                <button class="btn btn-primary btn-sm" id="btn-goto-tambah-soal">+ Buat Soal Baru</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-open-modal-stimulus">+ Buat Stimulus</button>
+                <button type="button" class="btn btn-warning btn-sm" id="btn-renumber-questions">⚡ Rapikan Nomor</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-goto-tambah-soal">+ Buat Soal Baru</button>
               </div>
             </div>
             <div style="display: flex; gap: 15px; align-items: center; max-width: 500px;">
@@ -410,24 +409,29 @@
           </div>
         </div>
 
-        <!-- SEKSI 4: TAMBAH SOAL -->
+        <!-- SEKSI 4: TAMBAH SOAL (DENGAN DROPDOWN PILIH UJIAN LANGSUNG) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
               <span class="card-title">Formulir Input Soal Manual</span>
-              <button class="btn btn-secondary btn-sm" id="btn-back-to-bank">&larr; Kembali ke Bank Soal</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-back-to-bank">&larr; Kembali ke Bank Soal</button>
             </div>
 
-            <div id="active-exam-banner" style="background: #e0e7ff; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;">
-              <small style="color: #3730a3; font-weight: 600;">Menambahkan Soal untuk Ujian:</small>
-              <div id="active-exam-title-display" style="font-weight: bold; color: var(--primary-color);">-</div>
+            <!-- PILIHAN SESI UJIAN LANGSUNG -->
+            <div style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
+              <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <label for="question-exam-select" style="font-weight: 700; color: #3730a3; white-space: nowrap;">🎯 Target Sesi Ujian:</label>
+                <select id="question-exam-select" style="flex-grow: 1; font-weight: 600; padding: 8px 12px;">
+                  <option value="">-- Pilih Sesi Ujian --</option>
+                </select>
+              </div>
             </div>
 
             <form id="form-create-question">
               <input type="hidden" id="question-exam-id">
 
               <div class="form-group">
-                <label for="question-stimulus-id">Kaitkan ke Grup Stimulus</label>
+                <label for="question-stimulus-id">Kaitkan ke Grup Stimulus / Wacana (Opsional)</label>
                 <select id="question-stimulus-id">
                   <option value="">-- Soal Mandiri (Tanpa Stimulus) --</option>
                 </select>
@@ -498,8 +502,10 @@
                 </div>
               </div>
 
+              <div id="question-form-alert" class="alert d-none" style="margin-top: 15px;"></div>
+
               <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 25px;">
-                <button type="submit" class="btn btn-primary" id="btn-save-question">Simpan Butir Soal</button>
+                <button type="submit" class="btn btn-primary" id="btn-save-question" style="padding: 10px 24px;">Simpan Butir Soal</button>
               </div>
             </form>
           </div>
@@ -510,7 +516,6 @@
           <div class="card" style="max-width: 900px; margin: 0 auto;">
             <div class="card-header">
               <span class="card-title">Import Butir Soal dari File Excel (.xlsx)</span>
-              <!-- ID TOMBOL DOWNLOAD TEMPLATE SOAL -->
               <button type="button" class="btn btn-secondary btn-sm" id="btn-download-template">📥 Unduh Template Soal (.xlsx)</button>
             </div>
 
@@ -560,8 +565,8 @@
                 <option value="">-- Memuat Kelas --</option>
               </select>
               <div style="margin-left: auto; display: flex; gap: 8px;">
-                <button class="btn btn-secondary btn-sm" id="btn-download-student-template">📥 Unduh Template Siswa</button>
-                <button class="btn btn-primary btn-sm" id="btn-open-import-student-modal">📂 Import Siswa via Excel</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-download-student-template">📥 Unduh Template Siswa</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-open-import-student-modal">📂 Import Siswa via Excel</button>
               </div>
             </div>
           </div>
@@ -590,7 +595,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title" id="title-students-table">Daftar Siswa</span>
-              <button class="btn btn-secondary btn-sm" id="btn-refresh-students">🔄 Segarkan</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-students">🔄 Segarkan</button>
             </div>
             <div class="table-responsive">
               <table class="data-table" id="students-table">
@@ -710,7 +715,7 @@
           <div class="card">
             <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
               <span class="card-title">Rekapitulasi Nilai & Analisis Butir Soal</span>
-              <button class="btn btn-secondary btn-sm" id="btn-refresh-hasil">🔄 Segarkan Data</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-hasil">🔄 Segarkan Data</button>
             </div>
 
             <div style="display: flex; gap: 15px; align-items: center; max-width: 550px; margin-bottom: 20px;">
