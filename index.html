@@ -2,44 +2,69 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portal Ujian Online Siswa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Portal Masuk Ujian Siswa</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    html, body {
+      height: 100%;
+      min-height: 100vh;
+      background-color: #f1f5f9;
+      overflow-y: auto !important;
+    }
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px;
+      box-sizing: border-box;
+    }
+    .portal-card {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 30px 24px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+    }
+  </style>
 </head>
-<body style="background: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+<body>
 
-  <div class="container form-container" style="margin: 20px auto; max-width: 440px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);">
-    <header class="text-center mb-4">
-      <h2 style="color: var(--primary-color); font-weight: 800; letter-spacing: -0.5px;">Portal Ujian Siswa</h2>
-      <p class="text-muted" style="font-size: 0.9rem; margin-top: 4px;">Masukkan Nomor Siswa (NIS/NISN) dan Token yang diberikan oleh guru pengawas</p>
-    </header>
-
-    <form id="form-student-login">
-      <div class="form-group">
-        <label for="student-nisn">Nomor Induk Siswa (NIS / NISN)</label>
-        <input type="text" id="student-nisn" required placeholder="Contoh: 10293" autocomplete="off">
+  <div class="login-wrapper">
+    <div class="portal-card">
+      <div class="text-center" style="margin-bottom: 24px;">
+        <div style="font-size: 2.5rem; margin-bottom: 8px;">📝</div>
+        <h2 style="margin: 0; font-size: 1.4rem; color: var(--text-main); font-weight: 800;">Portal Ujian Siswa</h2>
+        <p class="text-muted" style="font-size: 0.85rem; margin-top: 6px;">Masukkan Nomor Absen dan Token yang diberikan oleh guru.</p>
       </div>
 
-      <div class="form-group">
-        <label for="exam-token-input">Token Ujian</label>
-        <input type="text" id="exam-token-input" required maxlength="10" placeholder="Contoh: IPA7A26" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px; font-size: 1.1rem; text-align: center;" autocomplete="off">
+      <form id="form-student-login">
+        <div class="form-group">
+          <label for="student-attendance-num">Nomor Absen Siswa</label>
+          <input type="number" id="student-attendance-num" min="1" max="100" required placeholder="Contoh: 12" style="font-size: 1.1rem; font-weight: bold; text-align: center;">
+        </div>
+
+        <div class="form-group">
+          <label for="exam-token-input">Token Ujian</label>
+          <input type="text" id="exam-token-input" required maxlength="10" placeholder="Contoh: MAT7A" style="text-transform: uppercase; font-weight: 800; letter-spacing: 3px; text-align: center; font-size: 1.15rem; color: var(--primary-color);">
+        </div>
+
+        <div id="student-login-alert" class="alert d-none"></div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="btn-submit-student-login" style="padding: 12px; font-size: 1rem; margin-top: 10px;">
+          Masuk Ruang Ujian &rarr;
+        </button>
+      </form>
+
+      <div class="text-center" style="margin-top: 25px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <a href="guru.html" class="text-muted" style="text-decoration: none; font-size: 0.85rem;">Portal Masuk Guru & Pengawas &rarr;</a>
       </div>
-
-      <div id="student-login-alert" class="alert d-none"></div>
-
-      <button type="submit" class="btn btn-primary btn-block" id="btn-submit-student-login" style="padding: 12px; font-size: 1rem; margin-top: 10px;">
-        Masuk Ruang Ujian &rarr;
-      </button>
-    </form>
-
-    <div class="text-center" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-      <a href="guru.html" class="text-muted" style="text-decoration: none; font-size: 0.85rem;">
-        Login sebagai Guru Pengawas &rarr;
-      </a>
     </div>
   </div>
 
-  <!-- Pustaka Ekosistem -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/utils.js"></script>
