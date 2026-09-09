@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
 </head>
 <body>
-  <!-- 1. TAMPILAN LOGIN -->
+  <!-- 1. LOGIN GURU -->
   <div id="auth-section" class="container form-container">
     <header class="text-center mb-4">
       <h2>Login Guru</h2>
@@ -33,7 +33,7 @@
     </div>
   </div>
 
-  <!-- 2. DASHBOARD UTAMA GURU -->
+  <!-- 2. DASHBOARD UTAMA -->
   <div id="dashboard-section" class="dashboard-wrapper d-none">
     <aside class="sidebar">
       <div class="sidebar-brand">UJIAN ONLINE GURU</div>
@@ -56,7 +56,7 @@
       <header class="topbar">
         <div class="page-title"><h3 id="current-menu-title">Dashboard</h3></div>
         <div class="user-profile">
-          <span id="teacher-name-display">Memuat nama...</span>
+          <span id="teacher-name-display">Memuat...</span>
         </div>
       </header>
 
@@ -81,10 +81,9 @@
           <div class="card">
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
-              <li>Buat rombel di menu <strong>Kelas</strong> dan tambahkan daftar siswa di <strong>Siswa</strong>.</li>
-              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>.</li>
-              <li>Input butir soal di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Excel</strong>.</li>
-              <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memantau nilai, mengunduh script integrasi Google Spreadsheet, serta menganalisis jawaban per butir soal.</li>
+              <li>Atur jadwal, token, opsi acak, dan sakelar anti-curang di menu <strong>Ujian</strong>.</li>
+              <li>Input butir pertanyaan di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Excel</strong>.</li>
+              <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memasang Google Spreadsheet dan memantau matriks per butir soal.</li>
             </ol>
           </div>
         </section>
@@ -119,18 +118,18 @@
           </div>
         </section>
 
-        <!-- MODAL BUAT UJIAN BARU -->
+        <!-- MODAL BUAT UJIAN BARU DENGAN SAKELAR ANTI-CURANG JELAS -->
         <div id="modal-create-exam" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 650px;">
             <div class="card-header" style="margin-bottom: 15px;">
-              <span class="card-title">Buat Sesi Ujian Baru</span>
+              <span class="card-title">Pengaturan Sesi Ujian Baru</span>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-exam">X</button>
             </div>
             <form id="form-create-exam">
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div class="form-group">
                   <label for="exam-title">Judul Ujian</label>
-                  <input type="text" id="exam-title" required placeholder="Contoh: Penilaian Harian Bab 1">
+                  <input type="text" id="exam-title" required placeholder="Contoh: Asesmen Sumatif Bab 1">
                 </div>
                 <div class="form-group">
                   <label for="exam-subject">Mata Pelajaran</label>
@@ -140,7 +139,7 @@
 
               <div class="form-group">
                 <label for="exam-description">Deskripsi / Petunjuk Singkat (Opsional)</label>
-                <textarea id="exam-description" rows="2" placeholder="Petunjuk khusus siswa..."></textarea>
+                <textarea id="exam-description" rows="2" placeholder="Petunjuk pengerjaan bagi siswa..."></textarea>
               </div>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -151,37 +150,44 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="exam-duration">Durasi (Menit)</label>
+                  <label for="exam-duration">Durasi Pengerjaan (Menit)</label>
                   <input type="number" id="exam-duration" min="5" max="300" value="60" required>
                 </div>
               </div>
 
               <div class="form-group">
-                <label for="exam-token">Token Ujian (Akses Masuk Siswa)</label>
+                <label for="exam-token">Token Ujian (Akses Siswa)</label>
                 <div style="display: flex; gap: 8px;">
-                  <input type="text" id="exam-token" required maxlength="10" placeholder="Contoh: IPA7A" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px;">
+                  <input type="text" id="exam-token" required maxlength="10" placeholder="Contoh: MAT7A" style="text-transform: uppercase; font-weight: bold; letter-spacing: 2px;">
                   <button type="button" class="btn btn-secondary" id="btn-generate-token">Acak</button>
                 </div>
               </div>
 
-              <!-- PENGATURAN KEAMANAN & SAKELAR ANTI-CURANG -->
-              <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 20px;">
-                <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9rem;">Keamanan & Pengacakan:</div>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.9rem;">
+              <!-- PENGATURAN SAKELAR ON/OFF ANTI-CURANG & ACAK SOAL -->
+              <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                <div style="font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; color: var(--text-main);">🛡️ Pengaturan Keamanan & Pengacakan:</div>
+                
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; font-size: 0.9rem;">
                   <input type="checkbox" id="exam-randomize-questions" checked>
-                  Acak urutan butir soal
+                  <strong>Acak Butir Soal Setiap Login</strong> (Tampilan siswa acak, tapi hasil Spreadsheet tetap urut No. 1 s.d. N)
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.9rem;">
+                
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 12px; font-size: 0.9rem;">
                   <input type="checkbox" id="exam-randomize-options" checked>
-                  Acak pilihan jawaban (opsi A-F)
+                  Acak pilihan jawaban (opsi A s.d. F)
                 </label>
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 6px; font-size: 0.9rem; color: #b91c1c; font-weight: 600;">
-                  <input type="checkbox" id="exam-anti-cheat" checked>
-                  Aktifkan Proteksi Anti-Curang (Cegah ganti tab, split screen, dan layar mengambang)
-                </label>
-                <div id="cheat-limit-wrap" style="margin-top: 6px; margin-left: 24px; display: flex; align-items: center; gap: 6px;">
-                  <label for="exam-max-violations" style="font-size: 0.85rem; color: var(--text-muted);">Toleransi Maksimal Pelanggaran:</label>
-                  <input type="number" id="exam-max-violations" min="1" max="10" value="3" style="width: 60px; padding: 3px 6px; font-size: 0.85rem;"> kali
+
+                <div style="border-top: 1px dashed var(--border-color); padding-top: 10px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95rem; color: #b91c1c; font-weight: 700;">
+                    <input type="checkbox" id="exam-anti-cheat" checked>
+                    Aktifkan Proteksi Anti-Curang (Cegah ganti tab, layar belah & jendela mengambang)
+                  </label>
+
+                  <div id="cheat-limit-wrap" style="margin-top: 8px; margin-left: 24px; display: flex; align-items: center; gap: 8px;">
+                    <label for="exam-max-violations" style="font-size: 0.85rem; color: var(--text-muted);">Batas Toleransi Pelanggaran:</label>
+                    <input type="number" id="exam-max-violations" min="1" max="10" value="3" style="width: 65px; padding: 4px 8px; font-size: 0.9rem; font-weight: 700; text-align: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">kali (lebih dari ini = kumpul paksa)</span>
+                  </div>
                 </div>
               </div>
 
@@ -212,6 +218,25 @@
                 <option value="">-- Pilih Sesi Ujian --</option>
               </select>
             </div>
+
+            <!-- KARTU STATISTIK SOAL -->
+            <div id="bank-stats-container" class="d-none" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+              <div style="background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 12px; text-align: center;">
+                <span style="font-size: 0.8rem; font-weight: 700; color: #3730a3; text-transform: uppercase;">Total Butir Soal</span>
+                <div id="stat-bank-total-questions" style="font-size: 1.8rem; font-weight: 800; color: var(--primary-color); margin: 4px 0;">0</div>
+                <small id="stat-bank-types-detail" class="text-muted" style="font-size: 0.75rem;">(0 PG | 0 PGK)</small>
+              </div>
+              <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 12px; text-align: center;">
+                <span style="font-size: 0.8rem; font-weight: 700; color: #065f46; text-transform: uppercase;">Total Stimulus / Wacana</span>
+                <div id="stat-bank-total-stimulus" style="font-size: 1.8rem; font-weight: 800; color: var(--success-color); margin: 4px 0;">0</div>
+                <small class="text-muted" style="font-size: 0.75rem;">Grup Wacana Terkait</small>
+              </div>
+              <div style="background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 12px; text-align: center;">
+                <span style="font-size: 0.8rem; font-weight: 700; color: #854d0e; text-transform: uppercase;">Akumulasi Bobot Poin</span>
+                <div id="stat-bank-total-points" style="font-size: 1.8rem; font-weight: 800; color: #ca8a04; margin: 4px 0;">0</div>
+                <small class="text-muted" style="font-size: 0.75rem;">Total Nilai Maksimal</small>
+              </div>
+            </div>
           </div>
           <div id="bank-soal-list-container"></div>
         </section>
@@ -231,7 +256,7 @@
               <div class="form-group">
                 <label>Gambar Stimulus (Opsional)</label>
                 <input type="file" id="stimulus-image-file" accept="image/*" style="font-size: 0.85rem; margin-bottom: 6px;">
-                <input type="url" id="stimulus-image-url" placeholder="Atau URL gambar eksternal">
+                <input type="url" id="stimulus-image-url" placeholder="Atau URL gambar">
               </div>
               <div class="form-group">
                 <label for="stimulus-content">Isi Teks Wacana</label>
@@ -584,12 +609,12 @@
               </select>
             </div>
 
-            <!-- KARTU INTEGRASI & DOWNLOAD KODE APPS SCRIPT SPREADSHEET -->
+            <!-- KARTU INTEGRASI SPREADSHEET DENGAN DOWNLOAD KODE -->
             <div id="spreadsheet-integration-card" class="d-none" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                 <div>
                   <h4 style="margin: 0; color: #166534; font-size: 1.05rem;">📊 Integrasi Google Spreadsheet Otomatis</h4>
-                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Tautkan Web App Google Apps Script agar rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda.</p>
+                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Tautkan Web App Google Apps Script agar rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda (Urut No. 1 s.d. N).</p>
                 </div>
                 <div style="display: flex; gap: 8px;">
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-download-apps-script">📥 Unduh Script (.js)</button>
@@ -597,7 +622,7 @@
                 </div>
               </div>
 
-              <!-- PANDUAN RINGKAS 5 LANGKAH -->
+              <!-- PANDUAN RINGKAS -->
               <details style="background: #ffffff; border: 1px solid #dcfce7; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.85rem; color: var(--text-main);">
                 <summary style="font-weight: 700; cursor: pointer; color: #166534;">📖 Petunjuk Pasang di Google Spreadsheet (Klik untuk membuka)</summary>
                 <ol style="margin: 8px 0 0 18px; line-height: 1.6;">
@@ -609,7 +634,7 @@
                 </ol>
               </details>
 
-              <!-- FORM INPUT LINK SPREADSHEET WEB APP -->
+              <!-- INPUT LINK WEB APP SPREADSHEET -->
               <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
                 <div style="flex-grow: 1; min-width: 280px;">
                   <label for="input-spreadsheet-url" style="font-size: 0.85rem; font-weight: 700; color: #166534; display: block; margin-bottom: 4px;">Tempel URL Web App Google Spreadsheet di Sini:</label>
@@ -642,7 +667,7 @@
               </table>
             </div>
 
-            <h4 style="margin: 30px 0 10px 0;">2. Matriks Analisis Butir Soal (Opsi Dipilih & Status 1/0)</h4>
+            <h4 style="margin: 30px 0 10px 0;">2. Matriks Analisis Butir Soal (Sesuai Urutan Asli Bank Soal)</h4>
             <div class="table-responsive" style="overflow-x: auto;">
               <table class="data-table" id="analisis-soal-table">
                 <thead id="analisis-table-header">
