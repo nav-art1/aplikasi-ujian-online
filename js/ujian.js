@@ -1,5 +1,6 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: PENGACAKAN TIAP LOGIN & SINKRONISASI SPREADSHEET URUT
+// MODUL PENGERJAAN UJIAN: PENGACAKAN PER TIPE SOAL (PG DENGAN PG, PGK DENGAN PGK)
+// DAN SINKRONISASI SPREADSHEET URUT ASLI NO. 1 S.D. SELESAI
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -57,7 +58,6 @@ const ExamRunnerModule = {
   },
 
   initAntiCheat() {
-    // Patuhi sakelar ON/OFF yang ditentukan guru
     if (!this.session.exam.anti_cheat) return;
 
     this.isCheatGuardActive = true;
@@ -159,14 +159,14 @@ const ExamRunnerModule = {
 
       qData.forEach(q => q.options = optionsMap[q.id] || []);
 
-      // Pengacakan Soal Setiap Kali Siswa Login (Kelompok stimulus tetap terkunci bersama)
+      // PENGACAKAN SOAL PER TIPE SOAL (PG DENGAN PG, PGK DENGAN PGK)
       if (this.session.exam.randomize_questions) {
-        this.questions = this.shuffleQuestionsPreservingStimulus(qData);
+        this.questions = this.shuffleQuestionsByType(qData);
       } else {
         this.questions = qData;
       }
 
-      // Pengacakan Opsi Pilihan
+      // Pengacakan Opsi Jawaban (A s.d. F)
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
@@ -180,19 +180,45 @@ const ExamRunnerModule = {
     }
   },
 
-  shuffleQuestionsPreservingStimulus(questionsList) {
+  // =========================================================================
+  // FUNGSI PENGACAKAN BERDASARKAN TIPE SOAL DENGAN MENGUNCI KELOMPOK STIMULUS
+  // =========================================================================
+  shuffleQuestionsByType(questionsList) {
+    // 1. Pisahkan soal berdasarkan question_type
+    const pgQuestions = questionsList.filter(q => (q.question_type || 'pg').toLowerCase() === 'pg');
+    const pgkQuestions = questionsList.filter(q => (q.question_type || '').toLowerCase() === 'pgk');
+    const otherQuestions = questionsList.filter(q => {
+      const t = (q.question_type || '').toLowerCase();
+      return t !== 'pg' && t !== 'pgk';
+    });
+
+    // 2. Acak masing-masing grup secara terisolasi dengan menjaga keutuhan stimulus
+    const shuffledPg = this.shuffleQuestionsPreservingStimulus(pgQuestions);
+    const shuffledPgk = this.shuffleQuestionsPreservingStimulus(pgkQuestions);
+    const shuffledOther = this.shuffleQuestionsPreservingStimulus(otherQuestions);
+
+    // 3. Gabungkan kembali urutannya: Blok PG di awal, dilanjutkan Blok PGK
+    return [...shuffledPg, ...shuffledPgk, ...shuffledOther];
+  },
+
+  shuffleQuestionsPreservingStimulus(subList) {
+    if (!subList || subList.length === 0) return [];
+    
     const units = [];
     const visitedStim = new Set();
-    questionsList.forEach(q => {
+
+    subList.forEach(q => {
       if (!q.stimulus_group_id) {
         units.push([q]);
       } else if (!visitedStim.has(q.stimulus_group_id)) {
         visitedStim.add(q.stimulus_group_id);
-        const group = questionsList.filter(item => item.stimulus_group_id === q.stimulus_group_id);
+        const group = subList.filter(item => item.stimulus_group_id === q.stimulus_group_id);
         units.push(group);
       }
     });
-    return this.shuffleArray(units).flat();
+
+    const shuffledUnits = this.shuffleArray(units);
+    return shuffledUnits.flat();
   },
 
   shuffleArray(array) {
@@ -214,6 +240,16 @@ const ExamRunnerModule = {
         const stim = this.stimuliMap[q.stimulus_group_id];
         document.getElementById("stimulus-title").innerText = stim.title || "Wacana Stimulus";
         document.getElementById("stimulus-content").innerText = stim.content || "";
+        
+        const stimImgWrap = document.getElementById("stimulus-image-wrap");
+        const stimImg = document.getElementById("stimulus-image");
+        if (stim.image_url) {
+          stimImg.src = stim.image_url;
+          stimImgWrap.style.display = "block";
+        } else {
+          stimImgWrap.style.display = "none";
+        }
+
         stimContainer.classList.remove("d-none");
         this.renderMath(stimContainer);
       } else {
@@ -228,6 +264,17 @@ const ExamRunnerModule = {
     const contentEl = document.getElementById("display-q-content");
     contentEl.innerText = q.content || "";
     this.renderMath(contentEl);
+
+    const imgWrap = document.getElementById("display-q-image-wrap");
+    const imgEl = document.getElementById("display-q-image");
+    if (imgWrap && imgEl) {
+      if (q.image_url) {
+        imgEl.src = q.image_url;
+        imgWrap.style.display = "block";
+      } else {
+        imgWrap.style.display = "none";
+      }
+    }
 
     const optionsContainer = document.getElementById("display-options-list");
     const isPgk = q.question_type === 'pgk';
@@ -455,7 +502,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. SUSUN DATA SPREADSHEET URUT SESUAI ORIGINAL_NUMBER DARI BANK SOAL (BUKAN URUTAN ACAK TAMPILAN SISWA)
+      // 3. SUSUN DATA SPREADSHEET SESUAI URUTAN ASLI BANK SOAL (ORIGINAL_NUMBER)
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -503,7 +550,7 @@ const ExamRunnerModule = {
         }
       }
 
-      // 4. Buka halaman selesai.html
+      // 4. Buka Halaman selesai.html
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
