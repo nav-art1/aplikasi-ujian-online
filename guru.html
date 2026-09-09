@@ -42,7 +42,7 @@
         <li><a href="#" class="nav-link" data-target="panel-ujian">Ujian</a></li>
         <li><a href="#" class="nav-link" data-target="panel-bank-soal">Bank Soal</a></li>
         <li><a href="#" class="nav-link" data-target="panel-tambah-soal">Tambah Soal</a></li>
-        <li><a href="#" class="nav-link" data-target="panel-import-excel">Import Excel</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-import-excel">Import Soal Excel</a></li>
         <li><a href="#" class="nav-link" data-target="panel-siswa">Siswa</a></li>
         <li><a href="#" class="nav-link" data-target="panel-kelas">Kelas</a></li>
         <li><a href="#" class="nav-link" data-target="panel-hasil">Hasil & Analisis Soal</a></li>
@@ -81,8 +81,9 @@
           <div class="card">
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
+              <li>Buat kelas di menu <strong>Kelas</strong>, lalu tambahkan atau import siswa per kelas di menu <strong>Siswa</strong>.</li>
               <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Anda juga dapat mengeditnya sewaktu-waktu dengan tombol <strong>⚙️ Atur</strong>.</li>
-              <li>Input butir pertanyaan di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Excel</strong>.</li>
+              <li>Input butir pertanyaan di <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Soal Excel</strong>.</li>
               <li>Buka menu <strong>Hasil & Analisis Soal</strong> untuk memasang Google Spreadsheet dan memantau matriks per butir soal.</li>
             </ol>
           </div>
@@ -163,13 +164,12 @@
                 </div>
               </div>
 
-              <!-- PENGATURAN SAKELAR ON/OFF ANTI-CURANG & ACAK SOAL -->
               <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
                 <div style="font-weight: 700; margin-bottom: 10px; font-size: 0.95rem; color: var(--text-main);">🛡️ Pengaturan Keamanan & Pengacakan:</div>
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; font-size: 0.9rem;">
                   <input type="checkbox" id="exam-randomize-questions" checked>
-                  <strong>Acak Butir Soal Setiap Login</strong> (Tampilan siswa acak, tapi hasil Spreadsheet tetap urut No. 1 s.d. N)
+                  <strong>Acak Butir Soal per Tipe</strong> (PG acak sesama PG, PGK acak sesama PGK)
                 </label>
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 12px; font-size: 0.9rem;">
@@ -201,7 +201,7 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT PENGATURAN UJIAN (EDIT ANTI-CURANG & ACAK) -->
+        <!-- MODAL EDIT PENGATURAN UJIAN -->
         <div id="modal-edit-exam-settings" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 540px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -220,7 +220,7 @@
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; font-size: 0.9rem;">
                   <input type="checkbox" id="edit-exam-randomize-questions">
-                  Acak urutan butir soal per siswa
+                  Acak butir soal per tipe (PG vs PGK)
                 </label>
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
@@ -236,7 +236,6 @@
                   <input type="checkbox" id="edit-exam-anti-cheat">
                   Status Proteksi Anti-Curang (ON / OFF)
                 </label>
-                <small class="text-muted" style="display: block; margin-left: 24px; margin-top: 4px;">Jika aktif, siswa dilarang buka tab lain, split screen, dan layar mengambang.</small>
 
                 <div style="margin-top: 12px; margin-left: 24px; display: flex; align-items: center; gap: 8px;">
                   <label for="edit-exam-max-violations" style="font-size: 0.85rem; color: #881337; font-weight: 600;">Batas Maksimal Pelanggaran:</label>
@@ -244,8 +243,6 @@
                   <span style="font-size: 0.85rem; color: #881337;">kali</span>
                 </div>
               </div>
-
-              <div id="edit-exam-settings-alert" class="alert d-none"></div>
 
               <div style="display: flex; gap: 10px; justify-content: flex-end;">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-edit-exam-settings">Batal</button>
@@ -508,12 +505,12 @@
           </div>
         </section>
 
-        <!-- SEKSI 5: IMPORT EXCEL -->
+        <!-- SEKSI 5: IMPORT SOAL EXCEL -->
         <section id="panel-import-excel" class="menu-panel d-none">
           <div class="card" style="max-width: 900px; margin: 0 auto;">
             <div class="card-header">
               <span class="card-title">Import Butir Soal dari File Excel (.xlsx)</span>
-              <button class="btn btn-secondary btn-sm" id="btn-download-template">📥 Unduh Template</button>
+              <button class="btn btn-secondary btn-sm" id="btn-download-template">📥 Unduh Template Soal</button>
             </div>
 
             <div class="form-group" style="background: #f8fafc; padding: 14px; border-radius: 6px;">
@@ -553,42 +550,105 @@
           </div>
         </section>
 
-        <!-- SEKSI 6: DATA SISWA -->
+        <!-- SEKSI 6: DATA SISWA PER KELAS & IMPORT SISWA EXCEL -->
         <section id="panel-siswa" class="menu-panel d-none">
-          <div class="card">
-            <div class="card-header"><span class="card-title">Tambah Siswa Baru</span></div>
+          <!-- FILTER PEMILIHAN KELAS TERLEBIH DAHULU -->
+          <div class="card" style="margin-bottom: 20px; background: #f8fafc;">
+            <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+              <label for="student-class-filter" style="font-weight: 700; font-size: 1rem; color: var(--primary-color);">🏫 Pilih Kelas / Rombel:</label>
+              <select id="student-class-filter" style="min-width: 200px; max-width: 350px; font-weight: 700;">
+                <option value="">-- Memuat Kelas --</option>
+              </select>
+              <div style="margin-left: auto; display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" id="btn-download-student-template">📥 Unduh Template Siswa</button>
+                <button class="btn btn-primary btn-sm" id="btn-open-import-student-modal">📂 Import Siswa via Excel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- FORM TAMBAH SISWA MANUAL (SESUAI KELAS YANG DIPILIH) -->
+          <div class="card" id="card-add-student-wrap">
+            <div class="card-header">
+              <span class="card-title" id="title-add-student">Tambah Siswa Baru</span>
+            </div>
             <form id="form-add-student" class="form-grid-3">
               <div class="form-group" style="margin-bottom: 0;">
-                <label for="student-class-id">Pilih Kelas</label>
-                <select id="student-class-id" required></select>
+                <label for="student-attendance-num-input">Nomor Absen</label>
+                <input type="number" id="student-attendance-num-input" min="1" max="100" required placeholder="Contoh: 1">
               </div>
               <div class="form-group" style="margin-bottom: 0;">
-                <label for="student-full-name">Nama Siswa</label>
-                <input type="text" id="student-full-name" required placeholder="Nama Siswa">
+                <label for="student-full-name">Nama Lengkap Siswa</label>
+                <input type="text" id="student-full-name" required placeholder="Nama Lengkap Siswa">
               </div>
               <div class="form-group" style="margin-bottom: 0;">
-                <label for="student-number">NISN</label>
-                <input type="text" id="student-number" required placeholder="Nomor NISN">
+                <label for="student-number">NIS / NISN (Opsional)</label>
+                <input type="text" id="student-number" placeholder="Nomor NIS/NISN">
               </div>
               <div><button type="submit" class="btn btn-primary" id="btn-save-student">+ Tambah</button></div>
             </form>
           </div>
 
+          <!-- TABEL SISWA KHUSUS KELAS TERSEBUT -->
           <div class="card">
             <div class="card-header">
-              <span class="card-title">Daftar Siswa</span>
-              <button class="btn btn-secondary btn-sm" id="btn-refresh-students">Segarkan</button>
+              <span class="card-title" id="title-students-table">Daftar Siswa</span>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-students">🔄 Segarkan</button>
             </div>
             <div class="table-responsive">
               <table class="data-table" id="students-table">
                 <thead>
-                  <tr><th>No</th><th>Kelas</th><th>NISN</th><th>Nama Lengkap</th><th>Status</th><th>Aksi</th></tr>
+                  <tr>
+                    <th style="width: 70px; text-align: center;">No. Absen</th>
+                    <th>Nama Lengkap</th>
+                    <th>NISN / NIS</th>
+                    <th>Kelas</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
                 </thead>
-                <tbody id="students-table-body"></tbody>
+                <tbody id="students-table-body">
+                  <tr><td colspan="6" class="text-center text-muted">Silakan pilih kelas terlebih dahulu di atas.</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
         </section>
+
+        <!-- MODAL IMPORT SISWA DARI EXCEL -->
+        <div id="modal-import-student" class="modal-overlay d-none">
+          <div class="modal-content" style="max-width: 600px;">
+            <div class="card-header" style="margin-bottom: 15px;">
+              <span class="card-title">Import Siswa dari Excel (.xlsx)</span>
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-import-student">X</button>
+            </div>
+
+            <div style="background: #eef2ff; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #c7d2fe;">
+              Target Kelas: <strong id="import-student-class-display" style="color: var(--primary-color);">-</strong>
+            </div>
+
+            <div class="form-group" style="background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 25px; text-align: center;">
+              <input type="file" id="excel-student-file-input" accept=".xlsx, .xls" style="max-width: 320px; margin: 0 auto; display: block;">
+              <small class="text-muted" style="display: block; margin-top: 8px;">Format kolom template: nomor_absen, nama_siswa, nisn</small>
+            </div>
+
+            <div id="import-student-preview-area" class="d-none" style="margin-top: 15px;">
+              <div style="font-weight: 700; margin-bottom: 6px;" id="import-student-summary-text">Pratinjau Data Siswa</div>
+              <div class="table-responsive" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px;">
+                <table class="data-table">
+                  <thead><tr><th>No. Absen</th><th>Nama Siswa</th><th>NISN</th></tr></thead>
+                  <tbody id="import-student-preview-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="import-student-alert" class="alert d-none" style="margin-top: 12px;"></div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+              <button type="button" class="btn btn-secondary" id="btn-cancel-import-student">Batal</button>
+              <button type="button" class="btn btn-primary" id="btn-commit-import-student" disabled>🚀 Simpan Semua Siswa</button>
+            </div>
+          </div>
+        </div>
 
         <!-- MODAL EDIT SISWA -->
         <div id="modal-edit-student" class="modal-overlay d-none">
@@ -597,8 +657,9 @@
             <form id="form-edit-student">
               <input type="hidden" id="edit-student-id">
               <div class="form-group"><label>Kelas</label><select id="edit-student-class-id" required></select></div>
+              <div class="form-group"><label>Nomor Absen</label><input type="number" id="edit-student-attendance-num" min="1" max="100" required></div>
               <div class="form-group"><label>Nama Lengkap</label><input type="text" id="edit-student-full-name" required></div>
-              <div class="form-group"><label>NISN</label><input type="text" id="edit-student-number" required></div>
+              <div class="form-group"><label>NIS / NISN</label><input type="text" id="edit-student-number"></div>
               <div style="display: flex; gap: 10px; justify-content: flex-end;">
                 <button type="button" class="btn btn-secondary" id="btn-cancel-edit-student">Batal</button>
                 <button type="submit" class="btn btn-primary" id="btn-update-student">Simpan Perubahan</button>
@@ -646,7 +707,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 8: REKAPITULASI NILAI, ANALISIS BUTIR SOAL & INTEGRASI SPREADSHEET -->
+        <!-- SEKSI 8: HASIL & ANALISIS SOAL -->
         <section id="panel-hasil" class="menu-panel d-none">
           <div class="card">
             <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
@@ -654,7 +715,6 @@
               <button class="btn btn-secondary btn-sm" id="btn-refresh-hasil">🔄 Segarkan Data</button>
             </div>
 
-            <!-- FILTER PILIH UJIAN -->
             <div style="display: flex; gap: 15px; align-items: center; max-width: 550px; margin-bottom: 20px;">
               <label for="hasil-exam-filter" style="font-weight: 700; white-space: nowrap;">Pilih Sesi Ujian:</label>
               <select id="hasil-exam-filter" style="flex-grow: 1;">
@@ -662,12 +722,11 @@
               </select>
             </div>
 
-            <!-- KARTU INTEGRASI SPREADSHEET -->
             <div id="spreadsheet-integration-card" class="d-none" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                 <div>
                   <h4 style="margin: 0; color: #166534; font-size: 1.05rem;">📊 Integrasi Google Spreadsheet Otomatis</h4>
-                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Tautkan Web App Google Apps Script agar rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda (Urut No. 1 s.d. N).</p>
+                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda (Urut No. 1 s.d. N).</p>
                 </div>
                 <div style="display: flex; gap: 8px;">
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-download-apps-script">📥 Unduh Script (.js)</button>
@@ -682,7 +741,7 @@
                   <li>Klik menu <strong>Ekstensi</strong> &rarr; <strong>Apps Script</strong>, lalu tempelkan kode yang disalin/diunduh.</li>
                   <li>Klik tombol biru <strong>Deploy (Terapkan)</strong> &rarr; <strong>New deployment (Penerapan baru)</strong> &rarr; pilih roda gigi <strong>Web app</strong>.</li>
                   <li>Atur <em>Execute as</em>: <strong>Me</strong>, dan <em>Who has access</em>: <strong>Anyone (Siapa saja)</strong> &rarr; klik <strong>Deploy</strong>.</li>
-                  <li>Salin <strong>Web App URL</strong> yang dihasilkan (awalan: <code>https://script.google.com/macros/s/.../exec</code>) lalu tempelkan pada kolom di bawah ini.</li>
+                  <li>Salin <strong>Web App URL</strong> yang dihasilkan lalu tempelkan pada kolom di bawah ini.</li>
                 </ol>
               </details>
 
@@ -702,7 +761,7 @@
               <table class="data-table" id="hasil-table">
                 <thead>
                   <tr>
-                    <th>No</th>
+                    <th>No. Absen</th>
                     <th>Nama Siswa</th>
                     <th>NISN</th>
                     <th>Kelas</th>
@@ -722,10 +781,10 @@
             <div class="table-responsive" style="overflow-x: auto;">
               <table class="data-table" id="analisis-soal-table">
                 <thead id="analisis-table-header">
-                  <tr><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th></tr>
+                  <tr><th>No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th></tr>
                 </thead>
                 <tbody id="analisis-table-body">
-                  <tr><td colspan="4" class="text-center text-muted">Pilih ujian untuk memuat analisis butir soal.</td></tr>
+                  <tr><td colspan="5" class="text-center text-muted">Pilih ujian untuk memuat analisis butir soal.</td></tr>
                 </tbody>
               </table>
             </div>
