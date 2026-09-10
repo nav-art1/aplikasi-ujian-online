@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: KOTAK SKRIP SPREADSHEET, BANK SOAL & ANALISIS POIN
+// MODUL DASHBOARD GURU: DILENGKAPI FITUR GANTI & ACAK TOKEN DI MODAL ATUR
 // ==========================================================================
 
 const GuruModule = {
@@ -100,7 +100,6 @@ const GuruModule = {
       console.warn("XLSX export warning, beralih ke CSV:", err);
     }
 
-    // Fallback CSV
     try {
       const headers = Object.keys(templateData[0]).join(",");
       const rows = templateData.map(row => Object.values(row).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
@@ -610,7 +609,7 @@ const GuruModule = {
           <td>${antiCheatBadge}</td>
           <td><span class="badge ${ex.is_active ? 'badge-success' : 'badge-danger'}">${ex.is_active ? 'Aktif' : 'Tutup'}</span></td>
           <td>
-            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak & Anti-Curang" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak, Anti-Curang & Ganti Token" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
             <button type="button" class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
             <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
           </td>
@@ -620,12 +619,14 @@ const GuruModule = {
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
   },
 
+  // MEMUAT NILAI TERMASUK TOKEN SAAT MODAL ATUR DIKLIK
   openEditExamSettingsModal(examId) {
     const exam = this.examsList.find(e => e.id === examId);
     if (!exam) return;
 
     document.getElementById("edit-exam-id").value = exam.id;
     document.getElementById("edit-exam-title-display").innerText = `${exam.title} (${exam.subject || '-'})`;
+    document.getElementById("edit-exam-token").value = exam.token || '';
     document.getElementById("edit-exam-randomize-questions").checked = !!exam.randomize_questions;
     document.getElementById("edit-exam-randomize-options").checked = !!exam.randomize_options;
     document.getElementById("edit-exam-anti-cheat").checked = (exam.anti_cheat !== false);
@@ -648,6 +649,7 @@ const GuruModule = {
       document.getElementById("exam-token").value = this.generateExamToken();
     });
 
+    // Form Buat Ujian Baru
     document.getElementById("form-create-exam")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = document.getElementById("exam-title").value.trim();
@@ -683,33 +685,49 @@ const GuruModule = {
       await this.loadQuickStats();
     });
 
+    // Modal Edit Pengaturan Ujian (Termasuk Ganti Token)
     const modalEditSettings = document.getElementById("modal-edit-exam-settings");
     const closeEditSettings = () => modalEditSettings.classList.add("d-none");
     document.getElementById("btn-close-modal-edit-exam-settings")?.addEventListener("click", closeEditSettings);
     document.getElementById("btn-cancel-edit-exam-settings")?.addEventListener("click", closeEditSettings);
 
+    // Tombol Acak Token Baru di Modal Atur
+    document.getElementById("btn-generate-edit-token")?.addEventListener("click", () => {
+      document.getElementById("edit-exam-token").value = this.generateExamToken();
+    });
+
+    // Simpan Perubahan Pengaturan & Token Baru ke Supabase
     document.getElementById("form-edit-exam-settings")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("edit-exam-id").value;
+      const newToken = document.getElementById("edit-exam-token").value.trim().toUpperCase();
       const randomizeQ = document.getElementById("edit-exam-randomize-questions").checked;
       const randomizeOpt = document.getElementById("edit-exam-randomize-options").checked;
       const antiCheat = document.getElementById("edit-exam-anti-cheat").checked;
       const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
 
+      if (!newToken) {
+        alert("Token ujian tidak boleh kosong!");
+        return;
+      }
+
       const client = getSupabaseClient();
       try {
-        await client.from('exams').update({
+        const { error } = await client.from('exams').update({
+          token: newToken,
           randomize_questions: randomizeQ,
           randomize_options: randomizeOpt,
           anti_cheat: antiCheat,
           max_violations: maxViolations
         }).eq('id', examId);
 
+        if (error) throw error;
+
         closeEditSettings();
         await this.loadExamsTable();
-        alert("Pengaturan keamanan & pengacakan berhasil diperbarui!");
+        alert(`Pengaturan dan Token Ujian berhasil diperbarui menjadi "${newToken}"!`);
       } catch (err) {
-        alert(`Gagal: ${err.message}`);
+        alert(`Gagal memperbarui: ${err.message}`);
       }
     });
   },
@@ -1183,6 +1201,113 @@ const GuruModule = {
     });
   },
 
+  setupImportExcelEventListeners() {
+    const btnDownload = document.getElementById("btn-download-template");
+    if (btnDownload) {
+      btnDownload.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.downloadExcelTemplate();
+      };
+    }
+
+    const fileInput = document.getElementById("excel-file-input");
+    fileInput?.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          this.parsedExcelQuestions = [];
+          let tableRows = '';
+
+          raw.forEach((r, idx) => {
+            const num = r.nomor || (idx + 1);
+            const type = (r.tipe || 'pg').toLowerCase().trim();
+            const points = parseFloat(r.poin) || 1.0;
+            const content = (r.soal || '').trim();
+            const rawKey = String(r.kunci || '').toUpperCase().trim();
+            const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+
+            const options = [];
+            ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
+              const text = r[`opsi_${lbl}`] ? String(r[`opsi_${lbl}`]).trim() : '';
+              if (text) {
+                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: correctKeys.includes(lbl.toUpperCase()) });
+              }
+            });
+
+            if (content && options.length >= 2) {
+              this.parsedExcelQuestions.push({
+                original_number: num,
+                stimulus_title: r.judul_stimulus ? String(r.judul_stimulus).trim() : null,
+                stimulus_content: r.isi_stimulus ? String(r.isi_stimulus).trim() : '',
+                question_type: type,
+                points: points,
+                content: content,
+                correct_keys: correctKeys,
+                options: options
+              });
+
+              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${correctKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+            }
+          });
+
+          document.getElementById("import-summary-text").innerText = `Pratinjau: ${this.parsedExcelQuestions.length} Soal Siap Diimpor`;
+          document.getElementById("import-preview-body").innerHTML = tableRows;
+          document.getElementById("import-preview-area").classList.remove("d-none");
+        } catch (err) {
+          alert(`Gagal baca Excel: ${err.message}`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById("btn-commit-import")?.addEventListener("click", async () => {
+      const examId = document.getElementById("import-exam-select").value;
+      if (!examId) return alert("Pilih sesi ujian terlebih dahulu.");
+
+      const client = getSupabaseClient();
+      try {
+        const stimMap = {};
+        for (const q of this.parsedExcelQuestions) {
+          let stimId = null;
+          if (q.stimulus_title) {
+            if (!stimMap[q.stimulus_title]) {
+              const { data: s } = await client.from('stimulus_groups').insert({ exam_id: examId, title: q.stimulus_title, content: q.stimulus_content }).select().single();
+              stimMap[q.stimulus_title] = s.id;
+            }
+            stimId = stimMap[q.stimulus_title];
+          }
+
+          const { data: insertedQ } = await client.from('questions').insert({
+            exam_id: examId,
+            stimulus_group_id: stimId,
+            original_number: q.original_number,
+            question_type: q.question_type,
+            points: q.points,
+            content: q.content,
+            correct_keys: correctKeys
+          }).select().single();
+
+          const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
+          await client.from('options').insert(opts);
+        }
+
+        alert("Sukses mengimpor seluruh butir soal!");
+        document.getElementById("import-preview-area").classList.add("d-none");
+        document.getElementById("excel-file-input").value = "";
+        await this.loadBankSoalContent(examId);
+      } catch (err) {
+        alert(`Gagal impor: ${err.message}`);
+      }
+    });
+  },
+
   // =========================================================================
   // SEKSI REKAP NILAI & SPREADSHEET (DENGAN KOTAK SKRIP LANGSUNG)
   // =========================================================================
@@ -1283,7 +1408,6 @@ const GuruModule = {
       if (sel.value) this.loadHasilAndAnalisis(sel.value);
     });
 
-    // Isi teks ke kotak kode Apps Script secara otomatis
     const codeBox = document.getElementById("apps-script-code-box");
     if (codeBox) {
       codeBox.value = this.getAppsScriptTemplate();
@@ -1300,11 +1424,10 @@ const GuruModule = {
       URL.revokeObjectURL(url);
     });
 
-    // Tombol Salin Kode Apps Script
     document.getElementById("btn-copy-apps-script")?.addEventListener("click", () => {
       const code = this.getAppsScriptTemplate();
       navigator.clipboard.writeText(code).then(() => {
-        alert("✅ Kode skrip Google Spreadsheet berhasil disalin ke clipboard! Buka Ekstensi -> Apps Script di spreadsheet Anda lalu tempelkan.");
+        alert("✅ Kode skrip Google Spreadsheet berhasil disalin ke clipboard!");
       });
     });
   },
