@@ -1423,7 +1423,7 @@ const GuruModule = {
   },
 
   // =========================================================================
-  // FIX UTAMA: RENDER MATRIKS ANALISIS BUTIR SOAL DENGAN NILAI POIN ASLI
+  // FIX UTAMA: RENDER MATRIKS ANALISIS DENGAN NILAI REAL-TIME & FALLBACK AMAN
   // =========================================================================
   async loadHasilAndAnalisis(examId) {
     const integrationCard = document.getElementById("spreadsheet-integration-card");
@@ -1495,7 +1495,7 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // 2. Ambil seluruh butir soal urut No. 1 s.d. N asli
+    // 2. Ambil butir soal urut No. 1 s.d. N asli
     const { data: questions } = await client
       .from('questions')
       .select('id, original_number, points, question_type, correct_keys')
@@ -1515,17 +1515,21 @@ const GuruModule = {
     headerHtml += '</tr>';
     if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
 
-    // 3. Ambil seluruh jawaban siswa lengkap dengan kolom score_earned
+    // 3. Ambil seluruh jawaban siswa (Gunakan select * agar tidak gagal jika ada kolom baru/lama)
     const attemptIds = attempts.map(a => a.id);
-    const { data: allAnswers } = await client
+    const { data: allAnswers, error: ansErr } = await client
       .from('student_answers')
-      .select('attempt_id, question_id, selected_keys, is_correct, score_earned')
+      .select('*')
       .in('attempt_id', attemptIds);
+
+    if (ansErr) console.error("Error mengambil student_answers:", ansErr);
 
     const ansMap = {};
     (allAnswers || []).forEach(ans => {
-      if (!ansMap[ans.attempt_id]) ansMap[ans.attempt_id] = {};
-      ansMap[ans.attempt_id][ans.question_id] = ans;
+      const attId = String(ans.attempt_id);
+      const qId = String(ans.question_id);
+      if (!ansMap[attId]) ansMap[attId] = {};
+      ansMap[attId][qId] = ans;
     });
 
     // 4. Render tabel matriks per siswa
@@ -1533,6 +1537,8 @@ const GuruModule = {
     attempts.forEach(att => {
       const st = att.students || {};
       const isCheat = att.submission_type === 'forced_cheat';
+      const attId = String(att.id);
+
       matrixHtml += `
         <tr style="${isCheat ? 'background: #fff1f2;' : ''}">
           <td style="text-align: center;"><strong>${st.attendance_number || '-'}</strong></td>
@@ -1543,12 +1549,14 @@ const GuruModule = {
       `;
 
       questions.forEach(q => {
-        const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
+        const qId = String(q.id);
+        const a = (ansMap[attId] && ansMap[attId][qId]) ? ansMap[attId][qId] : null;
+
         if (a) {
           const keys = (a.selected_keys || []).join(",") || "-";
           const maxP = parseFloat(q.points) || 1.0;
-          
-          // Fallback kalkulasi jika data lama di student_answers belum ada score_earned
+
+          // Hitung nilai riil (baik yang tersimpan di DB ataupun auto-kalkulasi fallback jika data lama)
           let earned = 0;
           if (a.score_earned !== null && a.score_earned !== undefined) {
             earned = parseFloat(a.score_earned);
@@ -1571,9 +1579,9 @@ const GuruModule = {
 
           let color = '#ef4444'; // Merah (0)
           if (earned >= maxP) {
-            color = 'var(--success-color)'; // Hijau (Full)
+            color = 'var(--success-color)'; // Hijau (Penuh)
           } else if (earned > 0) {
-            color = '#f59e0b'; // Kuning Oranye (Parsial/Setengah)
+            color = '#f59e0b'; // Oranye (Setengah)
           }
 
           matrixHtml += `<td style="color: ${color}; font-weight: 700; text-align: center;">${keys} (${earned})</td>`;
@@ -1585,7 +1593,7 @@ const GuruModule = {
     });
     if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
 
-    // 5. Tombol Kirim Ulang Semua Data ke Google Spreadsheet
+    // 5. Tombol Sinkronisasi Ulang ke Google Spreadsheet
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
@@ -1598,10 +1606,12 @@ const GuruModule = {
         try {
           for (const att of attempts) {
             const st = att.students || {};
+            const attId = String(att.id);
             const itemAnalysis = [];
             
             questions.forEach((q) => {
-              const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
+              const qId = String(q.id);
+              const a = (ansMap[attId] && ansMap[attId][qId]) ? ansMap[attId][qId] : null;
               const maxP = parseFloat(q.points) || 1.0;
               let earned = 0;
 
@@ -1641,7 +1651,7 @@ const GuruModule = {
               submitted_at: new Date(att.submitted_at).toLocaleString("id-ID"),
               total_questions: questions.length,
               total_points: att.total_points || 0,
-              correct_count: (allAnswers || []).filter(ans => ans.attempt_id === att.id && ans.is_correct).length,
+              correct_count: (allAnswers || []).filter(ans => String(ans.attempt_id) === attId && ans.is_correct).length,
               final_score: att.score,
               submission_type: att.submission_type,
               violation_count: att.violation_count,
