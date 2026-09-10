@@ -46,7 +46,7 @@
         <li><a href="#" class="nav-link" data-target="panel-import-excel">Import Soal Excel</a></li>
         <li><a href="#" class="nav-link" data-target="panel-siswa">Siswa</a></li>
         <li><a href="#" class="nav-link" data-target="panel-kelas">Kelas</a></li>
-        <li><a href="#" class="nav-link" data-target="panel-hasil">Hasil & Analisis Soal</a></li>
+        <li><a href="#" class="nav-link" data-target="panel-hasil">Hasil Ujian</a></li>
       </ul>
       <div class="sidebar-footer">
         <button type="button" id="btn-logout" class="btn btn-danger btn-block">Logout</button>
@@ -82,9 +82,9 @@
           <div class="card">
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
-              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Gunakan tombol <strong>⚙️ Atur</strong> untuk mengubah token, sakelar anti-curang, dan pengacakan kapan saja.</li>
+              <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>. Gunakan tombol <strong>⚙️ Atur</strong> untuk mengubah pengaturan kapan saja.</li>
               <li>Input butir pertanyaan di menu <strong>Tambah Soal</strong> atau secara massal melalui <strong>Import Soal Excel</strong>.</li>
-              <li>Pantau nilai siswa dan dapatkan integrasi otomatis Google Spreadsheet di menu <strong>Hasil & Analisis Soal</strong>.</li>
+              <li>Pantau nilai siswa dan dapatkan integrasi otomatis Google Spreadsheet di menu <strong>Hasil Ujian</strong>.</li>
             </ol>
           </div>
         </section>
@@ -174,7 +174,7 @@
                 
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 12px; font-size: 0.9rem;">
                   <input type="checkbox" id="exam-randomize-options" checked>
-                  Acak pilihan jawaban (opsi A s.d. F)
+                  <strong>Acak Pilihan Jawaban</strong> (Urutan opsi A s.d. F teracak bagi tiap siswa)
                 </label>
 
                 <div style="border-top: 1px dashed var(--border-color); padding-top: 10px;">
@@ -215,14 +215,12 @@
                 <strong id="edit-exam-title-display" style="color: var(--primary-color); font-size: 1rem;">-</strong>
               </div>
 
-              <!-- INPUT GANTI TOKEN UJIAN -->
               <div class="form-group" style="background: #ffffff; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
                 <label for="edit-exam-token" style="font-weight: 700; color: var(--primary-color); display: block; margin-bottom: 6px;">🔑 Token Ujian (Akses Masuk Siswa):</label>
                 <div style="display: flex; gap: 8px;">
                   <input type="text" id="edit-exam-token" required maxlength="10" placeholder="Contoh: MAT7A" style="text-transform: uppercase; font-weight: 800; letter-spacing: 2px; font-size: 1.1rem; flex-grow: 1;">
                   <button type="button" class="btn btn-secondary" id="btn-generate-edit-token" style="white-space: nowrap;">🎲 Acak Token Baru</button>
                 </div>
-                <small class="text-muted" style="display: block; margin-top: 4px;">Anda bisa mengetik token baru sendiri atau menekan tombol acak.</small>
               </div>
 
               <div style="background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 16px;">
@@ -720,11 +718,11 @@
           </div>
         </div>
 
-        <!-- SEKSI 8: HASIL & ANALISIS SOAL -->
+        <!-- SEKSI 8: HASIL UJIAN (HANYA REKAPITULASI NILAI SISWA & SPREADSHEET) -->
         <section id="panel-hasil" class="menu-panel d-none">
           <div class="card">
             <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
-              <span class="card-title">Rekapitulasi Nilai & Analisis Butir Soal</span>
+              <span class="card-title">Rekapitulasi Nilai Siswa</span>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-hasil">🔄 Segarkan Data</button>
             </div>
 
@@ -735,11 +733,12 @@
               </select>
             </div>
 
+            <!-- KARTU INTEGRASI GOOGLE SPREADSHEET -->
             <div id="spreadsheet-integration-card" class="d-none" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
               <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
                 <div>
                   <h4 style="margin: 0; color: #166534; font-size: 1.05rem;">📊 Integrasi Google Spreadsheet Otomatis</h4>
-                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Rekap nilai & matriks analisis butir soal otomatis tercatat rapi di Google Drive Anda (Urut No. 1 s.d. N).</p>
+                  <p style="margin: 4px 0 0 0; font-size: 0.85rem; color: #15803d;">Rekap nilai & analisis butir soal otomatis tercatat rapi di Google Drive Anda (Urut No. 1 s.d. N).</p>
                 </div>
                 <div style="display: flex; gap: 8px;">
                   <button type="button" class="btn btn-secondary btn-sm" id="btn-download-apps-script">📥 Unduh Script (.js)</button>
@@ -778,7 +777,6 @@
               <div id="spreadsheet-alert" class="alert d-none" style="margin-top: 10px; margin-bottom: 0;"></div>
             </div>
 
-            <h4 style="margin: 20px 0 10px 0;">1. Rekapitulasi Nilai Siswa</h4>
             <div class="table-responsive">
               <table class="data-table" id="hasil-table">
                 <thead>
@@ -787,6 +785,7 @@
                     <th>Nama Siswa</th>
                     <th>NISN</th>
                     <th>Kelas</th>
+                    <th>Total Poin</th>
                     <th>Nilai (0-100)</th>
                     <th>Waktu Selesai</th>
                     <th>Status Kejujuran</th>
@@ -794,19 +793,7 @@
                   </tr>
                 </thead>
                 <tbody id="hasil-table-body">
-                  <tr><td colspan="8" class="text-center text-muted">Silakan pilih ujian terlebih dahulu.</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <h4 style="margin: 30px 0 10px 0;">2. Matriks Analisis Butir Soal (Sesuai Urutan Asli Bank Soal)</h4>
-            <div class="table-responsive" style="overflow-x: auto;">
-              <table class="data-table" id="analisis-soal-table">
-                <thead id="analisis-table-header">
-                  <tr><th>No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th></tr>
-                </thead>
-                <tbody id="analisis-table-body">
-                  <tr><td colspan="5" class="text-center text-muted">Pilih ujian untuk memuat analisis butir soal.</td></tr>
+                  <tr><td colspan="9" class="text-center text-muted">Silakan pilih ujian terlebih dahulu.</td></tr>
                 </tbody>
               </table>
             </div>
