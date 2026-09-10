@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: LABEL A-F URUT, ISI DIAKAC, & SKOR PGK BERTINGKAT
+// MODUL PENGERJAAN UJIAN: SKOR PGK BERTINGKAT (BENAR, SALAH 1, SALAH 2, SALAH 3)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -141,7 +141,7 @@ const ExamRunnerModule = {
 
       const { data: qData, error: qErr } = await client
         .from('questions')
-        .select('id, original_number, stimulus_group_id, question_type, points, pgk_score_err1, pgk_score_err2, image_url, content, correct_keys')
+        .select('id, original_number, stimulus_group_id, question_type, points, pgk_score_err1, pgk_score_err2, pgk_score_err3, image_url, content, correct_keys')
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
 
@@ -163,7 +163,7 @@ const ExamRunnerModule = {
         q.options = optionsMap[q.id] || [];
       });
 
-      // 1. Pengacakan Soal per Tipe Soal (PG sesama PG, PGK sesama PGK)
+      // 1. Pengacakan Butir Soal per Tipe Soal
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
       if (shouldRandomizeQuestions) {
         this.questions = this.shuffleQuestionsByType(qData);
@@ -171,7 +171,7 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut dari atas ke bawah)
+      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -294,7 +294,6 @@ const ExamRunnerModule = {
     const isPgk = q.question_type === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
     
-    // Opsi dengan teks teracak namun huruf A, B, C, D tetap urut
     const opts = q.displayOptions || q.options || [];
 
     let optionsHtml = '';
@@ -433,7 +432,7 @@ const ExamRunnerModule = {
   },
 
   // =========================================================================
-  // LOGIKA PENILAIAN PGK: SALAH 0 = FULL, SALAH 1 = PGK_ERR1, SALAH 2 = PGK_ERR2
+  // PENILAIAN AKURAT: NILAI 0 TETAP 0, BEBAS DITENTUKAN GURU
   // =========================================================================
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
@@ -468,11 +467,11 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // Ekstrak Kunci Pilihan Siswa
+        // 1. Ekstrak Kunci Pilihan Siswa
         const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
         const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
-        // Ekstrak Kunci Benar
+        // 2. Ekstrak Kunci Benar
         let trueKeys = [];
         if (q.correct_keys) {
           const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
@@ -487,7 +486,7 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // PILIHAN GANDA BIASA (1 KUNCI)
+          // --- PG BIASA (1 KUNCI) ---
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
@@ -495,19 +494,23 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // PILIHAN GANDA KOMPLEKS (PGK)
+          // --- PGK (MULTI KUNCI) ---
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
-          // Ambil skor custom dari guru jika ada, atau gunakan default proporsional
-          const scoreErr1 = (q.pgk_score_err1 !== undefined && q.pgk_score_err1 !== null)
-            ? parseFloat(q.pgk_score_err1)
-            : Number((qPoints * 0.5).toFixed(2));
+          // Pembacaan presisi: Angka 0 tetap terbaca sebagai 0 murni
+          const parseScore = (val, defaultVal) => {
+            if (val !== undefined && val !== null && val !== '') {
+              const parsed = parseFloat(val);
+              return isNaN(parsed) ? defaultVal : parsed;
+            }
+            return defaultVal;
+          };
 
-          const scoreErr2 = (q.pgk_score_err2 !== undefined && q.pgk_score_err2 !== null)
-            ? parseFloat(q.pgk_score_err2)
-            : 0;
+          const scoreErr1 = parseScore(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
+          const scoreErr2 = parseScore(q.pgk_score_err2, 0);
+          const scoreErr3 = parseScore(q.pgk_score_err3, 0);
 
           if (totalErrors === 0 && selectedKeys.length > 0) {
             scoreEarned = qPoints;
@@ -518,6 +521,9 @@ const ExamRunnerModule = {
             isCorrect = false;
           } else if (totalErrors === 2) {
             scoreEarned = scoreErr2;
+            isCorrect = false;
+          } else if (totalErrors === 3) {
+            scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
             scoreEarned = 0;
@@ -568,7 +574,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Susun Data Spreadsheet Urut Asli No. 1 s.d. N
+      // 3. Susun Data Spreadsheet
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
