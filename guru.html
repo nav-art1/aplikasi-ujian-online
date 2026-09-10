@@ -83,8 +83,8 @@
             <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
             <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
               <li>Atur jadwal, token, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong>.</li>
-              <li>Kelola butir soal di <strong>Bank Soal</strong>. Anda dapat menggunakan tombol <strong>⚡ Samakan Skor Massal</strong> untuk mengatur skor seluruh soal PG dan PGK sekaligus.</li>
-              <li>Input soal manual di menu <strong>Tambah Soal</strong> dengan skor PGK fleksibel (Benar Semua, Salah 1, Salah 2).</li>
+              <li>Kelola butir soal di <strong>Bank Soal</strong>. Gunakan tombol <strong>⚡ Samakan Skor Massal</strong> untuk mengatur skor seragam untuk Benar Semua, Salah 1, Salah 2, dan Salah 3.</li>
+              <li>Input butir pertanyaan manual di menu <strong>Tambah Soal</strong> dengan skor PGK yang bebas Anda tentukan.</li>
               <li>Pantau rekap nilai ujian dan integrasi Google Spreadsheet di menu <strong>Hasil Ujian</strong>.</li>
             </ol>
           </div>
@@ -301,43 +301,44 @@
           <div id="bank-soal-list-container"></div>
         </section>
 
-        <!-- MODAL SAMAKAN SKOR MASSAL (PG & PGK) -->
+        <!-- MODAL SAMAKAN SKOR MASSAL: BENAR, SALAH 1, SALAH 2, SALAH 3 -->
         <div id="modal-bulk-score" class="modal-overlay d-none">
-          <div class="modal-content" style="max-width: 520px;">
+          <div class="modal-content" style="max-width: 580px;">
             <div class="card-header" style="margin-bottom: 15px;">
               <span class="card-title">⚡ Atur / Samakan Skor Soal Massal</span>
               <button type="button" class="btn btn-secondary btn-sm" id="btn-close-modal-bulk-score">X</button>
             </div>
-            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0;">Atur skor seragam untuk seluruh butir soal pada sesi ujian yang sedang dipilih saat ini.</p>
+            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0;">Atur skor seragam untuk seluruh butir soal pada sesi ujian yang sedang aktif. Anda bebas mengisi nilai berapapun (termasuk 0).</p>
             <form id="form-bulk-score">
-              <!-- SKOR SERAGAM PG -->
               <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; margin-bottom: 15px;">
                 <div style="font-weight: 700; color: var(--primary-color); margin-bottom: 8px;">1. Pengaturan Skor Semua Soal PG (Pilihan Ganda):</div>
                 <div class="form-group" style="margin-bottom: 0;">
                   <label for="bulk-score-pg">Skor Benar untuk Setiap Soal PG</label>
-                  <input type="number" id="bulk-score-pg" min="0.1" step="0.1" value="2.0" required style="font-weight: bold;">
-                  <small class="text-muted">Jika salah, otomatis bernilai 0.</small>
+                  <input type="number" id="bulk-score-pg" min="0" step="0.1" value="2.0" required style="font-weight: bold;">
                 </div>
               </div>
 
-              <!-- SKOR SERAGAM PGK -->
               <div style="background: #fefce8; border: 1px solid #fef08a; border-radius: 8px; padding: 14px; margin-bottom: 20px;">
-                <div style="font-weight: 700; color: #854d0e; margin-bottom: 8px;">2. Pengaturan Skor Semua Soal PGK (Kompleks):</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div style="font-weight: 700; color: #854d0e; margin-bottom: 8px;">2. Pengaturan Skor Semua Soal PGK (Pilihan Ganda Kompleks):</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;">
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.8rem;">Benar Semua</label>
-                    <input type="number" id="bulk-score-pgk-full" min="0.1" step="0.1" value="4.0" required style="font-weight: bold; text-align: center;">
+                    <label style="font-size: 0.75rem; font-weight: 700;">Benar Semua</label>
+                    <input type="number" id="bulk-score-pgk-full" min="0" step="0.1" value="4.0" required style="font-weight: bold; text-align: center;">
                   </div>
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.8rem;">Salah 1</label>
+                    <label style="font-size: 0.75rem; font-weight: 700;">Salah 1</label>
                     <input type="number" id="bulk-score-pgk-err1" min="0" step="0.1" value="2.0" required style="font-weight: bold; text-align: center;">
                   </div>
                   <div class="form-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.8rem;">Salah 2</label>
-                    <input type="number" id="bulk-score-pgk-err2" min="0" step="0.1" value="1.0" required style="font-weight: bold; text-align: center;">
+                    <label style="font-size: 0.75rem; font-weight: 700;">Salah 2</label>
+                    <input type="number" id="bulk-score-pgk-err2" min="0" step="0.1" value="0.0" required style="font-weight: bold; text-align: center;">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label style="font-size: 0.75rem; font-weight: 700;">Salah 3</label>
+                    <input type="number" id="bulk-score-pgk-err3" min="0" step="0.1" value="0.0" required style="font-weight: bold; text-align: center;">
                   </div>
                 </div>
-                <small class="text-muted" style="display: block; margin-top: 6px;">Jika salah 3 atau lebih, otomatis bernilai 0.</small>
+                <small class="text-muted" style="display: block; margin-top: 6px;">Jika salah 4 atau lebih, nilai otomatis 0.</small>
               </div>
 
               <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -407,7 +408,7 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT SOAL (DENGAN SKOR PGK MANUAL) -->
+        <!-- MODAL EDIT SOAL (LENGKAP SKOR SALAH 1, 2, 3) -->
         <div id="modal-edit-question" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 780px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -439,21 +440,25 @@
                 </div>
                 <div class="form-group">
                   <label for="edit-q-points">Skor Benar Semua</label>
-                  <input type="number" id="edit-q-points" min="0.1" step="0.1" required>
+                  <input type="number" id="edit-q-points" min="0" step="0.1" required>
                 </div>
               </div>
 
-              <!-- PENGATURAN SKOR PGK BER уровня DI EDIT SOAL -->
+              <!-- PENGATURAN SKOR PGK DI EDIT SOAL -->
               <div id="edit-pgk-scores-wrap" class="d-none" style="background: #fefce8; border: 1px solid #fef08a; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
                 <strong style="color: #854d0e; font-size: 0.85rem; display: block; margin-bottom: 6px;">Skor Bertingkat PGK:</strong>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                   <div>
-                    <label for="edit-q-pgk-err1" style="font-size: 0.8rem;">Skor Jika Salah 1</label>
-                    <input type="number" id="edit-q-pgk-err1" min="0" step="0.1" value="1.0">
+                    <label for="edit-q-pgk-err1" style="font-size: 0.8rem;">Skor Salah 1</label>
+                    <input type="number" id="edit-q-pgk-err1" min="0" step="0.1" value="0.0">
                   </div>
                   <div>
-                    <label for="edit-q-pgk-err2" style="font-size: 0.8rem;">Skor Jika Salah 2</label>
+                    <label for="edit-q-pgk-err2" style="font-size: 0.8rem;">Skor Salah 2</label>
                     <input type="number" id="edit-q-pgk-err2" min="0" step="0.1" value="0.0">
+                  </div>
+                  <div>
+                    <label for="edit-q-pgk-err3" style="font-size: 0.8rem;">Skor Salah 3</label>
+                    <input type="number" id="edit-q-pgk-err3" min="0" step="0.1" value="0.0">
                   </div>
                 </div>
               </div>
@@ -482,7 +487,7 @@
           </div>
         </div>
 
-        <!-- SEKSI 4: TAMBAH SOAL (DENGAN SKOR PGK MANUAL) -->
+        <!-- SEKSI 4: TAMBAH SOAL (LENGKAP SKOR SALAH 1, 2, 3) -->
         <section id="panel-tambah-soal" class="menu-panel d-none">
           <div class="card" style="max-width: 850px; margin: 0 auto;">
             <div class="card-header">
@@ -523,24 +528,28 @@
                 </div>
                 <div class="form-group">
                   <label for="question-points">Skor Benar Semua</label>
-                  <input type="number" id="question-points" min="0.1" step="0.1" value="2.0" required>
+                  <input type="number" id="question-points" min="0" step="0.1" value="4.0" required>
                 </div>
               </div>
 
-              <!-- PENGATURAN SKOR PGK BERTINGKAT DI TAMBAH SOAL -->
+              <!-- PENGATURAN SKOR PGK DI TAMBAH SOAL -->
               <div id="create-pgk-scores-wrap" class="d-none" style="background: #fefce8; border: 1px solid #fef08a; padding: 12px; border-radius: 6px; margin-bottom: 14px;">
-                <strong style="color: #854d0e; font-size: 0.85rem; display: block; margin-bottom: 6px;">Skor Bertingkat PGK:</strong>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <strong style="color: #854d0e; font-size: 0.85rem; display: block; margin-bottom: 6px;">Skor Bertingkat PGK (Bebas Ditentukan Guru):</strong>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                   <div>
-                    <label for="question-pgk-err1" style="font-size: 0.8rem;">Skor Jika Salah 1</label>
-                    <input type="number" id="question-pgk-err1" min="0" step="0.1" value="1.0">
+                    <label for="question-pgk-err1" style="font-size: 0.8rem;">Skor Salah 1</label>
+                    <input type="number" id="question-pgk-err1" min="0" step="0.1" value="2.0">
                   </div>
                   <div>
-                    <label for="question-pgk-err2" style="font-size: 0.8rem;">Skor Jika Salah 2</label>
+                    <label for="question-pgk-err2" style="font-size: 0.8rem;">Skor Salah 2</label>
                     <input type="number" id="question-pgk-err2" min="0" step="0.1" value="0.0">
                   </div>
+                  <div>
+                    <label for="question-pgk-err3" style="font-size: 0.8rem;">Skor Salah 3</label>
+                    <input type="number" id="question-pgk-err3" min="0" step="0.1" value="0.0">
+                  </div>
                 </div>
-                <small class="text-muted" style="display: block; margin-top: 4px;">Jika salah $\ge 3$, nilai otomatis 0.</small>
+                <small class="text-muted" style="display: block; margin-top: 4px;">Jika salah $\ge 4$, nilai otomatis 0.</small>
               </div>
 
               <div class="form-group">
@@ -630,9 +639,10 @@
                       <th>No</th>
                       <th>Stimulus</th>
                       <th>Tipe</th>
-                      <th>Skor Benar</th>
+                      <th>Benar</th>
                       <th>Salah 1</th>
                       <th>Salah 2</th>
+                      <th>Salah 3</th>
                       <th>Pertanyaan & Opsi</th>
                       <th>Kunci</th>
                       <th>Status</th>
