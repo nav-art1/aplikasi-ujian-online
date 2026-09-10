@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: PENILAIAN PARSIAL PGK, ANTI-CURANG, & WEBHOOK
+// MODUL PENGERJAAN UJIAN: PENILAIAN PARSIAL PGK & WEBHOOK SPREADSHEET POIN ASLI
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -430,7 +430,7 @@ const ExamRunnerModule = {
       const studentAnswersPayload = [];
 
       // =====================================================================
-      // SISTEM PENILAIAN BARU: PGK BERBOBOT PARSIAL (SALAH 1 = 50%, SALAH >= 2 = 0)
+      // SISTEM PENILAIAN PGK: SALAH 0 = FULL, SALAH 1 = 50%, SALAH >= 2 = 0
       // =====================================================================
       this.questions.forEach((q) => {
         const qPoints = parseFloat(q.points) || 1.0;
@@ -446,7 +446,7 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // Pilihan Ganda Biasa (1 Kunci)
+          // PG Biasa (1 Kunci Benar)
           const isMatch = (selectedKeys.length === trueKeys.length) &&
             selectedKeys.every((val, index) => val === trueKeys[index]);
 
@@ -456,25 +456,22 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // PG Kompleks (Multi Kunci): Hitung selisih ketidakcocokan
-          // missedKeys = Kunci benar yang tidak dicentang siswa
+          // PG Kompleks (Multi Kunci)
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
-          // wrongSelectedKeys = Opsi salah yang keliru dicentang siswa
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
-
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
           if (totalErrors === 0 && selectedKeys.length > 0) {
-            // Benar semua tanpa cela -> Nilai Full (100%)
+            // Benar semua -> Poin Full
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 (bisa kurang 1 centangan atau lebih 1 centangan salah) -> Nilai Setengah (50%)
+            // Salah 1 -> Poin Setengah (50%)
             scoreEarned = qPoints * 0.5;
             isCorrect = false;
           } else {
-            // Salah 2 atau lebih -> Nilai 0
+            // Salah >= 2 -> Poin 0
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -523,7 +520,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. SUSUN DATA SPREADSHEET URUT NO. 1 S.D. N ASLI DARI BANK SOAL
+      // 3. SUSUN DATA SPREADSHEET URUT ASLI NO. 1 S.D. N LENGKAP DENGAN POIN ASLI GURU
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -533,14 +530,15 @@ const ExamRunnerModule = {
             const selectedKeys = (userAns.keys || []).map(k => String(k).toUpperCase().trim());
             const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
 
+            const qPoints = parseFloat(q.points) || 1.0;
+            let earnedP = 0;
             let isItemFullCorrect = false;
-            let itemScoreLabel = "0";
 
             const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
             if (!isPgk) {
               isItemFullCorrect = (selectedKeys.length === trueKeys.length) &&
                 selectedKeys.every((val, index) => val === trueKeys[index]) && selectedKeys.length > 0;
-              itemScoreLabel = isItemFullCorrect ? "1" : "0";
+              earnedP = isItemFullCorrect ? qPoints : 0;
             } else {
               const missed = trueKeys.filter(k => !selectedKeys.includes(k));
               const wrong = selectedKeys.filter(k => !trueKeys.includes(k));
@@ -548,13 +546,13 @@ const ExamRunnerModule = {
 
               if (errs === 0 && selectedKeys.length > 0) {
                 isItemFullCorrect = true;
-                itemScoreLabel = "1";
+                earnedP = qPoints;
               } else if (errs === 1) {
                 isItemFullCorrect = false;
-                itemScoreLabel = "0.5";
+                earnedP = qPoints * 0.5;
               } else {
                 isItemFullCorrect = false;
-                itemScoreLabel = "0";
+                earnedP = 0;
               }
             }
 
@@ -562,7 +560,7 @@ const ExamRunnerModule = {
               question_number: q.original_number,
               selected_keys: selectedKeys,
               is_correct: isItemFullCorrect,
-              score_label: itemScoreLabel
+              score_earned: earnedP
             };
           });
 
@@ -575,6 +573,7 @@ const ExamRunnerModule = {
             subject: this.session.exam.subject,
             submitted_at: new Date().toLocaleString("id-ID"),
             total_questions: this.questions.length,
+            total_points: totalEarnedScore,
             correct_count: correctCount,
             final_score: finalPercentage,
             submission_type: finalSubmissionType,
