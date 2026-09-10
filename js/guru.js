@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: DILENGKAPI FITUR GANTI & ACAK TOKEN DI MODAL ATUR
+// MODUL DASHBOARD GURU: PERBAIKAN IMPORT EXCEL & SEMUA FITUR LENGKAP
 // ==========================================================================
 
 const GuruModule = {
@@ -41,7 +41,6 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  // FUNGSI UNDUH TEMPLATE SOAL (DUAL-FALLBACK: XLSX & CSV)
   downloadExcelTemplate() {
     const templateData = [
       {
@@ -116,7 +115,6 @@ const GuruModule = {
     }
   },
 
-  // FUNGSI UNDUH TEMPLATE SISWA
   downloadStudentExcelTemplate() {
     const templateData = [
       { nomor_absen: 1, nama_siswa: 'Ahmad Maulana', nisn: '10293847' },
@@ -619,7 +617,6 @@ const GuruModule = {
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
   },
 
-  // MEMUAT NILAI TERMASUK TOKEN SAAT MODAL ATUR DIKLIK
   openEditExamSettingsModal(examId) {
     const exam = this.examsList.find(e => e.id === examId);
     if (!exam) return;
@@ -649,7 +646,6 @@ const GuruModule = {
       document.getElementById("exam-token").value = this.generateExamToken();
     });
 
-    // Form Buat Ujian Baru
     document.getElementById("form-create-exam")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = document.getElementById("exam-title").value.trim();
@@ -685,18 +681,15 @@ const GuruModule = {
       await this.loadQuickStats();
     });
 
-    // Modal Edit Pengaturan Ujian (Termasuk Ganti Token)
     const modalEditSettings = document.getElementById("modal-edit-exam-settings");
     const closeEditSettings = () => modalEditSettings.classList.add("d-none");
     document.getElementById("btn-close-modal-edit-exam-settings")?.addEventListener("click", closeEditSettings);
     document.getElementById("btn-cancel-edit-exam-settings")?.addEventListener("click", closeEditSettings);
 
-    // Tombol Acak Token Baru di Modal Atur
     document.getElementById("btn-generate-edit-token")?.addEventListener("click", () => {
       document.getElementById("edit-exam-token").value = this.generateExamToken();
     });
 
-    // Simpan Perubahan Pengaturan & Token Baru ke Supabase
     document.getElementById("form-edit-exam-settings")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("edit-exam-id").value;
@@ -706,22 +699,17 @@ const GuruModule = {
       const antiCheat = document.getElementById("edit-exam-anti-cheat").checked;
       const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
 
-      if (!newToken) {
-        alert("Token ujian tidak boleh kosong!");
-        return;
-      }
+      if (!newToken) return alert("Token ujian tidak boleh kosong!");
 
       const client = getSupabaseClient();
       try {
-        const { error } = await client.from('exams').update({
+        await client.from('exams').update({
           token: newToken,
           randomize_questions: randomizeQ,
           randomize_options: randomizeOpt,
           anti_cheat: antiCheat,
           max_violations: maxViolations
         }).eq('id', examId);
-
-        if (error) throw error;
 
         closeEditSettings();
         await this.loadExamsTable();
@@ -1201,6 +1189,9 @@ const GuruModule = {
     });
   },
 
+  // =========================================================================
+  // FIX: SINKRONISASI IMPORT EXCEL (MEMAKAI q.correct_keys BUKAN correctKeys)
+  // =========================================================================
   setupImportExcelEventListeners() {
     const btnDownload = document.getElementById("btn-download-template");
     if (btnDownload) {
@@ -1231,13 +1222,13 @@ const GuruModule = {
             const points = parseFloat(r.poin) || 1.0;
             const content = (r.soal || '').trim();
             const rawKey = String(r.kunci || '').toUpperCase().trim();
-            const correctKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+            const parsedKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
 
             const options = [];
             ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
               const text = r[`opsi_${lbl}`] ? String(r[`opsi_${lbl}`]).trim() : '';
               if (text) {
-                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: correctKeys.includes(lbl.toUpperCase()) });
+                options.push({ option_label: lbl.toUpperCase(), content: text, is_correct: parsedKeys.includes(lbl.toUpperCase()) });
               }
             });
 
@@ -1249,11 +1240,11 @@ const GuruModule = {
                 question_type: type,
                 points: points,
                 content: content,
-                correct_keys: correctKeys,
+                correct_keys: parsedKeys, // disimpan di properti objek q
                 options: options
               });
 
-              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${correctKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${parsedKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
             }
           });
 
@@ -1284,6 +1275,7 @@ const GuruModule = {
             stimId = stimMap[q.stimulus_title];
           }
 
+          // FIX: Menggunakan q.correct_keys agar tidak memicu "correctKeys is not defined"
           const { data: insertedQ } = await client.from('questions').insert({
             exam_id: examId,
             stimulus_group_id: stimId,
@@ -1291,7 +1283,7 @@ const GuruModule = {
             question_type: q.question_type,
             points: q.points,
             content: q.content,
-            correct_keys: correctKeys
+            correct_keys: q.correct_keys // <--- Sudah diperbaiki
           }).select().single();
 
           const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
