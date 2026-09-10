@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL OTENTIKASI SISWA: LOGIN MENGGUNAKAN NOMOR ABSEN & TOKEN UJIAN
+// MODUL OTENTIKASI SISWA: LOGIN NOMOR ABSEN & FIX PARAMETER PENGACAKAN
 // ==========================================================================
 
 const StudentAuthModule = {
@@ -47,7 +47,7 @@ const StudentAuthModule = {
     }
 
     try {
-      // 1. Ambil sesi ujian berdasarkan Token
+      // 1. Ambil data sesi ujian berdasarkan Token
       const { data: examData, error: examError } = await client
         .from('exams')
         .select('id, title, subject, duration_minutes, token, is_active, class_id, randomize_questions, randomize_options, anti_cheat, max_violations, spreadsheet_url, classes(class_name)')
@@ -70,7 +70,7 @@ const StudentAuthModule = {
         return;
       }
 
-      // 2. Ambil data siswa berdasarkan Nomor Absen di kelas target ujian tersebut
+      // 2. Ambil data siswa berdasarkan Nomor Absen di kelas target ujian
       let studentQuery = client
         .from('students')
         .select('id, attendance_number, student_number, full_name, class_id, is_active, classes(class_name)')
@@ -99,7 +99,11 @@ const StudentAuthModule = {
         return;
       }
 
-      // 3. Simpan data sesi lengkap ke sessionStorage
+      // 3. Pastikan boolean pengacakan dan anti-cheat dibaca akurat
+      const isRandomQuestions = (examData.randomize_questions !== false && examData.randomize_questions !== "false");
+      const isRandomOptions = (examData.randomize_options !== false && examData.randomize_options !== "false");
+      const isAntiCheat = (examData.anti_cheat !== false && examData.anti_cheat !== "false");
+
       const sessionPayload = {
         student: {
           id: studentData.id,
@@ -114,9 +118,9 @@ const StudentAuthModule = {
           subject: examData.subject,
           duration_minutes: examData.duration_minutes,
           token: examData.token,
-          randomize_questions: examData.randomize_questions,
-          randomize_options: examData.randomize_options,
-          anti_cheat: examData.anti_cheat !== false,
+          randomize_questions: isRandomQuestions,
+          randomize_options: isRandomOptions,
+          anti_cheat: isAntiCheat,
           max_violations: examData.max_violations || 3,
           spreadsheet_url: examData.spreadsheet_url || null
         },
