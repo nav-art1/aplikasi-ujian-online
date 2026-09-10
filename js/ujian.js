@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: LABEL A,B,C TETAP URUT, ISI DIAKAC, & PGK PARSIAL (50%)
+// MODUL PENGERJAAN UJIAN: LABEL A-F URUT, ISI DIAKAC, & SKOR PGK BERTINGKAT
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -141,7 +141,7 @@ const ExamRunnerModule = {
 
       const { data: qData, error: qErr } = await client
         .from('questions')
-        .select('id, original_number, stimulus_group_id, question_type, points, image_url, content, correct_keys')
+        .select('id, original_number, stimulus_group_id, question_type, points, pgk_score_err1, pgk_score_err2, image_url, content, correct_keys')
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
 
@@ -163,7 +163,7 @@ const ExamRunnerModule = {
         q.options = optionsMap[q.id] || [];
       });
 
-      // 1. Pengacakan Butir Soal per Tipe (PG acak sesama PG, PGK acak sesama PGK)
+      // 1. Pengacakan Soal per Tipe Soal (PG sesama PG, PGK sesama PGK)
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
       if (shouldRandomizeQuestions) {
         this.questions = this.shuffleQuestionsByType(qData);
@@ -171,7 +171,7 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Isi Jawaban DENGAN LABEL A, B, C, D TETAP URUT
+      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut dari atas ke bawah)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -184,11 +184,10 @@ const ExamRunnerModule = {
             opts.sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
           }
 
-          // Pasang kembali label A, B, C, D secara urut ke baris yang sudah teracak
           q.displayOptions = opts.map((opt, idx) => ({
             ...opt,
             display_label: standardLabels[idx] || String.fromCharCode(65 + idx),
-            original_label: opt.option_label // Simpan label aslinya untuk validasi kunci
+            original_label: opt.option_label
           }));
         } else {
           q.displayOptions = q.options || [];
@@ -295,12 +294,11 @@ const ExamRunnerModule = {
     const isPgk = q.question_type === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
     
-    // Gunakan displayOptions yang label hurufnya A, B, C, D selalu urut
+    // Opsi dengan teks teracak namun huruf A, B, C, D tetap urut
     const opts = q.displayOptions || q.options || [];
 
     let optionsHtml = '';
     opts.forEach(opt => {
-      // Yang disimpan sebagai tanda pilihan adalah id opsi atau original_label agar penilaian 100% konsisten
       const optKey = opt.original_label || opt.option_label;
       const isChecked = currentAns.keys.includes(optKey);
       const letterLabel = opt.display_label || opt.option_label;
@@ -435,7 +433,7 @@ const ExamRunnerModule = {
   },
 
   // =========================================================================
-  // LOGIKA PENILAIAN AKURAT: PGK SALAH 0 = 100%, SALAH 1 = 50%, SALAH >= 2 = 0
+  // LOGIKA PENILAIAN PGK: SALAH 0 = FULL, SALAH 1 = PGK_ERR1, SALAH 2 = PGK_ERR2
   // =========================================================================
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
@@ -470,11 +468,11 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // 1. Ekstrak Kunci Pilihan Siswa
+        // Ekstrak Kunci Pilihan Siswa
         const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
         const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
-        // 2. Ekstrak Kunci Benar (Cek dari correct_keys atau dari opsi is_correct)
+        // Ekstrak Kunci Benar
         let trueKeys = [];
         if (q.correct_keys) {
           const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
@@ -489,36 +487,39 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // --- PILIHAN GANDA BIASA (1 KUNCI) ---
+          // PILIHAN GANDA BIASA (1 KUNCI)
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
-          } else {
-            scoreEarned = 0;
-            isCorrect = false;
           }
         } else {
-          // --- PILIHAN GANDA KOMPLEKS (PGK) ---
-          // missedKeys = Kunci benar yang tidak dicentang siswa
+          // PILIHAN GANDA KOMPLEKS (PGK)
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
-          // wrongSelectedKeys = Opsi salah yang keliru dicentang siswa
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
-
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
+          // Ambil skor custom dari guru jika ada, atau gunakan default proporsional
+          const scoreErr1 = (q.pgk_score_err1 !== undefined && q.pgk_score_err1 !== null)
+            ? parseFloat(q.pgk_score_err1)
+            : Number((qPoints * 0.5).toFixed(2));
+
+          const scoreErr2 = (q.pgk_score_err2 !== undefined && q.pgk_score_err2 !== null)
+            ? parseFloat(q.pgk_score_err2)
+            : 0;
+
           if (totalErrors === 0 && selectedKeys.length > 0) {
-            // Benar semua tanpa cela -> Nilai Penuh (100%)
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 (misal kurang 1 kunci benar ATAU kelebihan 1 centangan salah) -> PASTI 50%
-            scoreEarned = Number((qPoints * 0.5).toFixed(2));
+            scoreEarned = scoreErr1;
+            isCorrect = false;
+          } else if (totalErrors === 2) {
+            scoreEarned = scoreErr2;
             isCorrect = false;
           } else {
-            // Salah 2 atau lebih -> 0
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -534,7 +535,6 @@ const ExamRunnerModule = {
         });
       });
 
-      // Nilai Skala 0 - 100
       const finalPercentage = maxPossibleScore > 0 ? Math.round((totalEarnedScore / maxPossibleScore) * 100) : 0;
 
       // 1. Simpan Attempt ke Supabase
@@ -556,7 +556,7 @@ const ExamRunnerModule = {
 
       if (attErr) throw attErr;
 
-      // 2. Simpan Detail Jawaban Lengkap dengan Kolom score_earned
+      // 2. Simpan Detail Jawaban
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -568,7 +568,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Susun Data Spreadsheet Urut Asli No. 1 s.d. N Lengkap Poin Riil
+      // 3. Susun Data Spreadsheet Urut Asli No. 1 s.d. N
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
