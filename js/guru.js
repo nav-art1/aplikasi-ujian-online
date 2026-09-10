@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: PERBAIKAN IMPORT EXCEL & SEMUA FITUR LENGKAP
+// MODUL DASHBOARD GURU: PERBAIKAN MATRIKS ANALISIS BUTIR SOAL & SYNC SPREADSHEET
 // ==========================================================================
 
 const GuruModule = {
@@ -624,9 +624,9 @@ const GuruModule = {
     document.getElementById("edit-exam-id").value = exam.id;
     document.getElementById("edit-exam-title-display").innerText = `${exam.title} (${exam.subject || '-'})`;
     document.getElementById("edit-exam-token").value = exam.token || '';
-    document.getElementById("edit-exam-randomize-questions").checked = !!exam.randomize_questions;
-    document.getElementById("edit-exam-randomize-options").checked = !!exam.randomize_options;
-    document.getElementById("edit-exam-anti-cheat").checked = (exam.anti_cheat !== false);
+    document.getElementById("edit-exam-randomize-questions").checked = (exam.randomize_questions !== false && exam.randomize_questions !== 'false');
+    document.getElementById("edit-exam-randomize-options").checked = (exam.randomize_options !== false && exam.randomize_options !== 'false');
+    document.getElementById("edit-exam-anti-cheat").checked = (exam.anti_cheat !== false && exam.anti_cheat !== 'false');
     document.getElementById("edit-exam-max-violations").value = exam.max_violations || 3;
     document.getElementById("modal-edit-exam-settings").classList.remove("d-none");
   },
@@ -636,6 +636,9 @@ const GuruModule = {
     document.getElementById("btn-open-modal-exam")?.addEventListener("click", () => {
       document.getElementById("form-create-exam").reset();
       document.getElementById("exam-token").value = this.generateExamToken();
+      document.getElementById("exam-randomize-questions").checked = true;
+      document.getElementById("exam-randomize-options").checked = true;
+      document.getElementById("exam-anti-cheat").checked = true;
       modal.classList.remove("d-none");
     });
 
@@ -654,9 +657,10 @@ const GuruModule = {
       const classId = document.getElementById("exam-class-id").value;
       const duration = parseInt(document.getElementById("exam-duration").value, 10);
       const token = document.getElementById("exam-token").value.trim().toUpperCase();
-      const randomizeQ = document.getElementById("exam-randomize-questions").checked;
-      const randomizeOpt = document.getElementById("exam-randomize-options").checked;
-      const antiCheat = document.getElementById("exam-anti-cheat").checked;
+      
+      const randomizeQ = Boolean(document.getElementById("exam-randomize-questions").checked);
+      const randomizeOpt = Boolean(document.getElementById("exam-randomize-options").checked);
+      const antiCheat = Boolean(document.getElementById("exam-anti-cheat").checked);
       const maxViolations = parseInt(document.getElementById("exam-max-violations").value, 10) || 3;
 
       const client = getSupabaseClient();
@@ -694,9 +698,9 @@ const GuruModule = {
       e.preventDefault();
       const examId = document.getElementById("edit-exam-id").value;
       const newToken = document.getElementById("edit-exam-token").value.trim().toUpperCase();
-      const randomizeQ = document.getElementById("edit-exam-randomize-questions").checked;
-      const randomizeOpt = document.getElementById("edit-exam-randomize-options").checked;
-      const antiCheat = document.getElementById("edit-exam-anti-cheat").checked;
+      const randomizeQ = Boolean(document.getElementById("edit-exam-randomize-questions").checked);
+      const randomizeOpt = Boolean(document.getElementById("edit-exam-randomize-options").checked);
+      const antiCheat = Boolean(document.getElementById("edit-exam-anti-cheat").checked);
       const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
 
       if (!newToken) return alert("Token ujian tidak boleh kosong!");
@@ -1189,9 +1193,6 @@ const GuruModule = {
     });
   },
 
-  // =========================================================================
-  // FIX: SINKRONISASI IMPORT EXCEL (MEMAKAI q.correct_keys BUKAN correctKeys)
-  // =========================================================================
   setupImportExcelEventListeners() {
     const btnDownload = document.getElementById("btn-download-template");
     if (btnDownload) {
@@ -1240,7 +1241,7 @@ const GuruModule = {
                 question_type: type,
                 points: points,
                 content: content,
-                correct_keys: parsedKeys, // disimpan di properti objek q
+                correct_keys: parsedKeys,
                 options: options
               });
 
@@ -1275,7 +1276,6 @@ const GuruModule = {
             stimId = stimMap[q.stimulus_title];
           }
 
-          // FIX: Menggunakan q.correct_keys agar tidak memicu "correctKeys is not defined"
           const { data: insertedQ } = await client.from('questions').insert({
             exam_id: examId,
             stimulus_group_id: stimId,
@@ -1283,7 +1283,7 @@ const GuruModule = {
             question_type: q.question_type,
             points: q.points,
             content: q.content,
-            correct_keys: q.correct_keys // <--- Sudah diperbaiki
+            correct_keys: q.correct_keys
           }).select().single();
 
           const opts = q.options.map(o => ({ question_id: insertedQ.id, option_label: o.option_label, content: o.content, is_correct: o.is_correct }));
@@ -1300,9 +1300,6 @@ const GuruModule = {
     });
   },
 
-  // =========================================================================
-  // SEKSI REKAP NILAI & SPREADSHEET (DENGAN KOTAK SKRIP LANGSUNG)
-  // =========================================================================
   getAppsScriptTemplate() {
     return `function doPost(e) {
   try {
@@ -1351,7 +1348,7 @@ const GuruModule = {
     var sheetAnalisis = ss.getSheetByName("Analisis Soal");
     if (!sheetAnalisis) {
       sheetAnalisis = ss.insertSheet("Analisis Soal");
-      var headers = ["No. Absen", "Nama Siswa", "Kelas", "Nilai", "Status"];
+      var headers = ["No. Absen", "Nama Siswa", "Kelas", "Nilai Akhir", "Status"];
       for (var i = 1; i <= data.total_questions; i++) {
         headers.push("No. " + i);
       }
@@ -1370,7 +1367,8 @@ const GuruModule = {
     if (data.item_analysis && data.item_analysis.length > 0) {
       data.item_analysis.forEach(function(item) {
         var label = (item.selected_keys || []).join(",") || "-";
-        rowAnalisis.push(label + " (" + item.score_earned + ")");
+        var scoreVal = (item.score_earned !== undefined && item.score_earned !== null) ? item.score_earned : (item.is_correct ? 1 : 0);
+        rowAnalisis.push(label + " (" + scoreVal + ")");
       });
     }
     sheetAnalisis.appendRow(rowAnalisis);
@@ -1424,6 +1422,9 @@ const GuruModule = {
     });
   },
 
+  // =========================================================================
+  // FIX UTAMA: RENDER MATRIKS ANALISIS BUTIR SOAL DENGAN NILAI POIN ASLI
+  // =========================================================================
   async loadHasilAndAnalisis(examId) {
     const integrationCard = document.getElementById("spreadsheet-integration-card");
     const inputUrl = document.getElementById("input-spreadsheet-url");
@@ -1467,6 +1468,7 @@ const GuruModule = {
       };
     }
 
+    // 1. Ambil pengerjaan ujian siswa
     const { data: attempts } = await client
       .from('exam_attempts')
       .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, attendance_number, full_name, student_number, classes(class_name))')
@@ -1493,9 +1495,10 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
+    // 2. Ambil seluruh butir soal urut No. 1 s.d. N asli
     const { data: questions } = await client
       .from('questions')
-      .select('id, original_number, points, question_type')
+      .select('id, original_number, points, question_type, correct_keys')
       .eq('exam_id', examId)
       .order('original_number', { ascending: true });
 
@@ -1507,11 +1510,12 @@ const GuruModule = {
       return;
     }
 
-    let headerHtml = '<tr><th style="text-align:center;">No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai</th><th>Status</th>';
+    let headerHtml = '<tr><th style="text-align:center;">No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai Akhir</th><th>Status</th>';
     questions.forEach((q) => headerHtml += `<th style="text-align:center;">No.${q.original_number}<br><small style="color:var(--text-muted);">(${q.points}p)</small></th>`);
     headerHtml += '</tr>';
     if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
 
+    // 3. Ambil seluruh jawaban siswa lengkap dengan kolom score_earned
     const attemptIds = attempts.map(a => a.id);
     const { data: allAnswers } = await client
       .from('student_answers')
@@ -1524,6 +1528,7 @@ const GuruModule = {
       ansMap[ans.attempt_id][ans.question_id] = ans;
     });
 
+    // 4. Render tabel matriks per siswa
     let matrixHtml = '';
     attempts.forEach(att => {
       const st = att.students || {};
@@ -1542,13 +1547,33 @@ const GuruModule = {
         if (a) {
           const keys = (a.selected_keys || []).join(",") || "-";
           const maxP = parseFloat(q.points) || 1.0;
-          const earned = parseFloat(a.score_earned || 0);
+          
+          // Fallback kalkulasi jika data lama di student_answers belum ada score_earned
+          let earned = 0;
+          if (a.score_earned !== null && a.score_earned !== undefined) {
+            earned = parseFloat(a.score_earned);
+          } else {
+            const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
+            const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
+            const sKeys = (a.selected_keys || []).map(k => String(k).toUpperCase().trim());
 
-          let color = '#ef4444';
+            if (!isPgk) {
+              earned = a.is_correct ? maxP : 0;
+            } else {
+              const missed = trueKeys.filter(k => !sKeys.includes(k)).length;
+              const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
+              const errs = missed + wrong;
+              if (errs === 0 && sKeys.length > 0) earned = maxP;
+              else if (errs === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
+              else earned = 0;
+            }
+          }
+
+          let color = '#ef4444'; // Merah (0)
           if (earned >= maxP) {
-            color = 'var(--success-color)';
+            color = 'var(--success-color)'; // Hijau (Full)
           } else if (earned > 0) {
-            color = '#f59e0b';
+            color = '#f59e0b'; // Kuning Oranye (Parsial/Setengah)
           }
 
           matrixHtml += `<td style="color: ${color}; font-weight: 700; text-align: center;">${keys} (${earned})</td>`;
@@ -1560,6 +1585,7 @@ const GuruModule = {
     });
     if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
 
+    // 5. Tombol Kirim Ulang Semua Data ke Google Spreadsheet
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
@@ -1573,13 +1599,35 @@ const GuruModule = {
           for (const att of attempts) {
             const st = att.students || {};
             const itemAnalysis = [];
+            
             questions.forEach((q) => {
               const a = ansMap[att.id] ? ansMap[att.id][q.id] : null;
+              const maxP = parseFloat(q.points) || 1.0;
+              let earned = 0;
+
+              if (a) {
+                if (a.score_earned !== null && a.score_earned !== undefined) {
+                  earned = parseFloat(a.score_earned);
+                } else {
+                  const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
+                  const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
+                  const sKeys = (a.selected_keys || []).map(k => String(k).toUpperCase().trim());
+                  if (!isPgk) {
+                    earned = a.is_correct ? maxP : 0;
+                  } else {
+                    const errs = trueKeys.filter(k => !sKeys.includes(k)).length + sKeys.filter(k => !trueKeys.includes(k)).length;
+                    if (errs === 0 && sKeys.length > 0) earned = maxP;
+                    else if (errs === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
+                    else earned = 0;
+                  }
+                }
+              }
+
               itemAnalysis.push({
                 question_number: q.original_number,
                 selected_keys: a ? a.selected_keys : [],
                 is_correct: a ? a.is_correct : false,
-                score_earned: a ? parseFloat(a.score_earned || 0) : 0
+                score_earned: earned
               });
             });
 
