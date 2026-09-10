@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: PENILAIAN PARSIAL PGK & PENYIMPANAN NILAI PER SOAL
+// MODUL PENGERJAAN UJIAN: BENAR-BENAR ACAK OPSI, PENILAIAN PGK SETENGAH (50%)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -158,7 +158,7 @@ const ExamRunnerModule = {
 
       qData.forEach(q => q.options = optionsMap[q.id] || []);
 
-      // Pengacakan Soal per Tipe Soal (PG sesama PG, PGK sesama PGK)
+      // 1. Pengacakan Butir Soal per Tipe (PG acak sesama PG, PGK acak sesama PGK)
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
       if (shouldRandomizeQuestions) {
         this.questions = this.shuffleQuestionsByType(qData);
@@ -166,11 +166,13 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // Pengacakan Opsi Pilihan
+      // 2. Pengacakan Opsi Jawaban (Benar-benar diacak posisinya)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       if (shouldRandomizeOptions) {
         this.questions.forEach(q => {
-          if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
+          if (q.options && q.options.length > 1) {
+            q.options = this.shuffleArray([...q.options]);
+          }
         });
       }
 
@@ -215,11 +217,12 @@ const ExamRunnerModule = {
   },
 
   shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return array;
+    return arr;
   },
 
   renderCurrentQuestion() {
@@ -272,7 +275,9 @@ const ExamRunnerModule = {
     const optionsContainer = document.getElementById("display-options-list");
     const isPgk = q.question_type === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
-    const opts = (q.options || []).sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
+    
+    // PERBAIKAN: JANGAN pakai .sort() agar pengacakan opsi TIDAK dibatalkan
+    const opts = q.options || [];
 
     let optionsHtml = '';
     opts.forEach(opt => {
@@ -441,8 +446,13 @@ const ExamRunnerModule = {
         maxPossibleScore += qPoints;
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
-        const selectedKeys = (userAns.keys || []).map(k => String(k).toUpperCase().trim());
-        const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
+        
+        // Normalisasi Kunci Siswa & Kunci Benar (Hapus spasi, koma, huruf kapital)
+        const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
+        const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
+
+        const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
+        const trueKeys = rawTrue.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
         let scoreEarned = 0;
         let isCorrect = false;
@@ -450,27 +460,33 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
+          // PG Biasa: 1 Kunci
           const isMatch = (selectedKeys.length === trueKeys.length) &&
-            selectedKeys.every((val, index) => val === trueKeys[index]);
+            selectedKeys.length > 0 &&
+            selectedKeys[0] === trueKeys[0];
 
-          if (isMatch && selectedKeys.length > 0) {
+          if (isMatch) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           }
         } else {
+          // PGK (Multi Kunci): Hitung selisih ketidakcocokan
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
           if (totalErrors === 0 && selectedKeys.length > 0) {
+            // Benar semua tanpa cela -> Nilai Full
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
+            // Salah 1 (bisa kurang 1 centangan atau lebih 1 centangan salah) -> PASTI 50%
             scoreEarned = parseFloat((qPoints * 0.5).toFixed(2));
             isCorrect = false;
           } else {
+            // Salah 2 atau lebih -> Nilai 0
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -516,8 +532,7 @@ const ExamRunnerModule = {
           is_correct: a.is_correct,
           score_earned: a.score_earned
         }));
-        const { error: insAnsErr } = await client.from('student_answers').insert(answersData);
-        if (insAnsErr) console.warn("Peringatan simpan detail jawaban:", insAnsErr);
+        await client.from('student_answers').insert(answersData);
       }
 
       // 3. Susun Data Spreadsheet Urut Asli No. 1 s.d. N Lengkap Poin Riil
