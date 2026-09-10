@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: PERBAIKAN MATRIKS ANALISIS BUTIR SOAL & SYNC SPREADSHEET
+// MODUL DASHBOARD GURU: REKAP NILAI BERSIH & SINKRONISASI SPREADSHEET
 // ==========================================================================
 
 const GuruModule = {
@@ -1423,7 +1423,7 @@ const GuruModule = {
   },
 
   // =========================================================================
-  // FIX UTAMA: RENDER MATRIKS ANALISIS DENGAN NILAI REAL-TIME & FALLBACK AMAN
+  // REKAPITULASI NILAI GURU (TABEL MATRIKS SUDAH DIHAPUS BERSIH)
   // =========================================================================
   async loadHasilAndAnalisis(examId) {
     const integrationCard = document.getElementById("spreadsheet-integration-card");
@@ -1468,7 +1468,7 @@ const GuruModule = {
       };
     }
 
-    // 1. Ambil pengerjaan ujian siswa
+    // Ambil data attempt siswa
     const { data: attempts } = await client
       .from('exam_attempts')
       .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, attendance_number, full_name, student_number, classes(class_name))')
@@ -1495,109 +1495,37 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // 2. Ambil butir soal urut No. 1 s.d. N asli
+    // Ambil data soal untuk sinkronisasi ke Spreadsheet
     const { data: questions } = await client
       .from('questions')
       .select('id, original_number, points, question_type, correct_keys')
       .eq('exam_id', examId)
       .order('original_number', { ascending: true });
 
-    const theadAnalisis = document.getElementById("analisis-table-header");
-    const tbodyAnalisis = document.getElementById("analisis-table-body");
-
-    if (!questions || questions.length === 0 || !attempts || attempts.length === 0) {
-      if (tbodyAnalisis) tbodyAnalisis.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada data jawaban untuk dianalisis.</td></tr>';
-      return;
+    const attemptIds = (attempts || []).map(a => a.id);
+    let allAnswers = [];
+    if (attemptIds.length > 0) {
+      const { data: ansData } = await client
+        .from('student_answers')
+        .select('*')
+        .in('attempt_id', attemptIds);
+      allAnswers = ansData || [];
     }
 
-    let headerHtml = '<tr><th style="text-align:center;">No. Absen</th><th>Nama Siswa</th><th>Kelas</th><th>Nilai Akhir</th><th>Status</th>';
-    questions.forEach((q) => headerHtml += `<th style="text-align:center;">No.${q.original_number}<br><small style="color:var(--text-muted);">(${q.points}p)</small></th>`);
-    headerHtml += '</tr>';
-    if (theadAnalisis) theadAnalisis.innerHTML = headerHtml;
-
-    // 3. Ambil seluruh jawaban siswa (Gunakan select * agar tidak gagal jika ada kolom baru/lama)
-    const attemptIds = attempts.map(a => a.id);
-    const { data: allAnswers, error: ansErr } = await client
-      .from('student_answers')
-      .select('*')
-      .in('attempt_id', attemptIds);
-
-    if (ansErr) console.error("Error mengambil student_answers:", ansErr);
-
     const ansMap = {};
-    (allAnswers || []).forEach(ans => {
+    allAnswers.forEach(ans => {
       const attId = String(ans.attempt_id);
       const qId = String(ans.question_id);
       if (!ansMap[attId]) ansMap[attId] = {};
       ansMap[attId][qId] = ans;
     });
 
-    // 4. Render tabel matriks per siswa
-    let matrixHtml = '';
-    attempts.forEach(att => {
-      const st = att.students || {};
-      const isCheat = att.submission_type === 'forced_cheat';
-      const attId = String(att.id);
-
-      matrixHtml += `
-        <tr style="${isCheat ? 'background: #fff1f2;' : ''}">
-          <td style="text-align: center;"><strong>${st.attendance_number || '-'}</strong></td>
-          <td><strong>${st.full_name || '-'}</strong></td>
-          <td>${st.classes ? st.classes.class_name : '-'}</td>
-          <td><strong>${att.score}</strong></td>
-          <td>${isCheat ? '<small style="color: #b91c1c; font-weight: bold;">CURANG</small>' : '<small style="color: var(--success-color); font-weight: bold;">MURNI</small>'}</td>
-      `;
-
-      questions.forEach(q => {
-        const qId = String(q.id);
-        const a = (ansMap[attId] && ansMap[attId][qId]) ? ansMap[attId][qId] : null;
-
-        if (a) {
-          const keys = (a.selected_keys || []).join(",") || "-";
-          const maxP = parseFloat(q.points) || 1.0;
-
-          // Hitung nilai riil (baik yang tersimpan di DB ataupun auto-kalkulasi fallback jika data lama)
-          let earned = 0;
-          if (a.score_earned !== null && a.score_earned !== undefined) {
-            earned = parseFloat(a.score_earned);
-          } else {
-            const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
-            const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
-            const sKeys = (a.selected_keys || []).map(k => String(k).toUpperCase().trim());
-
-            if (!isPgk) {
-              earned = a.is_correct ? maxP : 0;
-            } else {
-              const missed = trueKeys.filter(k => !sKeys.includes(k)).length;
-              const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
-              const errs = missed + wrong;
-              if (errs === 0 && sKeys.length > 0) earned = maxP;
-              else if (errs === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
-              else earned = 0;
-            }
-          }
-
-          let color = '#ef4444'; // Merah (0)
-          if (earned >= maxP) {
-            color = 'var(--success-color)'; // Hijau (Penuh)
-          } else if (earned > 0) {
-            color = '#f59e0b'; // Oranye (Setengah)
-          }
-
-          matrixHtml += `<td style="color: ${color}; font-weight: 700; text-align: center;">${keys} (${earned})</td>`;
-        } else {
-          matrixHtml += '<td style="color: #94a3b8; text-align: center;">- (0)</td>';
-        }
-      });
-      matrixHtml += '</tr>';
-    });
-    if (tbodyAnalisis) tbodyAnalisis.innerHTML = matrixHtml;
-
-    // 5. Tombol Sinkronisasi Ulang ke Google Spreadsheet
+    // Tombol Kirim Ulang Semua Nilai ke Spreadsheet (Mengirim Data Rekap & Butir Soal Lengkap Poin Asli)
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
         if (!targetUrl) return alert("Silakan tempel dan simpan URL Web App Spreadsheet terlebih dahulu.");
+        if (!attempts || attempts.length === 0) return alert("Belum ada data siswa untuk dikirim.");
         if (!confirm(`Kirim ulang ${attempts.length} data pengerjaan siswa ke Spreadsheet?`)) return;
 
         btnSyncAll.disabled = true;
@@ -1608,8 +1536,8 @@ const GuruModule = {
             const st = att.students || {};
             const attId = String(att.id);
             const itemAnalysis = [];
-            
-            questions.forEach((q) => {
+
+            (questions || []).forEach((q) => {
               const qId = String(q.id);
               const a = (ansMap[attId] && ansMap[attId][qId]) ? ansMap[attId][qId] : null;
               const maxP = parseFloat(q.points) || 1.0;
@@ -1620,14 +1548,19 @@ const GuruModule = {
                   earned = parseFloat(a.score_earned);
                 } else {
                   const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
-                  const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
-                  const sKeys = (a.selected_keys || []).map(k => String(k).toUpperCase().trim());
+                  const trueKeys = (Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/))
+                    .map(k => String(k).toUpperCase().trim()).filter(Boolean);
+                  const sKeys = (Array.isArray(a.selected_keys) ? a.selected_keys : String(a.selected_keys || '').split(/[,;\s]+/))
+                    .map(k => String(k).toUpperCase().trim()).filter(Boolean);
+
                   if (!isPgk) {
                     earned = a.is_correct ? maxP : 0;
                   } else {
-                    const errs = trueKeys.filter(k => !sKeys.includes(k)).length + sKeys.filter(k => !trueKeys.includes(k)).length;
-                    if (errs === 0 && sKeys.length > 0) earned = maxP;
-                    else if (errs === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
+                    const missed = trueKeys.filter(k => !sKeys.includes(k)).length;
+                    const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
+                    const totalErrors = missed + wrong;
+                    if (totalErrors === 0 && sKeys.length > 0) earned = maxP;
+                    else if (totalErrors === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
                     else earned = 0;
                   }
                 }
@@ -1649,9 +1582,9 @@ const GuruModule = {
               exam_title: examInfo.title,
               subject: examInfo.subject,
               submitted_at: new Date(att.submitted_at).toLocaleString("id-ID"),
-              total_questions: questions.length,
+              total_questions: (questions || []).length,
               total_points: att.total_points || 0,
-              correct_count: (allAnswers || []).filter(ans => String(ans.attempt_id) === attId && ans.is_correct).length,
+              correct_count: allAnswers.filter(ans => String(ans.attempt_id) === attId && ans.is_correct).length,
               final_score: att.score,
               submission_type: att.submission_type,
               violation_count: att.violation_count,
