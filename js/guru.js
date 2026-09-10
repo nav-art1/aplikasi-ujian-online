@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: FITUR SKOR MASSAL, ATURAN SKOR PGK & TEMPLATE EXCEL
+// MODUL DASHBOARD GURU: SKOR MASSAL FLEKSIBEL (SALAH 1, 2, 3 BEBAS DIATUR GURU)
 // ==========================================================================
 
 const GuruModule = {
@@ -41,7 +41,7 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  // TEMPLATE EXCEL SOAL DISESUAIKAN DENGAN SKOR PGK BERTINGKAT
+  // TEMPLATE EXCEL SOAL DENGAN KOLOM SALAH 1, 2, DAN 3
   downloadExcelTemplate() {
     const templateData = [
       {
@@ -52,6 +52,7 @@ const GuruModule = {
         poin_benar: 2.0,
         pgk_skor_salah_1: 0,
         pgk_skor_salah_2: 0,
+        pgk_skor_salah_3: 0,
         soal: "Ibukota negara Indonesia saat ini adalah...",
         opsi_a: "Jakarta",
         opsi_b: "Surabaya",
@@ -69,7 +70,8 @@ const GuruModule = {
         tipe: "pgk",
         poin_benar: 4.0,
         pgk_skor_salah_1: 2.0,
-        pgk_skor_salah_2: 1.0,
+        pgk_skor_salah_2: 0.0,
+        pgk_skor_salah_3: 0.0,
         soal: "Berdasarkan teks, manakah peran utama hutan mangrove? (Pilihan Ganda Kompleks)",
         opsi_a: "Meredam gelombang tsunami",
         opsi_b: "Tempat pemijahan udang dan kepiting",
@@ -761,9 +763,7 @@ const GuruModule = {
     }
   },
 
-  // =========================================================================
-  // FITUR: SAMAKAN SKOR SOAL SECARA MASSAL (SEMUA PG & SEMUA PGK)
-  // =========================================================================
+  // SAMAKAN SKOR MASSAL: PG DAN PGK (BENAR, SALAH 1, SALAH 2, SALAH 3)
   setupBulkScoreEventListeners() {
     const modal = document.getElementById("modal-bulk-score");
     const closeModal = () => modal.classList.add("d-none");
@@ -780,10 +780,11 @@ const GuruModule = {
       e.preventDefault();
       if (!this.selectedExamId) return;
 
-      const scorePg = parseFloat(document.getElementById("bulk-score-pg").value) || 2.0;
-      const scorePgkFull = parseFloat(document.getElementById("bulk-score-pgk-full").value) || 4.0;
-      const scorePgkErr1 = parseFloat(document.getElementById("bulk-score-pgk-err1").value) || 2.0;
-      const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value) || 1.0;
+      const scorePg = parseFloat(document.getElementById("bulk-score-pg").value);
+      const scorePgkFull = parseFloat(document.getElementById("bulk-score-pgk-full").value);
+      const scorePgkErr1 = parseFloat(document.getElementById("bulk-score-pgk-err1").value);
+      const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value);
+      const scorePgkErr3 = parseFloat(document.getElementById("bulk-score-pgk-err3").value);
 
       const btn = document.getElementById("btn-save-bulk-score");
       btn.disabled = true;
@@ -793,21 +794,22 @@ const GuruModule = {
       try {
         // 1. Update semua butir PG
         await client.from('questions')
-          .update({ points: scorePg })
+          .update({ points: isNaN(scorePg) ? 2.0 : scorePg })
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pg');
 
-        // 2. Update semua butir PGK
+        // 2. Update semua butir PGK dengan nilai eksplisit (termasuk jika 0)
         await client.from('questions')
           .update({
-            points: scorePgkFull,
-            pgk_score_err1: scorePgkErr1,
-            pgk_score_err2: scorePgkErr2
+            points: isNaN(scorePgkFull) ? 4.0 : scorePgkFull,
+            pgk_score_err1: isNaN(scorePgkErr1) ? 0 : scorePgkErr1,
+            pgk_score_err2: isNaN(scorePgkErr2) ? 0 : scorePgkErr2,
+            pgk_score_err3: isNaN(scorePgkErr3) ? 0 : scorePgkErr3
           })
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pgk');
 
-        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan!");
+        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan sesuai pengaturan Anda!");
         closeModal();
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
@@ -948,8 +950,12 @@ const GuruModule = {
     });
 
     const isPgk = q.question_type === 'pgk';
+    const err1Val = q.pgk_score_err1 !== null ? q.pgk_score_err1 : 0;
+    const err2Val = q.pgk_score_err2 !== null ? q.pgk_score_err2 : 0;
+    const err3Val = q.pgk_score_err3 !== null ? q.pgk_score_err3 : 0;
+
     const scoreBadge = isPgk
-      ? `<small style="display:block; color: #854d0e; font-size: 0.8rem; margin-top: 2px;">(Benar: ${q.points}p | Salah 1: ${q.pgk_score_err1 || 0}p | Salah 2: ${q.pgk_score_err2 || 0}p)</small>`
+      ? `<small style="display:block; color: #854d0e; font-size: 0.8rem; margin-top: 2px;">(Benar: ${q.points}p | Salah 1: ${err1Val}p | Salah 2: ${err2Val}p | Salah 3: ${err3Val}p)</small>`
       : `<small style="color: var(--text-muted); font-size: 0.8rem;">(${q.points} Poin)</small>`;
 
     return `
@@ -1114,11 +1120,16 @@ const GuruModule = {
       const stimId = document.getElementById("question-stimulus-id").value || null;
       const num = parseInt(document.getElementById("question-number").value, 10);
       const type = document.getElementById("question-type").value;
-      const points = parseFloat(document.getElementById("question-points").value) || 2.0;
+      const points = parseFloat(document.getElementById("question-points").value);
       
       const isPgk = type === 'pgk';
-      const pgkErr1 = isPgk ? (parseFloat(document.getElementById("question-pgk-err1").value) || 0) : 0;
-      const pgkErr2 = isPgk ? (parseFloat(document.getElementById("question-pgk-err2").value) || 0) : 0;
+      const rawErr1 = parseFloat(document.getElementById("question-pgk-err1").value);
+      const rawErr2 = parseFloat(document.getElementById("question-pgk-err2").value);
+      const rawErr3 = parseFloat(document.getElementById("question-pgk-err3").value);
+
+      const pgkErr1 = isPgk ? (isNaN(rawErr1) ? 0 : rawErr1) : 0;
+      const pgkErr2 = isPgk ? (isNaN(rawErr2) ? 0 : rawErr2) : 0;
+      const pgkErr3 = isPgk ? (isNaN(rawErr3) ? 0 : rawErr3) : 0;
 
       const content = document.getElementById("question-content").value.trim();
       const btnSave = document.getElementById("btn-save-question");
@@ -1166,9 +1177,10 @@ const GuruModule = {
           stimulus_group_id: stimId,
           original_number: num,
           question_type: type,
-          points: points,
+          points: isNaN(points) ? 4.0 : points,
           pgk_score_err1: pgkErr1,
           pgk_score_err2: pgkErr2,
+          pgk_score_err3: pgkErr3,
           image_url: imageUrl,
           content: content,
           correct_keys: correctKeys
@@ -1217,8 +1229,11 @@ const GuruModule = {
     document.getElementById("edit-q-number").value = q.original_number;
     document.getElementById("edit-q-type").value = q.question_type;
     document.getElementById("edit-q-points").value = q.points;
-    document.getElementById("edit-q-pgk-err1").value = q.pgk_score_err1 !== null ? q.pgk_score_err1 : Number((q.points * 0.5).toFixed(2));
-    document.getElementById("edit-q-pgk-err2").value = q.pgk_score_err2 !== null ? q.pgk_score_err2 : 0;
+    
+    // Tampilkan nilai asli persis dari database tanpa mengubah 0 menjadi angka lain
+    document.getElementById("edit-q-pgk-err1").value = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? q.pgk_score_err1 : 0;
+    document.getElementById("edit-q-pgk-err2").value = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? q.pgk_score_err2 : 0;
+    document.getElementById("edit-q-pgk-err3").value = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? q.pgk_score_err3 : 0;
 
     const isPgk = q.question_type === 'pgk';
     document.getElementById("edit-pgk-scores-wrap").classList.toggle("d-none", !isPgk);
@@ -1263,11 +1278,16 @@ const GuruModule = {
       const stimId = document.getElementById("edit-q-stimulus-id").value || null;
       const num = parseInt(document.getElementById("edit-q-number").value, 10);
       const type = document.getElementById("edit-q-type").value;
-      const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
+      const points = parseFloat(document.getElementById("edit-q-points").value);
       
       const isPgk = type === 'pgk';
-      const pgkErr1 = isPgk ? (parseFloat(document.getElementById("edit-q-pgk-err1").value) || 0) : 0;
-      const pgkErr2 = isPgk ? (parseFloat(document.getElementById("edit-q-pgk-err2").value) || 0) : 0;
+      const rawErr1 = parseFloat(document.getElementById("edit-q-pgk-err1").value);
+      const rawErr2 = parseFloat(document.getElementById("edit-q-pgk-err2").value);
+      const rawErr3 = parseFloat(document.getElementById("edit-q-pgk-err3").value);
+
+      const pgkErr1 = isPgk ? (isNaN(rawErr1) ? 0 : rawErr1) : 0;
+      const pgkErr2 = isPgk ? (isNaN(rawErr2) ? 0 : rawErr2) : 0;
+      const pgkErr3 = isPgk ? (isNaN(rawErr3) ? 0 : rawErr3) : 0;
 
       const content = document.getElementById("edit-q-content").value.trim();
 
@@ -1291,9 +1311,10 @@ const GuruModule = {
         stimulus_group_id: stimId,
         original_number: num,
         question_type: type,
-        points: points,
+        points: isNaN(points) ? 1.0 : points,
         pgk_score_err1: pgkErr1,
         pgk_score_err2: pgkErr2,
+        pgk_score_err3: pgkErr3,
         content: content,
         correct_keys: correctKeys
       }).eq('id', qId);
@@ -1333,9 +1354,17 @@ const GuruModule = {
           raw.forEach((r, idx) => {
             const num = r.nomor || (idx + 1);
             const type = (r.tipe || 'pg').toLowerCase().trim();
-            const points = parseFloat(r.poin_benar || r.poin) || 2.0;
-            const err1 = parseFloat(r.pgk_skor_salah_1) !== undefined ? parseFloat(r.pgk_skor_salah_1) : Number((points * 0.5).toFixed(2));
-            const err2 = parseFloat(r.pgk_skor_salah_2) !== undefined ? parseFloat(r.pgk_skor_salah_2) : 0;
+            const points = parseFloat(r.poin_benar || r.poin) || 4.0;
+            
+            // Baca nilai eksplisit jika ada
+            const rawErr1 = parseFloat(r.pgk_skor_salah_1);
+            const rawErr2 = parseFloat(r.pgk_skor_salah_2);
+            const rawErr3 = parseFloat(r.pgk_skor_salah_3);
+
+            const err1 = !isNaN(rawErr1) ? rawErr1 : 0;
+            const err2 = !isNaN(rawErr2) ? rawErr2 : 0;
+            const err3 = !isNaN(rawErr3) ? rawErr3 : 0;
+
             const content = (r.soal || '').trim();
             const rawKey = String(r.kunci || '').toUpperCase().trim();
             const parsedKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
@@ -1357,12 +1386,13 @@ const GuruModule = {
                 points: points,
                 pgk_score_err1: err1,
                 pgk_score_err2: err2,
+                pgk_score_err3: err3,
                 content: content,
                 correct_keys: parsedKeys,
                 options: options
               });
 
-              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${type === 'pgk' ? err1 : '-'}</td><td>${type === 'pgk' ? err2 : '-'}</td><td>${content.substring(0, 35)}...</td><td>${parsedKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${type === 'pgk' ? err1 : '-'}</td><td>${type === 'pgk' ? err2 : '-'}</td><td>${type === 'pgk' ? err3 : '-'}</td><td>${content.substring(0, 30)}...</td><td>${parsedKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
             }
           });
 
@@ -1401,6 +1431,7 @@ const GuruModule = {
             points: q.points,
             pgk_score_err1: q.pgk_score_err1,
             pgk_score_err2: q.pgk_score_err2,
+            pgk_score_err3: q.pgk_score_err3,
             content: q.content,
             correct_keys: q.correct_keys
           }).select().single();
@@ -1486,7 +1517,7 @@ const GuruModule = {
     if (data.item_analysis && data.item_analysis.length > 0) {
       data.item_analysis.forEach(function(item) {
         var label = (item.selected_keys || []).join(",") || "-";
-        var scoreVal = (item.score_earned !== undefined && item.score_earned !== null) ? item.score_earned : (item.is_correct ? 1 : 0);
+        var scoreVal = (item.score_earned !== undefined && item.score_earned !== null) ? item.score_earned : 0;
         rowAnalisis.push(label + " (" + scoreVal + ")");
       });
     }
@@ -1612,7 +1643,7 @@ const GuruModule = {
 
     const { data: questions } = await client
       .from('questions')
-      .select('id, original_number, points, pgk_score_err1, pgk_score_err2, question_type, correct_keys')
+      .select('id, original_number, points, pgk_score_err1, pgk_score_err2, pgk_score_err3, question_type, correct_keys')
       .eq('exam_id', examId)
       .order('original_number', { ascending: true });
 
@@ -1672,9 +1703,16 @@ const GuruModule = {
                     const missed = trueKeys.filter(k => !sKeys.includes(k)).length;
                     const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
                     const totalErrors = missed + wrong;
+                    
+                    // Baca nilai angka secara ketat (angka 0 tetap 0)
+                    const err1Val = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? parseFloat(q.pgk_score_err1) : 0;
+                    const err2Val = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? parseFloat(q.pgk_score_err2) : 0;
+                    const err3Val = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? parseFloat(q.pgk_score_err3) : 0;
+
                     if (totalErrors === 0 && sKeys.length > 0) earned = maxP;
-                    else if (totalErrors === 1) earned = q.pgk_score_err1 !== null ? parseFloat(q.pgk_score_err1) : Number((maxP * 0.5).toFixed(2));
-                    else if (totalErrors === 2) earned = q.pgk_score_err2 !== null ? parseFloat(q.pgk_score_err2) : 0;
+                    else if (totalErrors === 1) earned = err1Val;
+                    else if (totalErrors === 2) earned = err2Val;
+                    else if (totalErrors === 3) earned = err3Val;
                     else earned = 0;
                   }
                 }
