@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: REKAP NILAI BERSIH & SINKRONISASI SPREADSHEET
+// MODUL DASHBOARD GURU: FITUR SKOR MASSAL, ATURAN SKOR PGK & TEMPLATE EXCEL
 // ==========================================================================
 
 const GuruModule = {
@@ -41,6 +41,7 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
+  // TEMPLATE EXCEL SOAL DISESUAIKAN DENGAN SKOR PGK BERTINGKAT
   downloadExcelTemplate() {
     const templateData = [
       {
@@ -48,7 +49,9 @@ const GuruModule = {
         judul_stimulus: "",
         isi_stimulus: "",
         tipe: "pg",
-        poin: 1.0,
+        poin_benar: 2.0,
+        pgk_skor_salah_1: 0,
+        pgk_skor_salah_2: 0,
         soal: "Ibukota negara Indonesia saat ini adalah...",
         opsi_a: "Jakarta",
         opsi_b: "Surabaya",
@@ -62,9 +65,11 @@ const GuruModule = {
       {
         nomor: 2,
         judul_stimulus: "Teks Ekosistem Mangrove",
-        isi_stimulus: "Hutan mangrove merupakan ekosistem pesisir penting yang mencegah abrasi dan menjadi habitat ikan.",
+        isi_stimulus: "Hutan mangrove merupakan ekosistem pesisir penting yang mencegah abrasi dan menjadi habitat biota laut.",
         tipe: "pgk",
-        poin: 2.0,
+        poin_benar: 4.0,
+        pgk_skor_salah_1: 2.0,
+        pgk_skor_salah_2: 1.0,
         soal: "Berdasarkan teks, manakah peran utama hutan mangrove? (Pilihan Ganda Kompleks)",
         opsi_a: "Meredam gelombang tsunami",
         opsi_b: "Tempat pemijahan udang dan kepiting",
@@ -235,6 +240,7 @@ const GuruModule = {
     this.setupClassEventListeners();
     this.setupExamEventListeners();
     this.setupBankSoalEventListeners();
+    this.setupBulkScoreEventListeners();
     this.setupStimulusEventListeners();
     this.setupQuestionFormEventListeners();
     this.setupEditQuestionEventListeners();
@@ -755,6 +761,64 @@ const GuruModule = {
     }
   },
 
+  // =========================================================================
+  // FITUR: SAMAKAN SKOR SOAL SECARA MASSAL (SEMUA PG & SEMUA PGK)
+  // =========================================================================
+  setupBulkScoreEventListeners() {
+    const modal = document.getElementById("modal-bulk-score");
+    const closeModal = () => modal.classList.add("d-none");
+
+    document.getElementById("btn-open-modal-bulk-score")?.addEventListener("click", () => {
+      if (!this.selectedExamId) return alert("Silakan pilih sesi ujian terlebih dahulu di dropdown!");
+      modal.classList.remove("d-none");
+    });
+
+    document.getElementById("btn-close-modal-bulk-score")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-bulk-score")?.addEventListener("click", closeModal);
+
+    document.getElementById("form-bulk-score")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!this.selectedExamId) return;
+
+      const scorePg = parseFloat(document.getElementById("bulk-score-pg").value) || 2.0;
+      const scorePgkFull = parseFloat(document.getElementById("bulk-score-pgk-full").value) || 4.0;
+      const scorePgkErr1 = parseFloat(document.getElementById("bulk-score-pgk-err1").value) || 2.0;
+      const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value) || 1.0;
+
+      const btn = document.getElementById("btn-save-bulk-score");
+      btn.disabled = true;
+      btn.innerText = "Menerapkan...";
+
+      const client = getSupabaseClient();
+      try {
+        // 1. Update semua butir PG
+        await client.from('questions')
+          .update({ points: scorePg })
+          .eq('exam_id', this.selectedExamId)
+          .eq('question_type', 'pg');
+
+        // 2. Update semua butir PGK
+        await client.from('questions')
+          .update({
+            points: scorePgkFull,
+            pgk_score_err1: scorePgkErr1,
+            pgk_score_err2: scorePgkErr2
+          })
+          .eq('exam_id', this.selectedExamId)
+          .eq('question_type', 'pgk');
+
+        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan!");
+        closeModal();
+        await this.loadBankSoalContent(this.selectedExamId);
+      } catch (err) {
+        alert(`Gagal menyamakan skor: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Terapkan ke Semua Soal";
+      }
+    });
+  },
+
   async loadBankSoalExamFilter() {
     const filterSelect = document.getElementById("bank-exam-filter");
     const importSelect = document.getElementById("import-exam-select");
@@ -883,10 +947,18 @@ const GuruModule = {
       opts += `<div style="${o.is_correct ? 'color: var(--success-color); font-weight: bold;' : ''}">${o.is_correct ? '✓ ' : ''}<strong>${o.option_label}.</strong> ${o.content}</div>`;
     });
 
+    const isPgk = q.question_type === 'pgk';
+    const scoreBadge = isPgk
+      ? `<small style="display:block; color: #854d0e; font-size: 0.8rem; margin-top: 2px;">(Benar: ${q.points}p | Salah 1: ${q.pgk_score_err1 || 0}p | Salah 2: ${q.pgk_score_err2 || 0}p)</small>`
+      : `<small style="color: var(--text-muted); font-size: 0.8rem;">(${q.points} Poin)</small>`;
+
     return `
       <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #ffffff;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong>No. ${q.original_number} (${q.question_type.toUpperCase()} - ${q.points} Poin)</strong>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <strong>No. ${q.original_number} (${q.question_type.toUpperCase()})</strong>
+            ${scoreBadge}
+          </div>
           <div>
             <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
             <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
@@ -1017,8 +1089,12 @@ const GuruModule = {
       }
     });
 
+    // Toggle Tipe Soal (Munculkan Input Skor PGK jika memilih PGK)
     document.getElementById("question-type")?.addEventListener("change", (e) => {
       const isPgk = e.target.value === 'pgk';
+      const pgkBox = document.getElementById("create-pgk-scores-wrap");
+      if (pgkBox) pgkBox.classList.toggle("d-none", !isPgk);
+
       document.querySelectorAll("#options-inputs-container .option-key-input").forEach(i => {
         i.type = isPgk ? 'checkbox' : 'radio';
         if (!isPgk) i.name = "correct_key";
@@ -1038,7 +1114,12 @@ const GuruModule = {
       const stimId = document.getElementById("question-stimulus-id").value || null;
       const num = parseInt(document.getElementById("question-number").value, 10);
       const type = document.getElementById("question-type").value;
-      const points = parseFloat(document.getElementById("question-points").value) || 1.0;
+      const points = parseFloat(document.getElementById("question-points").value) || 2.0;
+      
+      const isPgk = type === 'pgk';
+      const pgkErr1 = isPgk ? (parseFloat(document.getElementById("question-pgk-err1").value) || 0) : 0;
+      const pgkErr2 = isPgk ? (parseFloat(document.getElementById("question-pgk-err2").value) || 0) : 0;
+
       const content = document.getElementById("question-content").value.trim();
       const btnSave = document.getElementById("btn-save-question");
       const fileInput = document.getElementById("question-image-file");
@@ -1086,6 +1167,8 @@ const GuruModule = {
           original_number: num,
           question_type: type,
           points: points,
+          pgk_score_err1: pgkErr1,
+          pgk_score_err2: pgkErr2,
           image_url: imageUrl,
           content: content,
           correct_keys: correctKeys
@@ -1134,9 +1217,14 @@ const GuruModule = {
     document.getElementById("edit-q-number").value = q.original_number;
     document.getElementById("edit-q-type").value = q.question_type;
     document.getElementById("edit-q-points").value = q.points;
-    document.getElementById("edit-q-content").value = q.content;
+    document.getElementById("edit-q-pgk-err1").value = q.pgk_score_err1 !== null ? q.pgk_score_err1 : Number((q.points * 0.5).toFixed(2));
+    document.getElementById("edit-q-pgk-err2").value = q.pgk_score_err2 !== null ? q.pgk_score_err2 : 0;
 
     const isPgk = q.question_type === 'pgk';
+    document.getElementById("edit-pgk-scores-wrap").classList.toggle("d-none", !isPgk);
+
+    document.getElementById("edit-q-content").value = q.content;
+
     const optMap = {};
     (q.options || []).forEach(o => optMap[o.option_label] = o);
 
@@ -1158,6 +1246,16 @@ const GuruModule = {
     document.getElementById("btn-cancel-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
     document.getElementById("btn-close-modal-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
 
+    document.getElementById("edit-q-type")?.addEventListener("change", (e) => {
+      const isPgk = e.target.value === 'pgk';
+      document.getElementById("edit-pgk-scores-wrap").classList.toggle("d-none", !isPgk);
+      document.querySelectorAll(".edit-opt-key").forEach(i => {
+        i.type = isPgk ? 'checkbox' : 'radio';
+        if (!isPgk) i.name = "edit_key";
+        else i.removeAttribute("name");
+      });
+    });
+
     document.getElementById("form-edit-question")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const qId = document.getElementById("edit-q-id").value;
@@ -1166,6 +1264,11 @@ const GuruModule = {
       const num = parseInt(document.getElementById("edit-q-number").value, 10);
       const type = document.getElementById("edit-q-type").value;
       const points = parseFloat(document.getElementById("edit-q-points").value) || 1.0;
+      
+      const isPgk = type === 'pgk';
+      const pgkErr1 = isPgk ? (parseFloat(document.getElementById("edit-q-pgk-err1").value) || 0) : 0;
+      const pgkErr2 = isPgk ? (parseFloat(document.getElementById("edit-q-pgk-err2").value) || 0) : 0;
+
       const content = document.getElementById("edit-q-content").value.trim();
 
       const textInputs = document.querySelectorAll(".edit-opt-text");
@@ -1184,7 +1287,17 @@ const GuruModule = {
       });
 
       const client = getSupabaseClient();
-      await client.from('questions').update({ stimulus_group_id: stimId, original_number: num, question_type: type, points: points, content: content, correct_keys: correctKeys }).eq('id', qId);
+      await client.from('questions').update({
+        stimulus_group_id: stimId,
+        original_number: num,
+        question_type: type,
+        points: points,
+        pgk_score_err1: pgkErr1,
+        pgk_score_err2: pgkErr2,
+        content: content,
+        correct_keys: correctKeys
+      }).eq('id', qId);
+
       await client.from('options').delete().eq('question_id', qId);
       await client.from('options').insert(options);
 
@@ -1220,7 +1333,9 @@ const GuruModule = {
           raw.forEach((r, idx) => {
             const num = r.nomor || (idx + 1);
             const type = (r.tipe || 'pg').toLowerCase().trim();
-            const points = parseFloat(r.poin) || 1.0;
+            const points = parseFloat(r.poin_benar || r.poin) || 2.0;
+            const err1 = parseFloat(r.pgk_skor_salah_1) !== undefined ? parseFloat(r.pgk_skor_salah_1) : Number((points * 0.5).toFixed(2));
+            const err2 = parseFloat(r.pgk_skor_salah_2) !== undefined ? parseFloat(r.pgk_skor_salah_2) : 0;
             const content = (r.soal || '').trim();
             const rawKey = String(r.kunci || '').toUpperCase().trim();
             const parsedKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
@@ -1240,12 +1355,14 @@ const GuruModule = {
                 stimulus_content: r.isi_stimulus ? String(r.isi_stimulus).trim() : '',
                 question_type: type,
                 points: points,
+                pgk_score_err1: err1,
+                pgk_score_err2: err2,
                 content: content,
                 correct_keys: parsedKeys,
                 options: options
               });
 
-              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${content.substring(0, 40)}...</td><td>${parsedKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
+              tableRows += `<tr><td>${num}</td><td>${r.judul_stimulus || '-'}</td><td>${type.toUpperCase()}</td><td>${points}</td><td>${type === 'pgk' ? err1 : '-'}</td><td>${type === 'pgk' ? err2 : '-'}</td><td>${content.substring(0, 35)}...</td><td>${parsedKeys.join(',')}</td><td><span class="badge badge-success">Valid</span></td></tr>`;
             }
           });
 
@@ -1282,6 +1399,8 @@ const GuruModule = {
             original_number: q.original_number,
             question_type: q.question_type,
             points: q.points,
+            pgk_score_err1: q.pgk_score_err1,
+            pgk_score_err2: q.pgk_score_err2,
             content: q.content,
             correct_keys: q.correct_keys
           }).select().single();
@@ -1422,9 +1541,6 @@ const GuruModule = {
     });
   },
 
-  // =========================================================================
-  // REKAPITULASI NILAI GURU (TABEL MATRIKS SUDAH DIHAPUS BERSIH)
-  // =========================================================================
   async loadHasilAndAnalisis(examId) {
     const integrationCard = document.getElementById("spreadsheet-integration-card");
     const inputUrl = document.getElementById("input-spreadsheet-url");
@@ -1468,7 +1584,6 @@ const GuruModule = {
       };
     }
 
-    // Ambil data attempt siswa
     const { data: attempts } = await client
       .from('exam_attempts')
       .select('id, score, total_points, violation_count, submission_type, submitted_at, students(id, attendance_number, full_name, student_number, classes(class_name))')
@@ -1495,10 +1610,9 @@ const GuruModule = {
     });
     if (tbodyHasil) tbodyHasil.innerHTML = rowsHtml || '<tr><td colspan="8" class="text-center text-muted">Belum ada data pengerjaan.</td></tr>';
 
-    // Ambil data soal untuk sinkronisasi ke Spreadsheet
     const { data: questions } = await client
       .from('questions')
-      .select('id, original_number, points, question_type, correct_keys')
+      .select('id, original_number, points, pgk_score_err1, pgk_score_err2, question_type, correct_keys')
       .eq('exam_id', examId)
       .order('original_number', { ascending: true });
 
@@ -1520,7 +1634,6 @@ const GuruModule = {
       ansMap[attId][qId] = ans;
     });
 
-    // Tombol Kirim Ulang Semua Nilai ke Spreadsheet (Mengirim Data Rekap & Butir Soal Lengkap Poin Asli)
     if (btnSyncAll) {
       btnSyncAll.onclick = async () => {
         const targetUrl = inputUrl.value.trim();
@@ -1560,7 +1673,8 @@ const GuruModule = {
                     const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
                     const totalErrors = missed + wrong;
                     if (totalErrors === 0 && sKeys.length > 0) earned = maxP;
-                    else if (totalErrors === 1) earned = parseFloat((maxP * 0.5).toFixed(2));
+                    else if (totalErrors === 1) earned = q.pgk_score_err1 !== null ? parseFloat(q.pgk_score_err1) : Number((maxP * 0.5).toFixed(2));
+                    else if (totalErrors === 2) earned = q.pgk_score_err2 !== null ? parseFloat(q.pgk_score_err2) : 0;
                     else earned = 0;
                   }
                 }
