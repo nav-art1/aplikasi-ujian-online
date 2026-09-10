@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: PENGACAKAN PER TIPE SOAL & PENGIRIMAN NOMOR ABSEN
+// MODUL PENGERJAAN UJIAN: PENILAIAN PARSIAL PGK, ANTI-CURANG, & WEBHOOK
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -158,14 +158,12 @@ const ExamRunnerModule = {
 
       qData.forEach(q => q.options = optionsMap[q.id] || []);
 
-      // Pengacakan Soal per Tipe Soal (PG acak PG, PGK acak PGK)
       if (this.session.exam.randomize_questions) {
         this.questions = this.shuffleQuestionsByType(qData);
       } else {
         this.questions = qData;
       }
 
-      // Pengacakan Opsi
       if (this.session.exam.randomize_options) {
         this.questions.forEach(q => {
           if (q.options && q.options.length > 0) q.options = this.shuffleArray([...q.options]);
@@ -431,26 +429,58 @@ const ExamRunnerModule = {
       let correctCount = 0;
       const studentAnswersPayload = [];
 
+      // =====================================================================
+      // SISTEM PENILAIAN BARU: PGK BERBOBOT PARSIAL (SALAH 1 = 50%, SALAH >= 2 = 0)
+      // =====================================================================
       this.questions.forEach((q) => {
         const qPoints = parseFloat(q.points) || 1.0;
         maxPossibleScore += qPoints;
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
-        const selectedKeys = userAns.keys || [];
-
+        const selectedKeys = (userAns.keys || []).map(k => String(k).toUpperCase().trim());
         const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
-        const userKeysSorted = [...selectedKeys].map(k => String(k).toUpperCase().trim()).sort();
-        const trueKeysSorted = [...trueKeys].sort();
-
-        const isCorrect = (userKeysSorted.length === trueKeysSorted.length) &&
-          userKeysSorted.every((val, index) => val === trueKeysSorted[index]);
 
         let scoreEarned = 0;
-        if (isCorrect) {
-          scoreEarned = qPoints;
-          totalEarnedScore += qPoints;
-          correctCount++;
+        let isCorrect = false;
+
+        const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
+
+        if (!isPgk) {
+          // Pilihan Ganda Biasa (1 Kunci)
+          const isMatch = (selectedKeys.length === trueKeys.length) &&
+            selectedKeys.every((val, index) => val === trueKeys[index]);
+
+          if (isMatch && selectedKeys.length > 0) {
+            scoreEarned = qPoints;
+            isCorrect = true;
+            correctCount++;
+          }
+        } else {
+          // PG Kompleks (Multi Kunci): Hitung selisih ketidakcocokan
+          // missedKeys = Kunci benar yang tidak dicentang siswa
+          const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
+          // wrongSelectedKeys = Opsi salah yang keliru dicentang siswa
+          const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
+
+          const totalErrors = missedKeys.length + wrongSelectedKeys.length;
+
+          if (totalErrors === 0 && selectedKeys.length > 0) {
+            // Benar semua tanpa cela -> Nilai Full (100%)
+            scoreEarned = qPoints;
+            isCorrect = true;
+            correctCount++;
+          } else if (totalErrors === 1) {
+            // Salah 1 (bisa kurang 1 centangan atau lebih 1 centangan salah) -> Nilai Setengah (50%)
+            scoreEarned = qPoints * 0.5;
+            isCorrect = false;
+          } else {
+            // Salah 2 atau lebih -> Nilai 0
+            scoreEarned = 0;
+            isCorrect = false;
+          }
         }
+
+        totalEarnedScore += scoreEarned;
 
         studentAnswersPayload.push({
           question_id: q.id,
@@ -500,18 +530,39 @@ const ExamRunnerModule = {
           
           const itemAnalysisData = sortedOriginalQuestions.map(q => {
             const userAns = this.userAnswers[q.id] || { keys: [] };
-            const selectedKeys = userAns.keys || [];
+            const selectedKeys = (userAns.keys || []).map(k => String(k).toUpperCase().trim());
             const trueKeys = (q.correct_keys || []).map(k => String(k).toUpperCase().trim());
-            const userKeysSorted = [...selectedKeys].map(k => String(k).toUpperCase().trim()).sort();
-            const trueKeysSorted = [...trueKeys].sort();
 
-            const isCorrect = (userKeysSorted.length === trueKeysSorted.length) &&
-              userKeysSorted.every((val, index) => val === trueKeysSorted[index]);
+            let isItemFullCorrect = false;
+            let itemScoreLabel = "0";
+
+            const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
+            if (!isPgk) {
+              isItemFullCorrect = (selectedKeys.length === trueKeys.length) &&
+                selectedKeys.every((val, index) => val === trueKeys[index]) && selectedKeys.length > 0;
+              itemScoreLabel = isItemFullCorrect ? "1" : "0";
+            } else {
+              const missed = trueKeys.filter(k => !selectedKeys.includes(k));
+              const wrong = selectedKeys.filter(k => !trueKeys.includes(k));
+              const errs = missed.length + wrong.length;
+
+              if (errs === 0 && selectedKeys.length > 0) {
+                isItemFullCorrect = true;
+                itemScoreLabel = "1";
+              } else if (errs === 1) {
+                isItemFullCorrect = false;
+                itemScoreLabel = "0.5";
+              } else {
+                isItemFullCorrect = false;
+                itemScoreLabel = "0";
+              }
+            }
 
             return {
               question_number: q.original_number,
               selected_keys: selectedKeys,
-              is_correct: isCorrect
+              is_correct: isItemFullCorrect,
+              score_label: itemScoreLabel
             };
           });
 
