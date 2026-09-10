@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: BENAR-BENAR ACAK OPSI, PENILAIAN PGK SETENGAH (50%)
+// MODUL PENGERJAAN UJIAN: LABEL A,B,C TETAP URUT, ISI DIAKAC, & PGK PARSIAL (50%)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -148,7 +148,10 @@ const ExamRunnerModule = {
       if (qErr) throw qErr;
 
       const questionIds = qData.map(q => q.id);
-      const { data: allOptions } = await client.from('options').select('id, question_id, option_label, content').in('question_id', questionIds);
+      const { data: allOptions } = await client
+        .from('options')
+        .select('id, question_id, option_label, content, is_correct')
+        .in('question_id', questionIds);
 
       const optionsMap = {};
       (allOptions || []).forEach(opt => {
@@ -156,7 +159,9 @@ const ExamRunnerModule = {
         optionsMap[opt.question_id].push(opt);
       });
 
-      qData.forEach(q => q.options = optionsMap[q.id] || []);
+      qData.forEach(q => {
+        q.options = optionsMap[q.id] || [];
+      });
 
       // 1. Pengacakan Butir Soal per Tipe (PG acak sesama PG, PGK acak sesama PGK)
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
@@ -166,15 +171,29 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Opsi Jawaban (Benar-benar diacak posisinya)
+      // 2. Pengacakan Isi Jawaban DENGAN LABEL A, B, C, D TETAP URUT
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
-      if (shouldRandomizeOptions) {
-        this.questions.forEach(q => {
-          if (q.options && q.options.length > 1) {
-            q.options = this.shuffleArray([...q.options]);
+      const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+      this.questions.forEach(q => {
+        if (q.options && q.options.length > 1) {
+          let opts = [...q.options];
+          if (shouldRandomizeOptions) {
+            opts = this.shuffleArray(opts);
+          } else {
+            opts.sort((a, b) => (a.option_label || '').localeCompare(b.option_label || ''));
           }
-        });
-      }
+
+          // Pasang kembali label A, B, C, D secara urut ke baris yang sudah teracak
+          q.displayOptions = opts.map((opt, idx) => ({
+            ...opt,
+            display_label: standardLabels[idx] || String.fromCharCode(65 + idx),
+            original_label: opt.option_label // Simpan label aslinya untuk validasi kunci
+          }));
+        } else {
+          q.displayOptions = q.options || [];
+        }
+      });
 
       this.renderCurrentQuestion();
       this.renderGridNumbers();
@@ -276,17 +295,21 @@ const ExamRunnerModule = {
     const isPgk = q.question_type === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
     
-    // PERBAIKAN: JANGAN pakai .sort() agar pengacakan opsi TIDAK dibatalkan
-    const opts = q.options || [];
+    // Gunakan displayOptions yang label hurufnya A, B, C, D selalu urut
+    const opts = q.displayOptions || q.options || [];
 
     let optionsHtml = '';
     opts.forEach(opt => {
-      const isChecked = currentAns.keys.includes(opt.option_label);
+      // Yang disimpan sebagai tanda pilihan adalah id opsi atau original_label agar penilaian 100% konsisten
+      const optKey = opt.original_label || opt.option_label;
+      const isChecked = currentAns.keys.includes(optKey);
+      const letterLabel = opt.display_label || opt.option_label;
+
       optionsHtml += `
-        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${opt.option_label}">
-          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${opt.option_label}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${opt.option_label}', ${isPgk})">
+        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${optKey}">
+          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${optKey}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${optKey}', ${isPgk})">
           <div style="flex-grow: 1;">
-            <strong>${opt.option_label}.</strong> <span class="math-opt-text">${opt.content}</span>
+            <strong>${letterLabel}.</strong> <span class="math-opt-text">${opt.content}</span>
           </div>
         </label>
       `;
@@ -411,6 +434,9 @@ const ExamRunnerModule = {
     }
   },
 
+  // =========================================================================
+  // LOGIKA PENILAIAN AKURAT: PGK SALAH 0 = 100%, SALAH 1 = 50%, SALAH >= 2 = 0
+  // =========================================================================
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -438,21 +464,24 @@ const ExamRunnerModule = {
       let correctCount = 0;
       const studentAnswersPayload = [];
 
-      // =====================================================================
-      // SISTEM PENILAIAN PGK: SALAH 0 = FULL, SALAH 1 = 50%, SALAH >= 2 = 0
-      // =====================================================================
       this.questions.forEach((q) => {
         const qPoints = parseFloat(q.points) || 1.0;
         maxPossibleScore += qPoints;
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // Normalisasi Kunci Siswa & Kunci Benar (Hapus spasi, koma, huruf kapital)
+        // 1. Ekstrak Kunci Pilihan Siswa
         const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
         const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
-        const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
-        const trueKeys = rawTrue.map(k => String(k).toUpperCase().trim()).filter(Boolean);
+        // 2. Ekstrak Kunci Benar (Cek dari correct_keys atau dari opsi is_correct)
+        let trueKeys = [];
+        if (q.correct_keys) {
+          const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
+          trueKeys = rawTrue.map(k => String(k).toUpperCase().trim()).filter(Boolean);
+        } else if (q.options && q.options.length > 0) {
+          trueKeys = q.options.filter(o => o.is_correct).map(o => String(o.option_label).toUpperCase().trim());
+        }
 
         let scoreEarned = 0;
         let isCorrect = false;
@@ -460,33 +489,36 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // PG Biasa: 1 Kunci
-          const isMatch = (selectedKeys.length === trueKeys.length) &&
-            selectedKeys.length > 0 &&
-            selectedKeys[0] === trueKeys[0];
-
+          // --- PILIHAN GANDA BIASA (1 KUNCI) ---
+          const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
+          } else {
+            scoreEarned = 0;
+            isCorrect = false;
           }
         } else {
-          // PGK (Multi Kunci): Hitung selisih ketidakcocokan
+          // --- PILIHAN GANDA KOMPLEKS (PGK) ---
+          // missedKeys = Kunci benar yang tidak dicentang siswa
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
+          // wrongSelectedKeys = Opsi salah yang keliru dicentang siswa
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
+
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
           if (totalErrors === 0 && selectedKeys.length > 0) {
-            // Benar semua tanpa cela -> Nilai Full
+            // Benar semua tanpa cela -> Nilai Penuh (100%)
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 (bisa kurang 1 centangan atau lebih 1 centangan salah) -> PASTI 50%
-            scoreEarned = parseFloat((qPoints * 0.5).toFixed(2));
+            // Salah 1 (misal kurang 1 kunci benar ATAU kelebihan 1 centangan salah) -> PASTI 50%
+            scoreEarned = Number((qPoints * 0.5).toFixed(2));
             isCorrect = false;
           } else {
-            // Salah 2 atau lebih -> Nilai 0
+            // Salah 2 atau lebih -> 0
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -502,6 +534,7 @@ const ExamRunnerModule = {
         });
       });
 
+      // Nilai Skala 0 - 100
       const finalPercentage = maxPossibleScore > 0 ? Math.round((totalEarnedScore / maxPossibleScore) * 100) : 0;
 
       // 1. Simpan Attempt ke Supabase
@@ -511,7 +544,7 @@ const ExamRunnerModule = {
           exam_id: this.session.exam.id,
           student_id: this.session.student.id,
           score: finalPercentage,
-          total_points: totalEarnedScore,
+          total_points: Number(totalEarnedScore.toFixed(2)),
           violation_count: this.violationCount,
           submission_type: finalSubmissionType,
           started_at: this.startTimeIso,
@@ -563,7 +596,7 @@ const ExamRunnerModule = {
             subject: this.session.exam.subject,
             submitted_at: new Date().toLocaleString("id-ID"),
             total_questions: this.questions.length,
-            total_points: totalEarnedScore,
+            total_points: Number(totalEarnedScore.toFixed(2)),
             correct_count: correctCount,
             final_score: finalPercentage,
             submission_type: finalSubmissionType,
