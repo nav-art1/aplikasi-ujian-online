@@ -450,7 +450,6 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // Pilihan Ganda Biasa (1 Kunci)
           const isMatch = (selectedKeys.length === trueKeys.length) &&
             selectedKeys.every((val, index) => val === trueKeys[index]);
 
@@ -460,22 +459,18 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // PG Kompleks (Multi Kunci): Dihitung selisih ketidakcocokan
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
           if (totalErrors === 0 && selectedKeys.length > 0) {
-            // Benar semua tanpa cela -> Nilai Full (100%)
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 (kurang 1 atau lebih 1) -> Nilai Setengah (50%)
             scoreEarned = parseFloat((qPoints * 0.5).toFixed(2));
             isCorrect = false;
           } else {
-            // Salah 2 atau lebih -> Nilai 0
             scoreEarned = 0;
             isCorrect = false;
           }
