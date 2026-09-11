@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: SKOR PGK BERTINGKAT (BENAR, SALAH 1, SALAH 2, SALAH 3)
+// MODUL PENGERJAAN UJIAN: DENGAN ANIMASI LOADING OVERLAY SAAT KUMPULKAN UJIAN
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -17,6 +17,21 @@ const ExamRunnerModule = {
   isCheatGuardActive: false,
   initialWindowHeight: window.innerHeight,
   isForcedSubmission: false,
+
+  // FUNGSI ANIMASI LOADING OVERLAY
+  showLoader(message = "Mengirim Jawaban Ujian...") {
+    const loader = document.getElementById("global-loader");
+    const msgEl = document.getElementById("loader-message");
+    if (loader) {
+      if (msgEl) msgEl.innerText = message;
+      loader.classList.remove("d-none");
+    }
+  },
+
+  hideLoader() {
+    const loader = document.getElementById("global-loader");
+    if (loader) loader.classList.add("d-none");
+  },
 
   renderMath(element) {
     if (typeof renderMathInElement === 'function' && element) {
@@ -163,7 +178,7 @@ const ExamRunnerModule = {
         q.options = optionsMap[q.id] || [];
       });
 
-      // 1. Pengacakan Butir Soal per Tipe Soal
+      // 1. Pengacakan Butir Soal per Tipe
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
       if (shouldRandomizeQuestions) {
         this.questions = this.shuffleQuestionsByType(qData);
@@ -171,7 +186,7 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut)
+      // 2. Pengacakan Opsi Jawaban (Huruf A, B, C, D tetap urut)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -431,9 +446,7 @@ const ExamRunnerModule = {
     }
   },
 
-  // =========================================================================
-  // PENILAIAN AKURAT: NILAI 0 TETAP 0, BEBAS DITENTUKAN GURU
-  // =========================================================================
+  // PENILAIAN AKURAT DENGAN ANIMASI LOADING OVERLAY
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -442,15 +455,14 @@ const ExamRunnerModule = {
       if (!confirm(msg)) return;
     }
 
+    // TAMPILKAN ANIMASI LOADING OVERLAY
+    this.showLoader("Mengumpulkan Lembar Jawaban...");
     this.isCheatGuardActive = false;
     clearInterval(this.timerInterval);
     localStorage.removeItem(`timer_end_${this.session.exam.id}_${this.session.student.id}`);
 
     const btnFinish = document.getElementById("btn-finish-exam");
-    if (btnFinish) {
-      btnFinish.disabled = true;
-      btnFinish.innerText = "Mengirim Jawaban...";
-    }
+    if (btnFinish) btnFinish.disabled = true;
 
     const finalSubmissionType = isCheatForced ? 'forced_cheat' : 'normal';
     const client = getSupabaseClient();
@@ -499,7 +511,6 @@ const ExamRunnerModule = {
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
-          // Pembacaan presisi: Angka 0 tetap terbaca sebagai 0 murni
           const parseScore = (val, defaultVal) => {
             if (val !== undefined && val !== null && val !== '') {
               const parsed = parseFloat(val);
@@ -638,8 +649,14 @@ const ExamRunnerModule = {
 
       sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
       sessionStorage.removeItem(`answers_${this.session.exam.id}_${this.session.student.id}`);
-      window.location.href = "selesai.html";
+      
+      // Beri jeda animasi sedikit sebelum pindah halaman
+      setTimeout(() => {
+        window.location.href = "selesai.html";
+      }, 500);
+
     } catch (err) {
+      this.hideLoader();
       alert(`Kendala pengiriman jawaban: ${err.message}`);
       if (btnFinish) {
         btnFinish.disabled = false;
