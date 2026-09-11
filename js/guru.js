@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: DENGAN ANIMASI LOADING OVERLAY / SPINNER PADA SEMUA UPLOAD
+// MODUL GURU: FIX UPLOAD GAMBAR SOAL/STIMULUS & PENGATURAN SKOR
 // ==========================================================================
 
 const GuruModule = {
@@ -14,7 +14,6 @@ const GuruModule = {
   parsedExcelQuestions: [],
   parsedExcelStudents: [],
 
-  // FUNGSI ANIMASI LOADING OVERLAY
   showLoader(message = "Memproses Data...") {
     const loader = document.getElementById("global-loader");
     const msgEl = document.getElementById("loader-message");
@@ -45,15 +44,26 @@ const GuruModule = {
     }
   },
 
+  // FIX: FUNGSI UPLOAD GAMBAR DENGAN VALIDASI PUBLIC STORAGE
   async uploadImageFile(file, folder = 'questions') {
     if (!file) return null;
     const client = getSupabaseClient();
     const fileExt = file.name.split('.').pop() || 'jpg';
-    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt.toLowerCase()}`;
+    const cleanFileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt.toLowerCase()}`;
 
-    const { data, error } = await client.storage.from('exam-images').upload(fileName, file, { cacheControl: '3600', upsert: false });
-    if (error) throw new Error(`Upload gambar gagal: ${error.message}`);
-    return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
+    const { data, error } = await client.storage
+      .from('exam-images')
+      .upload(cleanFileName, file, { cacheControl: '3600', upsert: true });
+
+    if (error) {
+      throw new Error(`Upload gambar gagal: ${error.message}. Pastikan bucket "exam-images" di Supabase berstatus Public.`);
+    }
+
+    const { data: pubUrlData } = client.storage
+      .from('exam-images')
+      .getPublicUrl(cleanFileName);
+
+    return pubUrlData.publicUrl;
   },
 
   downloadExcelTemplate() {
@@ -103,7 +113,6 @@ const GuruModule = {
         const worksheet = XLSX.utils.json_to_sheet(templateData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Template Soal");
-
         const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
@@ -117,7 +126,7 @@ const GuruModule = {
         return;
       }
     } catch (err) {
-      console.warn("XLSX export warning, beralih ke CSV:", err);
+      console.warn("XLSX warning, beralih ke CSV:", err);
     }
 
     try {
@@ -148,7 +157,6 @@ const GuruModule = {
         const ws = XLSX.utils.json_to_sheet(templateData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Template Siswa");
-
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
@@ -162,7 +170,7 @@ const GuruModule = {
         return;
       }
     } catch (err) {
-      console.warn("XLSX student warning, beralih ke CSV:", err);
+      console.warn("XLSX student warning:", err);
     }
 
     const headers = Object.keys(templateData[0]).join(",");
@@ -478,7 +486,6 @@ const GuruModule = {
     }
   },
 
-  // IMPORT SISWA VIA EXCEL DENGAN ANIMASI LOADING
   setupImportStudentEventListeners() {
     document.getElementById("btn-download-student-template")?.addEventListener("click", () => this.downloadStudentExcelTemplate());
     
@@ -535,7 +542,7 @@ const GuruModule = {
     document.getElementById("btn-commit-import-student")?.addEventListener("click", async () => {
       if (!this.selectedStudentClassId || this.parsedExcelStudents.length === 0) return;
       
-      this.showLoader(`Mengunggah ${this.parsedExcelStudents.length} data siswa ke database...`);
+      this.showLoader(`Mengunggah ${this.parsedExcelStudents.length} data siswa...`);
       const client = getSupabaseClient();
       try {
         const payload = this.parsedExcelStudents.map(s => ({
@@ -550,7 +557,7 @@ const GuruModule = {
         if (error) throw error;
 
         this.hideLoader();
-        alert(`Berhasil mengimpor ${payload.length} siswa ke dalam kelas!`);
+        alert(`Berhasil mengimpor ${payload.length} siswa!`);
         closeModal();
         await this.loadStudentsTableByClass(this.selectedStudentClassId);
         await this.loadQuickStats();
@@ -675,7 +682,7 @@ const GuruModule = {
           <td>${antiCheatBadge}</td>
           <td><span class="badge ${ex.is_active ? 'badge-success' : 'badge-danger'}">${ex.is_active ? 'Aktif' : 'Tutup'}</span></td>
           <td>
-            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan Acak, Anti-Curang & Ganti Token" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
             <button type="button" class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
             <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
           </td>
@@ -780,7 +787,7 @@ const GuruModule = {
 
       if (!newToken) return alert("Token ujian tidak boleh kosong!");
 
-      this.showLoader("Memperbarui token & pengaturan ujian...");
+      this.showLoader("Memperbarui pengaturan ujian...");
       const client = getSupabaseClient();
       try {
         await client.from('exams').update({
@@ -793,9 +800,9 @@ const GuruModule = {
 
         closeEditSettings();
         await this.loadExamsTable();
-        alert(`Pengaturan dan Token Ujian berhasil diperbarui menjadi "${newToken}"!`);
+        alert(`Pengaturan berhasil disimpan! Token: "${newToken}"`);
       } catch (err) {
-        alert(`Gagal memperbarui: ${err.message}`);
+        alert(`Gagal update: ${err.message}`);
       } finally {
         this.hideLoader();
       }
@@ -840,20 +847,16 @@ const GuruModule = {
   goToAddQuestionWithStimulus(stimulusId, title = '') {
     this.targetStimulusId = stimulusId;
     this.targetStimulusTitle = title;
-    
     const linkTambahSoal = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
-    if (linkTambahSoal) {
-      linkTambahSoal.click();
-    }
+    if (linkTambahSoal) linkTambahSoal.click();
   },
 
-  // SAMAKAN SKOR MASSAL DENGAN ANIMASI LOADING
   setupBulkScoreEventListeners() {
     const modal = document.getElementById("modal-bulk-score");
     const closeModal = () => modal.classList.add("d-none");
 
     document.getElementById("btn-open-modal-bulk-score")?.addEventListener("click", () => {
-      if (!this.selectedExamId) return alert("Silakan pilih sesi ujian terlebih dahulu di dropdown!");
+      if (!this.selectedExamId) return alert("Pilih sesi ujian terlebih dahulu di dropdown atas!");
       modal.classList.remove("d-none");
     });
 
@@ -870,7 +873,7 @@ const GuruModule = {
       const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value);
       const scorePgkErr3 = parseFloat(document.getElementById("bulk-score-pgk-err3").value);
 
-      this.showLoader("Menerapkan skor massal ke semua butir soal...");
+      this.showLoader("Menerapkan skor massal...");
       const client = getSupabaseClient();
       try {
         await client.from('questions')
@@ -889,12 +892,12 @@ const GuruModule = {
           .eq('question_type', 'pgk');
 
         this.hideLoader();
-        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan!");
+        alert("✅ Skor seluruh butir PG & PGK berhasil disamakan!");
         closeModal();
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
         this.hideLoader();
-        alert(`Gagal menyamakan skor: ${err.message}`);
+        alert(`Gagal: ${err.message}`);
       }
     });
   },
@@ -942,9 +945,7 @@ const GuruModule = {
 
     document.getElementById("btn-goto-tambah-soal")?.addEventListener("click", () => {
       const linkTambahSoal = document.querySelector('.sidebar-menu .nav-link[data-target="panel-tambah-soal"]');
-      if (linkTambahSoal) {
-        linkTambahSoal.click();
-      }
+      if (linkTambahSoal) linkTambahSoal.click();
     });
 
     document.getElementById("btn-renumber-questions")?.addEventListener("click", () => {
@@ -959,7 +960,7 @@ const GuruModule = {
     if (!container) return;
 
     if (!examId) {
-      container.innerHTML = '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Silakan pilih salah satu ujian di atas.</p></div>';
+      container.innerHTML = '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Silakan pilih salah satu sesi ujian di atas.</p></div>';
       if (statsContainer) statsContainer.classList.add("d-none");
       return;
     }
@@ -991,6 +992,11 @@ const GuruModule = {
     let contentHtml = '';
     (stimulusGroups || []).forEach(stim => {
       const stimQs = (questions || []).filter(q => q.stimulus_group_id === stim.id);
+      
+      const stimImgHtml = stim.image_url 
+        ? `<div style="text-align: center; margin: 10px 0;"><img src="${stim.image_url}" alt="Gambar Stimulus" style="max-height: 220px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color);"></div>` 
+        : '';
+
       contentHtml += `
         <div class="card" style="border-left: 4px solid var(--primary-color); margin-bottom: 20px;">
           <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
@@ -1001,6 +1007,7 @@ const GuruModule = {
               <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteStimulusGroup('${stim.id}', '${examId}')">Hapus</button>
             </div>
           </div>
+          ${stimImgHtml}
           <p style="white-space: pre-line; margin-bottom: 12px;">${stim.content || ''}</p>
           <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId)).join('')}</div>
         </div>
@@ -1017,7 +1024,7 @@ const GuruModule = {
       `;
     }
 
-    container.innerHTML = contentHtml || '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Belum ada butir soal pada ujian ini. Klik "+ Buat Soal Baru" di atas untuk menambah soal.</p></div>';
+    container.innerHTML = contentHtml || '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Belum ada butir soal pada ujian ini.</p></div>';
     this.renderMath(container);
   },
 
@@ -1036,6 +1043,10 @@ const GuruModule = {
       ? `<small style="display:block; color: #854d0e; font-size: 0.8rem; margin-top: 2px;">(Benar: ${q.points}p | Salah 1: ${err1Val}p | Salah 2: ${err2Val}p | Salah 3: ${err3Val}p)</small>`
       : `<small style="color: var(--text-muted); font-size: 0.8rem;">(${q.points} Poin)</small>`;
 
+    const qImgHtml = q.image_url 
+      ? `<div style="text-align: center; margin: 10px 0;"><img src="${q.image_url}" alt="Gambar Soal" style="max-height: 200px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color);"></div>` 
+      : '';
+
     return `
       <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #ffffff;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -1048,6 +1059,7 @@ const GuruModule = {
             <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
           </div>
         </div>
+        ${qImgHtml}
         <p style="white-space: pre-line; margin: 8px 0;">${q.content}</p>
         <div style="background: #f8fafc; padding: 8px; border-radius: 4px;">${opts || '<em class="text-muted">Pilihan jawaban belum diisi.</em>'}</div>
       </div>
@@ -1082,9 +1094,10 @@ const GuruModule = {
     }
   },
 
+  // FIX: BUAT STIMULUS DENGAN UPLOAD GAMBAR LANGSUNG
   setupStimulusEventListeners() {
     document.getElementById("btn-open-modal-stimulus")?.addEventListener("click", () => {
-      if (!this.selectedExamId) return alert("Pilih ujian terlebih dahulu!");
+      if (!this.selectedExamId) return alert("Pilih sesi ujian terlebih dahulu di dropdown!");
       document.getElementById("form-create-stimulus").reset();
       document.getElementById("modal-create-stimulus").classList.remove("d-none");
     });
@@ -1095,10 +1108,24 @@ const GuruModule = {
       e.preventDefault();
       const title = document.getElementById("stimulus-title").value.trim();
       const content = document.getElementById("stimulus-content").value.trim();
+      const fileInput = document.getElementById("stimulus-image-file");
+      let imageUrl = document.getElementById("stimulus-image-url").value.trim() || null;
+
       this.showLoader("Menyimpan stimulus wacana...");
       const client = getSupabaseClient();
       try {
-        await client.from('stimulus_groups').insert({ exam_id: this.selectedExamId, title: title, content: content });
+        if (fileInput && fileInput.files[0]) {
+          this.showLoader("Mengunggah gambar stimulus...");
+          imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
+        }
+
+        await client.from('stimulus_groups').insert({
+          exam_id: this.selectedExamId,
+          title: title,
+          content: content,
+          image_url: imageUrl
+        });
+
         document.getElementById("modal-create-stimulus").classList.add("d-none");
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
@@ -1110,15 +1137,29 @@ const GuruModule = {
 
     document.getElementById("btn-cancel-edit-stimulus")?.addEventListener("click", () => document.getElementById("modal-edit-stimulus").classList.add("d-none"));
     document.getElementById("btn-close-modal-edit-stimulus")?.addEventListener("click", () => document.getElementById("modal-edit-stimulus").classList.add("d-none"));
+    
     document.getElementById("form-edit-stimulus")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const id = document.getElementById("edit-stimulus-id").value;
       const title = document.getElementById("edit-stimulus-title").value.trim();
       const content = document.getElementById("edit-stimulus-content").value.trim();
+      const fileInput = document.getElementById("edit-stimulus-image-file");
+      let imageUrl = document.getElementById("edit-stimulus-image-url").value.trim() || null;
+
       this.showLoader("Memperbarui stimulus...");
       const client = getSupabaseClient();
       try {
-        await client.from('stimulus_groups').update({ title: title, content: content }).eq('id', id);
+        if (fileInput && fileInput.files[0]) {
+          this.showLoader("Mengunggah gambar stimulus baru...");
+          imageUrl = await this.uploadImageFile(fileInput.files[0], 'stimulus');
+        }
+
+        await client.from('stimulus_groups').update({
+          title: title,
+          content: content,
+          image_url: imageUrl
+        }).eq('id', id);
+
         document.getElementById("modal-edit-stimulus").classList.add("d-none");
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
@@ -1135,6 +1176,8 @@ const GuruModule = {
     document.getElementById("edit-stimulus-id").value = s.id;
     document.getElementById("edit-stimulus-title").value = s.title;
     document.getElementById("edit-stimulus-content").value = s.content;
+    document.getElementById("edit-stimulus-image-url").value = s.image_url || '';
+    document.getElementById("edit-stimulus-image-file").value = "";
     document.getElementById("modal-edit-stimulus").classList.remove("d-none");
   },
 
@@ -1181,6 +1224,7 @@ const GuruModule = {
     }
   },
 
+  // FIX: BUAT SOAL MANUAL DENGAN UPLOAD GAMBAR KE STORAGE
   setupQuestionFormEventListeners() {
     document.getElementById("btn-back-to-bank")?.addEventListener("click", () => {
       const bankLink = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
@@ -1213,15 +1257,11 @@ const GuruModule = {
       });
     });
 
-    // SIMPAN SOAL MANUAL DENGAN ANIMASI LOADING
     document.getElementById("form-create-question")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("question-exam-select")?.value || this.selectedExamId;
       
-      if (!examId) {
-        alert("Silakan pilih Target Sesi Ujian di dropdown atas terlebih dahulu!");
-        return;
-      }
+      if (!examId) return alert("Silakan pilih Target Sesi Ujian di dropdown atas terlebih dahulu!");
 
       const stimId = document.getElementById("question-stimulus-id").value || null;
       const num = parseInt(document.getElementById("question-number").value, 10);
@@ -1259,11 +1299,11 @@ const GuruModule = {
       if (options.length < 2) return alert("Pilihan jawaban minimal harus terisi 2 opsi!");
       if (correctKeys.length === 0) return alert("Pilih minimal 1 kunci jawaban benar!");
 
-      this.showLoader("Menyimpan butir pertanyaan...");
+      this.showLoader("Menyimpan butir soal...");
 
       try {
         if (fileInput && fileInput.files[0]) {
-          this.showLoader("Mengunggah gambar pertanyaan...");
+          this.showLoader("Mengunggah gambar butir soal...");
           imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
         }
 
@@ -1326,6 +1366,8 @@ const GuruModule = {
     document.getElementById("edit-q-number").value = q.original_number;
     document.getElementById("edit-q-type").value = q.question_type;
     document.getElementById("edit-q-points").value = q.points;
+    document.getElementById("edit-q-image-url").value = q.image_url || '';
+    document.getElementById("edit-q-image-file").value = "";
     
     document.getElementById("edit-q-pgk-err1").value = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? q.pgk_score_err1 : 0;
     document.getElementById("edit-q-pgk-err2").value = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? q.pgk_score_err2 : 0;
@@ -1353,6 +1395,7 @@ const GuruModule = {
     document.getElementById("edit-options-container").innerHTML = html;
   },
 
+  // FIX: EDIT SOAL BISA GANTI/UPLOAD GAMBAR BARU
   setupEditQuestionEventListeners() {
     document.getElementById("btn-cancel-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
     document.getElementById("btn-close-modal-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
@@ -1375,6 +1418,8 @@ const GuruModule = {
       const num = parseInt(document.getElementById("edit-q-number").value, 10);
       const type = document.getElementById("edit-q-type").value;
       const points = parseFloat(document.getElementById("edit-q-points").value);
+      const fileInput = document.getElementById("edit-q-image-file");
+      let imageUrl = document.getElementById("edit-q-image-url").value.trim() || null;
       
       const isPgk = type === 'pgk';
       const rawErr1 = parseFloat(document.getElementById("edit-q-pgk-err1").value);
@@ -1405,6 +1450,11 @@ const GuruModule = {
       this.showLoader("Menyimpan perubahan butir soal...");
       const client = getSupabaseClient();
       try {
+        if (fileInput && fileInput.files[0]) {
+          this.showLoader("Mengunggah gambar soal baru...");
+          imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
+        }
+
         await client.from('questions').update({
           stimulus_group_id: stimId,
           original_number: num,
@@ -1413,6 +1463,7 @@ const GuruModule = {
           pgk_score_err1: pgkErr1,
           pgk_score_err2: pgkErr2,
           pgk_score_err3: pgkErr3,
+          image_url: imageUrl,
           content: content,
           correct_keys: correctKeys
         }).eq('id', qId);
@@ -1430,7 +1481,6 @@ const GuruModule = {
     });
   },
 
-  // IMPORT SOAL DARI EXCEL DENGAN ANIMASI LOADING OVERLAY
   setupImportExcelEventListeners() {
     const btnDownload = document.getElementById("btn-download-template");
     if (btnDownload) {
@@ -1471,6 +1521,7 @@ const GuruModule = {
             const content = (r.soal || '').trim();
             const rawKey = String(r.kunci || '').toUpperCase().trim();
             const parsedKeys = rawKey.split(/[,;\s]+/).filter(Boolean);
+            const imgUrl = (r.gambar_url || '').trim() || null;
 
             const options = [];
             ['a', 'b', 'c', 'd', 'e', 'f'].forEach(lbl => {
@@ -1490,6 +1541,7 @@ const GuruModule = {
                 pgk_score_err1: err1,
                 pgk_score_err2: err2,
                 pgk_score_err3: err3,
+                image_url: imgUrl,
                 content: content,
                 correct_keys: parsedKeys,
                 options: options
@@ -1536,6 +1588,7 @@ const GuruModule = {
             pgk_score_err1: q.pgk_score_err1,
             pgk_score_err2: q.pgk_score_err2,
             pgk_score_err3: q.pgk_score_err3,
+            image_url: q.image_url,
             content: q.content,
             correct_keys: q.correct_keys
           }).select().single();
@@ -1559,79 +1612,74 @@ const GuruModule = {
   getAppsScriptTemplate() {
     return `function doPost(e) {
   try {
-    var data = JSON.parse(e.postData.contents);
+    var raw = e.postData.contents;
+    var data = JSON.parse(raw);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    
+
     // 1. SHEET REKAP NILAI
     var sheetNilai = ss.getSheetByName("Rekap Nilai");
     if (!sheetNilai) {
       sheetNilai = ss.insertSheet("Rekap Nilai");
       sheetNilai.appendRow([
-        "Waktu Submit", 
-        "No. Absen",
-        "Nama Siswa", 
-        "NISN", 
-        "Kelas", 
-        "Mata Pelajaran", 
-        "Judul Ujian", 
-        "Jumlah Benar Penuh", 
-        "Total Soal", 
-        "Total Poin Diperoleh",
-        "Nilai Akhir (0-100)",
-        "Status Pengerjaan",
-        "Pelanggaran"
+        "Waktu Submit", "No. Absen", "Nama Siswa", "NISN", "Kelas", 
+        "Mata Pelajaran", "Judul Ujian", "Total Soal", "Nilai Akhir (0-100)", 
+        "Total Poin", "Status Pengerjaan", "Pelanggaran"
       ]);
-      sheetNilai.getRange("A1:M1").setFontWeight("bold").setBackground("#e0e7ff");
+      sheetNilai.getRange("A1:L1").setFontWeight("bold").setBackground("#e0e7ff");
     }
-    
+
     sheetNilai.appendRow([
       data.submitted_at || new Date().toLocaleString("id-ID"),
       data.attendance_number || "-",
       data.student_name,
-      data.student_number,
+      data.student_number || "-",
       data.class_name,
       data.subject,
       data.exam_title,
-      data.correct_count,
       data.total_questions,
-      data.total_points || 0,
       data.final_score,
+      data.total_points || 0,
       data.submission_type === 'forced_cheat' ? 'TERINDIKASI CURANG' : 'SELESAI MURNI',
       (data.violation_count || 0) + " kali"
     ]);
-    
+
     // 2. SHEET ANALISIS BUTIR SOAL
     var sheetAnalisis = ss.getSheetByName("Analisis Soal");
+    var totalQ = Number(data.total_questions) || (data.item_analysis ? data.item_analysis.length : 0);
+
     if (!sheetAnalisis) {
       sheetAnalisis = ss.insertSheet("Analisis Soal");
       var headers = ["No. Absen", "Nama Siswa", "Kelas", "Nilai Akhir", "Status"];
-      for (var i = 1; i <= data.total_questions; i++) {
+      for (var i = 1; i <= totalQ; i++) {
         headers.push("No. " + i);
       }
       sheetAnalisis.appendRow(headers);
       sheetAnalisis.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#fef3c7");
     }
-    
+
     var rowAnalisis = [
       data.attendance_number || "-",
-      data.student_name, 
-      data.class_name, 
-      data.final_score, 
+      data.student_name,
+      data.class_name,
+      data.final_score,
       data.submission_type === 'forced_cheat' ? 'CURANG' : 'MURNI'
     ];
 
     if (data.item_analysis && data.item_analysis.length > 0) {
-      data.item_analysis.forEach(function(item) {
-        var label = (item.selected_keys || []).join(",") || "-";
+      for (var j = 0; j < data.item_analysis.length; j++) {
+        var item = data.item_analysis[j];
+        var keys = (item.selected_keys && item.selected_keys.length > 0) ? item.selected_keys.join(",") : "-";
         var scoreVal = (item.score_earned !== undefined && item.score_earned !== null) ? item.score_earned : 0;
-        rowAnalisis.push(label + " (" + scoreVal + ")");
-      });
+        rowAnalisis.push(keys + " (" + scoreVal + ")");
+      }
     }
     sheetAnalisis.appendRow(rowAnalisis);
-    
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" })).setMimeType(ContentService.MimeType.JSON);
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }`;
   },
