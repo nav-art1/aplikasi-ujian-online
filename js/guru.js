@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL GURU: FIX UPLOAD GAMBAR SOAL/STIMULUS & PENGATURAN SKOR
+// MODUL DASHBOARD GURU: PINDAH POSISI SOAL (NAIK/TURUN) & AUTO RE-INDEX HAPUS
 // ==========================================================================
 
 const GuruModule = {
@@ -14,6 +14,7 @@ const GuruModule = {
   parsedExcelQuestions: [],
   parsedExcelStudents: [],
 
+  // ANIMASI LOADING OVERLAY
   showLoader(message = "Memproses Data...") {
     const loader = document.getElementById("global-loader");
     const msgEl = document.getElementById("loader-message");
@@ -44,7 +45,6 @@ const GuruModule = {
     }
   },
 
-  // FIX: FUNGSI UPLOAD GAMBAR DENGAN VALIDASI PUBLIC STORAGE
   async uploadImageFile(file, folder = 'questions') {
     if (!file) return null;
     const client = getSupabaseClient();
@@ -226,26 +226,52 @@ const GuruModule = {
         return;
       }
 
-      const ordered = [];
-      const visited = new Set();
-      for (const q of allQ) {
-        if (!q.stimulus_group_id) {
-          ordered.push(q);
-        } else if (!visited.has(q.stimulus_group_id)) {
-          visited.add(q.stimulus_group_id);
-          const group = allQ.filter(item => item.stimulus_group_id === q.stimulus_group_id);
-          ordered.push(...group);
-        }
-      }
-
-      for (let i = 0; i < ordered.length; i++) {
-        await client.from('questions').update({ original_number: i + 1 }).eq('id', ordered[i].id);
+      for (let i = 0; i < allQ.length; i++) {
+        await client.from('questions').update({ original_number: i + 1 }).eq('id', allQ[i].id);
       }
 
       alert("Urutan nomor berhasil dirapikan!");
       await this.loadBankSoalContent(examId);
     } catch (err) {
       alert(`Gagal: ${err.message}`);
+    } finally {
+      this.hideLoader();
+    }
+  },
+
+  // FITUR: PINDAH POSISI URUTAN SOAL (NAIK / TURUN)
+  async moveQuestionPosition(questionId, examId, currentNumber, direction) {
+    const targetNumber = currentNumber + direction;
+    if (targetNumber < 1) return;
+
+    this.showLoader("Memindahkan urutan soal...");
+    const client = getSupabaseClient();
+
+    try {
+      // 1. Cari soal tetangga yang berada di posisi target
+      const { data: neighbor, error: nErr } = await client
+        .from('questions')
+        .select('id, original_number')
+        .eq('exam_id', examId)
+        .eq('original_number', targetNumber)
+        .maybeSingle();
+
+      if (nErr) throw nErr;
+
+      if (!neighbor) {
+        // Jika tidak ada soal pas di angka target, langsung update posisi soal ini
+        await client.from('questions').update({ original_number: targetNumber }).eq('id', questionId);
+      } else {
+        // Tukar nomor urut dengan nomor sementara (temporary) agar tidak terjadi konflik nomor
+        const tempNumber = 999999;
+        await client.from('questions').update({ original_number: tempNumber }).eq('id', questionId);
+        await client.from('questions').update({ original_number: currentNumber }).eq('id', neighbor.id);
+        await client.from('questions').update({ original_number: targetNumber }).eq('id', questionId);
+      }
+
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert(`Gagal memindahkan posisi soal: ${err.message}`);
     } finally {
       this.hideLoader();
     }
@@ -969,9 +995,10 @@ const GuruModule = {
     const { data: stimulusGroups } = await client.from('stimulus_groups').select('*').eq('exam_id', examId);
     const { data: questions } = await client.from('questions').select('*, options(*)').eq('exam_id', examId).order('original_number', { ascending: true });
 
+    const totalQCount = questions ? questions.length : 0;
+
     if (statsContainer) {
       statsContainer.classList.remove("d-none");
-      const totalQ = questions ? questions.length : 0;
       const totalStim = stimulusGroups ? stimulusGroups.length : 0;
       let pgCount = 0;
       let pgkCount = 0;
@@ -983,7 +1010,7 @@ const GuruModule = {
         totalPoints += parseFloat(q.points) || 1.0;
       });
 
-      document.getElementById("stat-bank-total-questions").innerText = totalQ;
+      document.getElementById("stat-bank-total-questions").innerText = totalQCount;
       document.getElementById("stat-bank-types-detail").innerText = `(${pgCount} Pilihan Ganda | ${pgkCount} PGK)`;
       document.getElementById("stat-bank-total-stimulus").innerText = totalStim;
       document.getElementById("stat-bank-total-points").innerText = totalPoints.toFixed(1).replace(/\.0$/, '');
@@ -1009,7 +1036,7 @@ const GuruModule = {
           </div>
           ${stimImgHtml}
           <p style="white-space: pre-line; margin-bottom: 12px;">${stim.content || ''}</p>
-          <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId)).join('')}</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId, totalQCount)).join('')}</div>
         </div>
       `;
     });
@@ -1019,16 +1046,17 @@ const GuruModule = {
       contentHtml += `
         <div class="card">
           <div class="card-header"><span class="card-title">Soal Mandiri (${standalones.length} Soal)</span></div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">${standalones.map(q => this.renderQuestionItem(q, examId)).join('')}</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">${standalones.map(q => this.renderQuestionItem(q, examId, totalQCount)).join('')}</div>
         </div>
       `;
     }
 
-    container.innerHTML = contentHtml || '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Belum ada butir soal pada ujian ini.</p></div>';
+    container.innerHTML = contentHtml || '<div class="card text-center" style="padding: 30px;"><p class="text-muted">Belum ada butir soal pada ujian ini. Klik "+ Buat Soal Baru" di atas untuk menambah soal.</p></div>';
     this.renderMath(container);
   },
 
-  renderQuestionItem(q, examId) {
+  // RENDER BUTIR SOAL DENGAN TOMBOL PINDAH POSISI (⬆️ / ⬇️)
+  renderQuestionItem(q, examId, totalCount = 0) {
     let opts = '';
     (q.options || []).forEach(o => {
       opts += `<div style="${o.is_correct ? 'color: var(--success-color); font-weight: bold;' : ''}">${o.is_correct ? '✓ ' : ''}<strong>${o.option_label}.</strong> ${o.content}</div>`;
@@ -1047,16 +1075,20 @@ const GuruModule = {
       ? `<div style="text-align: center; margin: 10px 0;"><img src="${q.image_url}" alt="Gambar Soal" style="max-height: 200px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color);"></div>` 
       : '';
 
+    const currentNum = q.original_number || 1;
+
     return `
       <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #ffffff;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
           <div>
-            <strong>No. ${q.original_number} (${q.question_type.toUpperCase()})</strong>
+            <strong>No. ${currentNum} (${q.question_type.toUpperCase()})</strong>
             ${scoreBadge}
           </div>
-          <div>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button type="button" class="btn btn-secondary btn-sm" title="Pindah Naik" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', ${currentNum}, -1)" ${currentNum <= 1 ? 'disabled style="opacity:0.4;"' : ''}>⬆️</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Pindah Turun" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', ${currentNum}, 1)" ${currentNum >= totalCount ? 'disabled style="opacity:0.4;"' : ''}>⬇️</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}', ${currentNum})">Hapus</button>
           </div>
         </div>
         ${qImgHtml}
@@ -1066,12 +1098,35 @@ const GuruModule = {
     `;
   },
 
-  async deleteQuestion(id, examId) {
-    if (!confirm("Hapus butir soal ini?")) return;
-    this.showLoader("Menghapus butir soal...");
+  // FIX: HAPUS SOAL DISERTAI AUTO-REINDEX AGAR NOMOR DI BAWAHNYA OTOMATIS MENYESUAIKAN
+  async deleteQuestion(id, examId, deletedNumber = null) {
+    if (!confirm("Hapus butir soal ini? Nomor soal di bawahnya akan otomatis menyesuaikan.")) return;
+    this.showLoader("Menghapus butir soal dan menyusun ulang penomoran...");
     const client = getSupabaseClient();
     try {
-      await client.from('questions').delete().eq('id', id);
+      // 1. Hapus butir soal yang dipilih
+      const { error: delErr } = await client.from('questions').delete().eq('id', id);
+      if (delErr) throw delErr;
+
+      // 2. Ambil seluruh sisa butir soal yang ada pada ujian tersebut secara berurutan
+      const { data: remaining, error: fetchErr } = await client
+        .from('questions')
+        .select('id, original_number')
+        .eq('exam_id', examId)
+        .order('original_number', { ascending: true });
+
+      if (fetchErr) throw fetchErr;
+
+      // 3. Susun ulang nomor urut sisa soal (1, 2, 3, ...) agar tidak ada nomor yang bolong/hilang
+      if (remaining && remaining.length > 0) {
+        for (let i = 0; i < remaining.length; i++) {
+          const expectedNumber = i + 1;
+          if (remaining[i].original_number !== expectedNumber) {
+            await client.from('questions').update({ original_number: expectedNumber }).eq('id', remaining[i].id);
+          }
+        }
+      }
+
       await this.loadBankSoalContent(examId);
     } catch (err) {
       alert("Gagal hapus soal: " + err.message);
@@ -1094,7 +1149,6 @@ const GuruModule = {
     }
   },
 
-  // FIX: BUAT STIMULUS DENGAN UPLOAD GAMBAR LANGSUNG
   setupStimulusEventListeners() {
     document.getElementById("btn-open-modal-stimulus")?.addEventListener("click", () => {
       if (!this.selectedExamId) return alert("Pilih sesi ujian terlebih dahulu di dropdown!");
@@ -1224,7 +1278,6 @@ const GuruModule = {
     }
   },
 
-  // FIX: BUAT SOAL MANUAL DENGAN UPLOAD GAMBAR KE STORAGE
   setupQuestionFormEventListeners() {
     document.getElementById("btn-back-to-bank")?.addEventListener("click", () => {
       const bankLink = document.querySelector('.sidebar-menu .nav-link[data-target="panel-bank-soal"]');
@@ -1395,7 +1448,6 @@ const GuruModule = {
     document.getElementById("edit-options-container").innerHTML = html;
   },
 
-  // FIX: EDIT SOAL BISA GANTI/UPLOAD GAMBAR BARU
   setupEditQuestionEventListeners() {
     document.getElementById("btn-cancel-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
     document.getElementById("btn-close-modal-edit-q")?.addEventListener("click", () => document.getElementById("modal-edit-question").classList.add("d-none"));
