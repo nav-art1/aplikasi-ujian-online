@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: SKOR MASSAL FLEKSIBEL (SALAH 1, 2, 3 BEBAS DIATUR GURU)
+// MODUL DASHBOARD GURU: DENGAN ANIMASI LOADING OVERLAY / SPINNER PADA SEMUA UPLOAD
 // ==========================================================================
 
 const GuruModule = {
@@ -13,6 +13,21 @@ const GuruModule = {
   selectedStudentClassId: null,
   parsedExcelQuestions: [],
   parsedExcelStudents: [],
+
+  // FUNGSI ANIMASI LOADING OVERLAY
+  showLoader(message = "Memproses Data...") {
+    const loader = document.getElementById("global-loader");
+    const msgEl = document.getElementById("loader-message");
+    if (loader) {
+      if (msgEl) msgEl.innerText = message;
+      loader.classList.remove("d-none");
+    }
+  },
+
+  hideLoader() {
+    const loader = document.getElementById("global-loader");
+    if (loader) loader.classList.add("d-none");
+  },
 
   renderMath(containerElement) {
     if (typeof renderMathInElement === 'function' && containerElement) {
@@ -41,7 +56,6 @@ const GuruModule = {
     return client.storage.from('exam-images').getPublicUrl(data.path).data.publicUrl;
   },
 
-  // TEMPLATE EXCEL SOAL DENGAN KOLOM SALAH 1, 2, DAN 3
   downloadExcelTemplate() {
     const templateData = [
       {
@@ -195,10 +209,14 @@ const GuruModule = {
 
   async renumberAllQuestions(examId) {
     if (!examId || !confirm("Rapikan seluruh urutan nomor soal dari 1 s.d. selesai?")) return;
+    this.showLoader("Merapikan nomor butir soal...");
     const client = getSupabaseClient();
     try {
       const { data: allQ } = await client.from('questions').select('id, stimulus_group_id, original_number').eq('exam_id', examId).order('original_number', { ascending: true });
-      if (!allQ || allQ.length === 0) return;
+      if (!allQ || allQ.length === 0) {
+        this.hideLoader();
+        return;
+      }
 
       const ordered = [];
       const visited = new Set();
@@ -220,6 +238,8 @@ const GuruModule = {
       await this.loadBankSoalContent(examId);
     } catch (err) {
       alert(`Gagal: ${err.message}`);
+    } finally {
+      this.hideLoader();
     }
   },
 
@@ -384,18 +404,25 @@ const GuruModule = {
       const fullName = document.getElementById("student-full-name").value.trim();
       const studentNumber = document.getElementById("student-number").value.trim() || `S-${Date.now()}`;
 
+      this.showLoader("Menambahkan data siswa...");
       const client = getSupabaseClient();
-      await client.from('students').insert({
-        class_id: this.selectedStudentClassId,
-        attendance_number: absen,
-        full_name: fullName,
-        student_number: studentNumber,
-        is_active: true
-      });
+      try {
+        await client.from('students').insert({
+          class_id: this.selectedStudentClassId,
+          attendance_number: absen,
+          full_name: fullName,
+          student_number: studentNumber,
+          is_active: true
+        });
 
-      e.target.reset();
-      await this.loadStudentsTableByClass(this.selectedStudentClassId);
-      await this.loadQuickStats();
+        e.target.reset();
+        await this.loadStudentsTableByClass(this.selectedStudentClassId);
+        await this.loadQuickStats();
+      } catch (err) {
+        alert("Gagal tambah siswa: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
 
     document.getElementById("btn-cancel-edit-student")?.addEventListener("click", () => document.getElementById("modal-edit-student").classList.add("d-none"));
@@ -407,16 +434,23 @@ const GuruModule = {
       const fullName = document.getElementById("edit-student-full-name").value.trim();
       const studentNumber = document.getElementById("edit-student-number").value.trim();
 
+      this.showLoader("Menyimpan perubahan siswa...");
       const client = getSupabaseClient();
-      await client.from('students').update({
-        class_id: classId,
-        attendance_number: absen,
-        full_name: fullName,
-        student_number: studentNumber
-      }).eq('id', id);
+      try {
+        await client.from('students').update({
+          class_id: classId,
+          attendance_number: absen,
+          full_name: fullName,
+          student_number: studentNumber
+        }).eq('id', id);
 
-      document.getElementById("modal-edit-student").classList.add("d-none");
-      await this.loadStudentsTableByClass(this.selectedStudentClassId);
+        document.getElementById("modal-edit-student").classList.add("d-none");
+        await this.loadStudentsTableByClass(this.selectedStudentClassId);
+      } catch (err) {
+        alert("Gagal update siswa: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
   },
 
@@ -431,12 +465,20 @@ const GuruModule = {
 
   async deleteStudent(studentId, fullName) {
     if (!confirm(`Hapus data siswa "${fullName}"?`)) return;
+    this.showLoader("Menghapus data siswa...");
     const client = getSupabaseClient();
-    await client.from('students').delete().eq('id', studentId);
-    if (this.selectedStudentClassId) await this.loadStudentsTableByClass(this.selectedStudentClassId);
-    await this.loadQuickStats();
+    try {
+      await client.from('students').delete().eq('id', studentId);
+      if (this.selectedStudentClassId) await this.loadStudentsTableByClass(this.selectedStudentClassId);
+      await this.loadQuickStats();
+    } catch (err) {
+      alert("Gagal hapus siswa: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
+  // IMPORT SISWA VIA EXCEL DENGAN ANIMASI LOADING
   setupImportStudentEventListeners() {
     document.getElementById("btn-download-student-template")?.addEventListener("click", () => this.downloadStudentExcelTemplate());
     
@@ -492,10 +534,8 @@ const GuruModule = {
 
     document.getElementById("btn-commit-import-student")?.addEventListener("click", async () => {
       if (!this.selectedStudentClassId || this.parsedExcelStudents.length === 0) return;
-      const btn = document.getElementById("btn-commit-import-student");
-      btn.disabled = true;
-      btn.innerText = "Menyimpan...";
-
+      
+      this.showLoader(`Mengunggah ${this.parsedExcelStudents.length} data siswa ke database...`);
       const client = getSupabaseClient();
       try {
         const payload = this.parsedExcelStudents.map(s => ({
@@ -509,15 +549,14 @@ const GuruModule = {
         const { error } = await client.from('students').insert(payload);
         if (error) throw error;
 
+        this.hideLoader();
         alert(`Berhasil mengimpor ${payload.length} siswa ke dalam kelas!`);
         closeModal();
         await this.loadStudentsTableByClass(this.selectedStudentClassId);
         await this.loadQuickStats();
       } catch (err) {
+        this.hideLoader();
         alert(`Gagal import siswa: ${err.message}`);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "🚀 Simpan Semua Siswa";
       }
     });
   },
@@ -549,12 +588,19 @@ const GuruModule = {
     document.getElementById("form-add-class")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = document.getElementById("new-class-name").value.trim();
+      this.showLoader("Menambahkan kelas baru...");
       const client = getSupabaseClient();
-      await client.from('classes').insert({ teacher_id: this.currentTeacher.id, class_name: name });
-      e.target.reset();
-      await this.loadClassesTable();
-      await this.loadClassesDropdown();
-      await this.loadQuickStats();
+      try {
+        await client.from('classes').insert({ teacher_id: this.currentTeacher.id, class_name: name });
+        e.target.reset();
+        await this.loadClassesTable();
+        await this.loadClassesDropdown();
+        await this.loadQuickStats();
+      } catch (err) {
+        alert("Gagal tambah kelas: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
 
     document.getElementById("btn-cancel-edit-class")?.addEventListener("click", () => document.getElementById("modal-edit-class").classList.add("d-none"));
@@ -562,11 +608,18 @@ const GuruModule = {
       e.preventDefault();
       const id = document.getElementById("edit-class-id").value;
       const name = document.getElementById("edit-class-name").value.trim();
+      this.showLoader("Menyimpan kelas...");
       const client = getSupabaseClient();
-      await client.from('classes').update({ class_name: name }).eq('id', id);
-      document.getElementById("modal-edit-class").classList.add("d-none");
-      await this.loadClassesTable();
-      await this.loadClassesDropdown();
+      try {
+        await client.from('classes').update({ class_name: name }).eq('id', id);
+        document.getElementById("modal-edit-class").classList.add("d-none");
+        await this.loadClassesTable();
+        await this.loadClassesDropdown();
+      } catch (err) {
+        alert("Gagal edit kelas: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
   },
 
@@ -578,11 +631,18 @@ const GuruModule = {
 
   async deleteClass(id, name) {
     if (!confirm(`Hapus kelas "${name}"?`)) return;
+    this.showLoader("Menghapus kelas...");
     const client = getSupabaseClient();
-    await client.from('classes').delete().eq('id', id);
-    await this.loadClassesTable();
-    await this.loadClassesDropdown();
-    await this.loadQuickStats();
+    try {
+      await client.from('classes').delete().eq('id', id);
+      await this.loadClassesTable();
+      await this.loadClassesDropdown();
+      await this.loadQuickStats();
+    } catch (err) {
+      alert("Gagal hapus kelas: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
   generateExamToken() {
@@ -671,26 +731,33 @@ const GuruModule = {
       const antiCheat = Boolean(document.getElementById("exam-anti-cheat").checked);
       const maxViolations = parseInt(document.getElementById("exam-max-violations").value, 10) || 3;
 
+      this.showLoader("Menerbitkan ujian baru...");
       const client = getSupabaseClient();
-      await client.from('exams').insert({
-        teacher_id: this.currentTeacher.id,
-        class_id: classId,
-        title: title,
-        subject: subject,
-        description: desc,
-        duration_minutes: duration,
-        token: token,
-        randomize_questions: randomizeQ,
-        randomize_options: randomizeOpt,
-        anti_cheat: antiCheat,
-        max_violations: maxViolations,
-        is_active: true
-      });
+      try {
+        await client.from('exams').insert({
+          teacher_id: this.currentTeacher.id,
+          class_id: classId,
+          title: title,
+          subject: subject,
+          description: desc,
+          duration_minutes: duration,
+          token: token,
+          randomize_questions: randomizeQ,
+          randomize_options: randomizeOpt,
+          anti_cheat: antiCheat,
+          max_violations: maxViolations,
+          is_active: true
+        });
 
-      closeModal();
-      await this.loadExamsTable();
-      await this.loadBankSoalExamFilter();
-      await this.loadQuickStats();
+        closeModal();
+        await this.loadExamsTable();
+        await this.loadBankSoalExamFilter();
+        await this.loadQuickStats();
+      } catch (err) {
+        alert("Gagal menerbitkan ujian: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
 
     const modalEditSettings = document.getElementById("modal-edit-exam-settings");
@@ -713,6 +780,7 @@ const GuruModule = {
 
       if (!newToken) return alert("Token ujian tidak boleh kosong!");
 
+      this.showLoader("Memperbarui token & pengaturan ujian...");
       const client = getSupabaseClient();
       try {
         await client.from('exams').update({
@@ -728,23 +796,39 @@ const GuruModule = {
         alert(`Pengaturan dan Token Ujian berhasil diperbarui menjadi "${newToken}"!`);
       } catch (err) {
         alert(`Gagal memperbarui: ${err.message}`);
+      } finally {
+        this.hideLoader();
       }
     });
   },
 
   async toggleExamStatus(examId, currentStatus) {
+    this.showLoader("Mengubah status ujian...");
     const client = getSupabaseClient();
-    await client.from('exams').update({ is_active: !currentStatus }).eq('id', examId);
-    await this.loadExamsTable();
+    try {
+      await client.from('exams').update({ is_active: !currentStatus }).eq('id', examId);
+      await this.loadExamsTable();
+    } catch (err) {
+      alert("Gagal ubah status: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
   async deleteExam(examId, title) {
     if (!confirm(`Hapus ujian "${title}"? Seluruh butir soal di dalamnya akan terhapus.`)) return;
+    this.showLoader("Menghapus ujian...");
     const client = getSupabaseClient();
-    await client.from('exams').delete().eq('id', examId);
-    await this.loadExamsTable();
-    await this.loadBankSoalExamFilter();
-    await this.loadQuickStats();
+    try {
+      await client.from('exams').delete().eq('id', examId);
+      await this.loadExamsTable();
+      await this.loadBankSoalExamFilter();
+      await this.loadQuickStats();
+    } catch (err) {
+      alert("Gagal hapus ujian: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
   setExamActive(examId, title) {
@@ -763,7 +847,7 @@ const GuruModule = {
     }
   },
 
-  // SAMAKAN SKOR MASSAL: PG DAN PGK (BENAR, SALAH 1, SALAH 2, SALAH 3)
+  // SAMAKAN SKOR MASSAL DENGAN ANIMASI LOADING
   setupBulkScoreEventListeners() {
     const modal = document.getElementById("modal-bulk-score");
     const closeModal = () => modal.classList.add("d-none");
@@ -786,19 +870,14 @@ const GuruModule = {
       const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value);
       const scorePgkErr3 = parseFloat(document.getElementById("bulk-score-pgk-err3").value);
 
-      const btn = document.getElementById("btn-save-bulk-score");
-      btn.disabled = true;
-      btn.innerText = "Menerapkan...";
-
+      this.showLoader("Menerapkan skor massal ke semua butir soal...");
       const client = getSupabaseClient();
       try {
-        // 1. Update semua butir PG
         await client.from('questions')
           .update({ points: isNaN(scorePg) ? 2.0 : scorePg })
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pg');
 
-        // 2. Update semua butir PGK dengan nilai eksplisit (termasuk jika 0)
         await client.from('questions')
           .update({
             points: isNaN(scorePgkFull) ? 4.0 : scorePgkFull,
@@ -809,14 +888,13 @@ const GuruModule = {
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pgk');
 
-        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan sesuai pengaturan Anda!");
+        this.hideLoader();
+        alert("✅ Seluruh skor butir soal PG dan PGK berhasil disamakan!");
         closeModal();
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
+        this.hideLoader();
         alert(`Gagal menyamakan skor: ${err.message}`);
-      } finally {
-        btn.disabled = false;
-        btn.innerText = "Terapkan ke Semua Soal";
       }
     });
   },
@@ -978,16 +1056,30 @@ const GuruModule = {
 
   async deleteQuestion(id, examId) {
     if (!confirm("Hapus butir soal ini?")) return;
+    this.showLoader("Menghapus butir soal...");
     const client = getSupabaseClient();
-    await client.from('questions').delete().eq('id', id);
-    await this.loadBankSoalContent(examId);
+    try {
+      await client.from('questions').delete().eq('id', id);
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert("Gagal hapus soal: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
   async deleteStimulusGroup(id, examId) {
     if (!confirm("Hapus stimulus ini? Soal di dalamnya akan tetap disimpan sebagai soal mandiri.")) return;
+    this.showLoader("Menghapus stimulus wacana...");
     const client = getSupabaseClient();
-    await client.from('stimulus_groups').delete().eq('id', id);
-    await this.loadBankSoalContent(examId);
+    try {
+      await client.from('stimulus_groups').delete().eq('id', id);
+      await this.loadBankSoalContent(examId);
+    } catch (err) {
+      alert("Gagal hapus stimulus: " + err.message);
+    } finally {
+      this.hideLoader();
+    }
   },
 
   setupStimulusEventListeners() {
@@ -1003,10 +1095,17 @@ const GuruModule = {
       e.preventDefault();
       const title = document.getElementById("stimulus-title").value.trim();
       const content = document.getElementById("stimulus-content").value.trim();
+      this.showLoader("Menyimpan stimulus wacana...");
       const client = getSupabaseClient();
-      await client.from('stimulus_groups').insert({ exam_id: this.selectedExamId, title: title, content: content });
-      document.getElementById("modal-create-stimulus").classList.add("d-none");
-      await this.loadBankSoalContent(this.selectedExamId);
+      try {
+        await client.from('stimulus_groups').insert({ exam_id: this.selectedExamId, title: title, content: content });
+        document.getElementById("modal-create-stimulus").classList.add("d-none");
+        await this.loadBankSoalContent(this.selectedExamId);
+      } catch (err) {
+        alert("Gagal simpan stimulus: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
 
     document.getElementById("btn-cancel-edit-stimulus")?.addEventListener("click", () => document.getElementById("modal-edit-stimulus").classList.add("d-none"));
@@ -1016,10 +1115,17 @@ const GuruModule = {
       const id = document.getElementById("edit-stimulus-id").value;
       const title = document.getElementById("edit-stimulus-title").value.trim();
       const content = document.getElementById("edit-stimulus-content").value.trim();
+      this.showLoader("Memperbarui stimulus...");
       const client = getSupabaseClient();
-      await client.from('stimulus_groups').update({ title: title, content: content }).eq('id', id);
-      document.getElementById("modal-edit-stimulus").classList.add("d-none");
-      await this.loadBankSoalContent(this.selectedExamId);
+      try {
+        await client.from('stimulus_groups').update({ title: title, content: content }).eq('id', id);
+        document.getElementById("modal-edit-stimulus").classList.add("d-none");
+        await this.loadBankSoalContent(this.selectedExamId);
+      } catch (err) {
+        alert("Gagal update stimulus: " + err.message);
+      } finally {
+        this.hideLoader();
+      }
     });
   },
 
@@ -1095,7 +1201,6 @@ const GuruModule = {
       }
     });
 
-    // Toggle Tipe Soal (Munculkan Input Skor PGK jika memilih PGK)
     document.getElementById("question-type")?.addEventListener("change", (e) => {
       const isPgk = e.target.value === 'pgk';
       const pgkBox = document.getElementById("create-pgk-scores-wrap");
@@ -1108,6 +1213,7 @@ const GuruModule = {
       });
     });
 
+    // SIMPAN SOAL MANUAL DENGAN ANIMASI LOADING
     document.getElementById("form-create-question")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("question-exam-select")?.value || this.selectedExamId;
@@ -1132,7 +1238,6 @@ const GuruModule = {
       const pgkErr3 = isPgk ? (isNaN(rawErr3) ? 0 : rawErr3) : 0;
 
       const content = document.getElementById("question-content").value.trim();
-      const btnSave = document.getElementById("btn-save-question");
       const fileInput = document.getElementById("question-image-file");
       let imageUrl = document.getElementById("question-image-url").value.trim() || null;
 
@@ -1151,21 +1256,14 @@ const GuruModule = {
         }
       });
 
-      if (options.length < 2) {
-        alert("Pilihan jawaban minimal harus terisi 2 opsi!");
-        return;
-      }
+      if (options.length < 2) return alert("Pilihan jawaban minimal harus terisi 2 opsi!");
+      if (correctKeys.length === 0) return alert("Pilih minimal 1 kunci jawaban benar!");
 
-      if (correctKeys.length === 0) {
-        alert("Pilih minimal 1 kunci jawaban benar!");
-        return;
-      }
-
-      btnSave.disabled = true;
-      btnSave.innerText = "Menyimpan Soal...";
+      this.showLoader("Menyimpan butir pertanyaan...");
 
       try {
         if (fileInput && fileInput.files[0]) {
+          this.showLoader("Mengunggah gambar pertanyaan...");
           imageUrl = await this.uploadImageFile(fileInput.files[0], 'questions');
         }
 
@@ -1204,13 +1302,12 @@ const GuruModule = {
         textInputs.forEach(i => i.value = "");
         document.getElementById("question-number").value = num + 1;
 
+        this.hideLoader();
         alert(`Butir Soal No. ${num} berhasil disimpan!`);
         await this.loadBankSoalContent(examId);
       } catch (err) {
+        this.hideLoader();
         alert(`Gagal menyimpan butir soal: ${err.message}`);
-      } finally {
-        btnSave.disabled = false;
-        btnSave.innerText = "Simpan Butir Soal";
       }
     });
   },
@@ -1230,7 +1327,6 @@ const GuruModule = {
     document.getElementById("edit-q-type").value = q.question_type;
     document.getElementById("edit-q-points").value = q.points;
     
-    // Tampilkan nilai asli persis dari database tanpa mengubah 0 menjadi angka lain
     document.getElementById("edit-q-pgk-err1").value = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? q.pgk_score_err1 : 0;
     document.getElementById("edit-q-pgk-err2").value = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? q.pgk_score_err2 : 0;
     document.getElementById("edit-q-pgk-err3").value = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? q.pgk_score_err3 : 0;
@@ -1306,27 +1402,35 @@ const GuruModule = {
         }
       });
 
+      this.showLoader("Menyimpan perubahan butir soal...");
       const client = getSupabaseClient();
-      await client.from('questions').update({
-        stimulus_group_id: stimId,
-        original_number: num,
-        question_type: type,
-        points: isNaN(points) ? 1.0 : points,
-        pgk_score_err1: pgkErr1,
-        pgk_score_err2: pgkErr2,
-        pgk_score_err3: pgkErr3,
-        content: content,
-        correct_keys: correctKeys
-      }).eq('id', qId);
+      try {
+        await client.from('questions').update({
+          stimulus_group_id: stimId,
+          original_number: num,
+          question_type: type,
+          points: isNaN(points) ? 1.0 : points,
+          pgk_score_err1: pgkErr1,
+          pgk_score_err2: pgkErr2,
+          pgk_score_err3: pgkErr3,
+          content: content,
+          correct_keys: correctKeys
+        }).eq('id', qId);
 
-      await client.from('options').delete().eq('question_id', qId);
-      await client.from('options').insert(options);
+        await client.from('options').delete().eq('question_id', qId);
+        await client.from('options').insert(options);
 
-      document.getElementById("modal-edit-question").classList.add("d-none");
-      await this.loadBankSoalContent(examId);
+        this.hideLoader();
+        document.getElementById("modal-edit-question").classList.add("d-none");
+        await this.loadBankSoalContent(examId);
+      } catch (err) {
+        this.hideLoader();
+        alert("Gagal update soal: " + err.message);
+      }
     });
   },
 
+  // IMPORT SOAL DARI EXCEL DENGAN ANIMASI LOADING OVERLAY
   setupImportExcelEventListeners() {
     const btnDownload = document.getElementById("btn-download-template");
     if (btnDownload) {
@@ -1356,7 +1460,6 @@ const GuruModule = {
             const type = (r.tipe || 'pg').toLowerCase().trim();
             const points = parseFloat(r.poin_benar || r.poin) || 4.0;
             
-            // Baca nilai eksplisit jika ada
             const rawErr1 = parseFloat(r.pgk_skor_salah_1);
             const rawErr2 = parseFloat(r.pgk_skor_salah_2);
             const rawErr3 = parseFloat(r.pgk_skor_salah_3);
@@ -1410,6 +1513,7 @@ const GuruModule = {
       const examId = document.getElementById("import-exam-select").value;
       if (!examId) return alert("Pilih sesi ujian terlebih dahulu.");
 
+      this.showLoader(`Mengunggah ${this.parsedExcelQuestions.length} butir soal ke database...`);
       const client = getSupabaseClient();
       try {
         const stimMap = {};
@@ -1440,11 +1544,13 @@ const GuruModule = {
           await client.from('options').insert(opts);
         }
 
+        this.hideLoader();
         alert("Sukses mengimpor seluruh butir soal!");
         document.getElementById("import-preview-area").classList.add("d-none");
         document.getElementById("excel-file-input").value = "";
         await this.loadBankSoalContent(examId);
       } catch (err) {
+        this.hideLoader();
         alert(`Gagal impor: ${err.message}`);
       }
     });
@@ -1597,8 +1703,7 @@ const GuruModule = {
     if (btnSaveUrl) {
       btnSaveUrl.onclick = async () => {
         const urlVal = inputUrl.value.trim();
-        btnSaveUrl.disabled = true;
-        btnSaveUrl.innerText = "Menyimpan...";
+        this.showLoader("Menyimpan tautan Spreadsheet...");
         try {
           await client.from('exams').update({ spreadsheet_url: urlVal || null }).eq('id', examId);
           alertEl.className = "alert alert-success";
@@ -1609,8 +1714,7 @@ const GuruModule = {
           alertEl.innerText = `Gagal menyimpan: ${err.message}`;
           alertEl.classList.remove("d-none");
         } finally {
-          btnSaveUrl.disabled = false;
-          btnSaveUrl.innerText = "💾 Simpan Tautan";
+          this.hideLoader();
         }
       };
     }
@@ -1672,8 +1776,7 @@ const GuruModule = {
         if (!attempts || attempts.length === 0) return alert("Belum ada data siswa untuk dikirim.");
         if (!confirm(`Kirim ulang ${attempts.length} data pengerjaan siswa ke Spreadsheet?`)) return;
 
-        btnSyncAll.disabled = true;
-        btnSyncAll.innerText = "Mengirim Data...";
+        this.showLoader(`Mengirimkan ${attempts.length} data nilai ke Google Spreadsheet...`);
 
         try {
           for (const att of attempts) {
@@ -1704,7 +1807,6 @@ const GuruModule = {
                     const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
                     const totalErrors = missed + wrong;
                     
-                    // Baca nilai angka secara ketat (angka 0 tetap 0)
                     const err1Val = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? parseFloat(q.pgk_score_err1) : 0;
                     const err2Val = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? parseFloat(q.pgk_score_err2) : 0;
                     const err3Val = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? parseFloat(q.pgk_score_err3) : 0;
@@ -1751,12 +1853,11 @@ const GuruModule = {
             });
           }
 
+          this.hideLoader();
           alert(`Berhasil mengirimkan ${attempts.length} data nilai ke Google Spreadsheet!`);
         } catch (err) {
+          this.hideLoader();
           alert(`Kendala pengiriman: ${err.message}`);
-        } finally {
-          btnSyncAll.disabled = false;
-          btnSyncAll.innerText = "🚀 Kirim Ulang Semua Nilai ke Spreadsheet";
         }
       };
     }
