@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: DENGAN ANIMASI LOADING OVERLAY SAAT KUMPULKAN UJIAN
+// MODUL PENGERJAAN UJIAN: TOMBOL PILIH DI KIRI SEJAJAR TEKS (FLEX-ROW)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -18,7 +18,6 @@ const ExamRunnerModule = {
   initialWindowHeight: window.innerHeight,
   isForcedSubmission: false,
 
-  // FUNGSI ANIMASI LOADING OVERLAY
   showLoader(message = "Mengirim Jawaban Ujian...") {
     const loader = document.getElementById("global-loader");
     const msgEl = document.getElementById("loader-message");
@@ -186,7 +185,7 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Opsi Jawaban (Huruf A, B, C, D tetap urut)
+      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -258,6 +257,7 @@ const ExamRunnerModule = {
     return arr;
   },
 
+  // RENDER SOAL: TOMBOL CHECKBOX/RADIO PASTI DI KIRI SEJAJAR DENGAN TEKS
   renderCurrentQuestion() {
     if (!this.questions || this.questions.length === 0) return;
     const q = this.questions[this.currentIndex];
@@ -317,11 +317,12 @@ const ExamRunnerModule = {
       const isChecked = currentAns.keys.includes(optKey);
       const letterLabel = opt.display_label || opt.option_label;
 
+      // Inline style untuk mengunci tombol agar selalu di sebelah kiri teks secara horizontal
       optionsHtml += `
-        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${optKey}">
-          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${optKey}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${optKey}', ${isPgk})">
-          <div style="flex-grow: 1;">
-            <strong>${letterLabel}.</strong> <span class="math-opt-text">${opt.content}</span>
+        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${optKey}" style="display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 12px !important; cursor: pointer; padding: 12px 16px; margin-bottom: 10px; border-radius: 8px;">
+          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${optKey}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${optKey}', ${isPgk})" style="margin: 4px 0 0 0 !important; flex-shrink: 0; width: 18px; height: 18px; cursor: pointer;">
+          <div style="flex-grow: 1; display: inline-block; line-height: 1.5;">
+            <strong style="margin-right: 4px;">${letterLabel}.</strong> <span class="math-opt-text">${opt.content}</span>
           </div>
         </label>
       `;
@@ -446,7 +447,6 @@ const ExamRunnerModule = {
     }
   },
 
-  // PENILAIAN AKURAT DENGAN ANIMASI LOADING OVERLAY
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -455,7 +455,6 @@ const ExamRunnerModule = {
       if (!confirm(msg)) return;
     }
 
-    // TAMPILKAN ANIMASI LOADING OVERLAY
     this.showLoader("Mengumpulkan Lembar Jawaban...");
     this.isCheatGuardActive = false;
     clearInterval(this.timerInterval);
@@ -498,7 +497,7 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // --- PG BIASA (1 KUNCI) ---
+          // PG Biasa: 1 Kunci
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
@@ -506,7 +505,7 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // --- PGK (MULTI KUNCI) ---
+          // PGK (Multi Kunci)
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
@@ -650,7 +649,6 @@ const ExamRunnerModule = {
       sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
       sessionStorage.removeItem(`answers_${this.session.exam.id}_${this.session.student.id}`);
       
-      // Beri jeda animasi sedikit sebelum pindah halaman
       setTimeout(() => {
         window.location.href = "selesai.html";
       }, 500);
