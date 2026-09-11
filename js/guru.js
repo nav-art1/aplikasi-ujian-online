@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: PINDAH POSISI SOAL (NAIK/TURUN) & AUTO RE-INDEX HAPUS
+// MODUL DASHBOARD GURU: PINDAH POSISI PAKET STIMULUS UTUH & AUTO RE-INDEX
 // ==========================================================================
 
 const GuruModule = {
@@ -226,8 +226,21 @@ const GuruModule = {
         return;
       }
 
-      for (let i = 0; i < allQ.length; i++) {
-        await client.from('questions').update({ original_number: i + 1 }).eq('id', allQ[i].id);
+      // Pertahankan rumpun stimulus tetap berdampingan
+      const ordered = [];
+      const visited = new Set();
+      for (const q of allQ) {
+        if (!q.stimulus_group_id) {
+          ordered.push(q);
+        } else if (!visited.has(q.stimulus_group_id)) {
+          visited.add(q.stimulus_group_id);
+          const group = allQ.filter(item => item.stimulus_group_id === q.stimulus_group_id);
+          ordered.push(...group);
+        }
+      }
+
+      for (let i = 0; i < ordered.length; i++) {
+        await client.from('questions').update({ original_number: i + 1 }).eq('id', ordered[i].id);
       }
 
       alert("Urutan nomor berhasil dirapikan!");
@@ -239,39 +252,75 @@ const GuruModule = {
     }
   },
 
-  // FITUR: PINDAH POSISI URUTAN SOAL (NAIK / TURUN)
-  async moveQuestionPosition(questionId, examId, currentNumber, direction) {
-    const targetNumber = currentNumber + direction;
-    if (targetNumber < 1) return;
-
-    this.showLoader("Memindahkan urutan soal...");
+  // =========================================================================
+  // FIX PRESISI: PINDAH POSISI SOAL / PAKET STIMULUS LENGKAP TANPA PECAH RUMPUN
+  // =========================================================================
+  async moveQuestionPosition(questionId, examId, direction) {
+    this.showLoader("Menata ulang posisi soal...");
     const client = getSupabaseClient();
 
     try {
-      // 1. Cari soal tetangga yang berada di posisi target
-      const { data: neighbor, error: nErr } = await client
+      // 1. Ambil semua soal pada ujian ini terurut nomor
+      const { data: allQuestions, error: fetchErr } = await client
         .from('questions')
-        .select('id, original_number')
+        .select('id, original_number, stimulus_group_id')
         .eq('exam_id', examId)
-        .eq('original_number', targetNumber)
-        .maybeSingle();
+        .order('original_number', { ascending: true });
 
-      if (nErr) throw nErr;
+      if (fetchErr) throw fetchErr;
+      if (!allQuestions || allQuestions.length === 0) return;
 
-      if (!neighbor) {
-        // Jika tidak ada soal pas di angka target, langsung update posisi soal ini
-        await client.from('questions').update({ original_number: targetNumber }).eq('id', questionId);
-      } else {
-        // Tukar nomor urut dengan nomor sementara (temporary) agar tidak terjadi konflik nomor
-        const tempNumber = 999999;
-        await client.from('questions').update({ original_number: tempNumber }).eq('id', questionId);
-        await client.from('questions').update({ original_number: currentNumber }).eq('id', neighbor.id);
-        await client.from('questions').update({ original_number: targetNumber }).eq('id', questionId);
+      // 2. Susun unit-unit rumpun (soal stimulus jadi 1 blok array, soal mandiri 1 blok array)
+      const units = [];
+      const visitedStim = new Set();
+
+      for (const q of allQuestions) {
+        if (!q.stimulus_group_id) {
+          units.push([q]);
+        } else if (!visitedStim.has(q.stimulus_group_id)) {
+          visitedStim.add(q.stimulus_group_id);
+          const group = allQuestions.filter(item => item.stimulus_group_id === q.stimulus_group_id);
+          units.push(group);
+        }
+      }
+
+      // 3. Temukan unit mana yang berisi soal yang sedang diklik
+      const unitIndex = units.findIndex(u => u.some(q => q.id === questionId));
+      if (unitIndex === -1) return;
+
+      const targetUnitIndex = unitIndex + direction;
+
+      // Cek batas atas dan bawah
+      if (targetUnitIndex < 0 || targetUnitIndex >= units.length) {
+        this.hideLoader();
+        return;
+      }
+
+      // 4. Tukar posisi kedua unit tersebut dalam array
+      const temp = units[unitIndex];
+      units[unitIndex] = units[targetUnitIndex];
+      units[targetUnitIndex] = temp;
+
+      // 5. Ratakan kembali susunan unit menjadi daftar soal urut baru
+      const flattened = units.flat();
+
+      // Gunakan penomoran offset sementara agar tidak terjadi konflik angka unik
+      for (let i = 0; i < flattened.length; i++) {
+        await client.from('questions')
+          .update({ original_number: 10000 + i + 1 })
+          .eq('id', flattened[i].id);
+      }
+
+      // Terapkan nomor urut akhir (1, 2, 3, ...)
+      for (let i = 0; i < flattened.length; i++) {
+        await client.from('questions')
+          .update({ original_number: i + 1 })
+          .eq('id', flattened[i].id);
       }
 
       await this.loadBankSoalContent(examId);
     } catch (err) {
-      alert(`Gagal memindahkan posisi soal: ${err.message}`);
+      alert(`Gagal memindahkan posisi: ${err.message}`);
     } finally {
       this.hideLoader();
     }
@@ -1024,10 +1073,19 @@ const GuruModule = {
         ? `<div style="text-align: center; margin: 10px 0;"><img src="${stim.image_url}" alt="Gambar Stimulus" style="max-height: 220px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color);"></div>` 
         : '';
 
+      // Hitung rentang nomor soal dalam stimulus ini
+      const stimNumbers = stimQs.map(q => q.original_number).sort((a, b) => a - b);
+      const numberBadge = stimNumbers.length > 0 
+        ? `<span class="badge badge-secondary" style="margin-left: 8px;">Soal No. ${stimNumbers[0]} - ${stimNumbers[stimNumbers.length - 1]}</span>` 
+        : '';
+
       contentHtml += `
         <div class="card" style="border-left: 4px solid var(--primary-color); margin-bottom: 20px;">
           <div class="card-header" style="background: #f1f5f9; margin: -24px -24px 15px -24px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <strong>Wacana: ${stim.title}</strong>
+            <div>
+              <strong>Wacana: ${stim.title}</strong>
+              ${numberBadge}
+            </div>
             <div style="display: flex; gap: 6px;">
               <button type="button" class="btn btn-primary btn-sm" onclick="GuruModule.goToAddQuestionWithStimulus('${stim.id}', '${stim.title}')">+ Tambah Soal di Wacana Ini</button>
               <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditStimulusModal('${stim.id}')">Edit</button>
@@ -1036,7 +1094,7 @@ const GuruModule = {
           </div>
           ${stimImgHtml}
           <p style="white-space: pre-line; margin-bottom: 12px;">${stim.content || ''}</p>
-          <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId, totalQCount)).join('')}</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">${stimQs.map(q => this.renderQuestionItem(q, examId, totalQCount, true)).join('')}</div>
         </div>
       `;
     });
@@ -1046,7 +1104,7 @@ const GuruModule = {
       contentHtml += `
         <div class="card">
           <div class="card-header"><span class="card-title">Soal Mandiri (${standalones.length} Soal)</span></div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">${standalones.map(q => this.renderQuestionItem(q, examId, totalQCount)).join('')}</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">${standalones.map(q => this.renderQuestionItem(q, examId, totalQCount, false)).join('')}</div>
         </div>
       `;
     }
@@ -1055,8 +1113,8 @@ const GuruModule = {
     this.renderMath(container);
   },
 
-  // RENDER BUTIR SOAL DENGAN TOMBOL PINDAH POSISI (⬆️ / ⬇️)
-  renderQuestionItem(q, examId, totalCount = 0) {
+  // RENDER BUTIR SOAL DENGAN TOMBOL PINDAH POSISI PAKET (⬆️ / ⬇️)
+  renderQuestionItem(q, examId, totalCount = 0, isPartOfStimulus = false) {
     let opts = '';
     (q.options || []).forEach(o => {
       opts += `<div style="${o.is_correct ? 'color: var(--success-color); font-weight: bold;' : ''}">${o.is_correct ? '✓ ' : ''}<strong>${o.option_label}.</strong> ${o.content}</div>`;
@@ -1076,6 +1134,9 @@ const GuruModule = {
       : '';
 
     const currentNum = q.original_number || 1;
+    const moveTooltip = isPartOfStimulus 
+      ? 'Pindahkan paket stimulus ini bersama seluruh soal di dalamnya' 
+      : 'Pindahkan soal ini';
 
     return `
       <div style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: #ffffff;">
@@ -1085,10 +1146,10 @@ const GuruModule = {
             ${scoreBadge}
           </div>
           <div style="display: flex; gap: 4px; align-items: center;">
-            <button type="button" class="btn btn-secondary btn-sm" title="Pindah Naik" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', ${currentNum}, -1)" ${currentNum <= 1 ? 'disabled style="opacity:0.4;"' : ''}>⬆️</button>
-            <button type="button" class="btn btn-secondary btn-sm" title="Pindah Turun" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', ${currentNum}, 1)" ${currentNum >= totalCount ? 'disabled style="opacity:0.4;"' : ''}>⬇️</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="${moveTooltip} ke atas" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', -1)" ${currentNum <= 1 ? 'disabled style="opacity:0.4;"' : ''}>⬆️</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="${moveTooltip} ke bawah" onclick="GuruModule.moveQuestionPosition('${q.id}', '${examId}', 1)" ${currentNum >= totalCount ? 'disabled style="opacity:0.4;"' : ''}>⬇️</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="GuruModule.openEditQuestionModal('${q.id}', '${examId}')">Edit</button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}', ${currentNum})">Hapus</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteQuestion('${q.id}', '${examId}')">Hapus</button>
           </div>
         </div>
         ${qImgHtml}
@@ -1098,32 +1159,49 @@ const GuruModule = {
     `;
   },
 
-  // FIX: HAPUS SOAL DISERTAI AUTO-REINDEX AGAR NOMOR DI BAWAHNYA OTOMATIS MENYESUAIKAN
-  async deleteQuestion(id, examId, deletedNumber = null) {
-    if (!confirm("Hapus butir soal ini? Nomor soal di bawahnya akan otomatis menyesuaikan.")) return;
-    this.showLoader("Menghapus butir soal dan menyusun ulang penomoran...");
+  // HAPUS SOAL DENGAN MENJAGA RUMPUN STIMULUS DAN MENATA ULANG PENOMORAN (1 s.d. N)
+  async deleteQuestion(id, examId) {
+    if (!confirm("Hapus butir soal ini? Penomoran soal lainnya akan otomatis menyesuaikan.")) return;
+    this.showLoader("Menghapus butir soal...");
     const client = getSupabaseClient();
     try {
-      // 1. Hapus butir soal yang dipilih
       const { error: delErr } = await client.from('questions').delete().eq('id', id);
       if (delErr) throw delErr;
 
-      // 2. Ambil seluruh sisa butir soal yang ada pada ujian tersebut secara berurutan
-      const { data: remaining, error: fetchErr } = await client
+      const { data: allQuestions, error: fetchErr } = await client
         .from('questions')
-        .select('id, original_number')
+        .select('id, original_number, stimulus_group_id')
         .eq('exam_id', examId)
         .order('original_number', { ascending: true });
 
       if (fetchErr) throw fetchErr;
 
-      // 3. Susun ulang nomor urut sisa soal (1, 2, 3, ...) agar tidak ada nomor yang bolong/hilang
-      if (remaining && remaining.length > 0) {
-        for (let i = 0; i < remaining.length; i++) {
-          const expectedNumber = i + 1;
-          if (remaining[i].original_number !== expectedNumber) {
-            await client.from('questions').update({ original_number: expectedNumber }).eq('id', remaining[i].id);
+      if (allQuestions && allQuestions.length > 0) {
+        // Susun urut dengan menjaga paket stimulus tetap berdampingan
+        const ordered = [];
+        const visited = new Set();
+        for (const q of allQuestions) {
+          if (!q.stimulus_group_id) {
+            ordered.push(q);
+          } else if (!visited.has(q.stimulus_group_id)) {
+            visited.add(q.stimulus_group_id);
+            const group = allQuestions.filter(item => item.stimulus_group_id === q.stimulus_group_id);
+            ordered.push(...group);
           }
+        }
+
+        // Simpan nomor offset sementara untuk menghindari bentrok angka unik
+        for (let i = 0; i < ordered.length; i++) {
+          await client.from('questions')
+            .update({ original_number: 10000 + i + 1 })
+            .eq('id', ordered[i].id);
+        }
+
+        // Terapkan penomoran rapi 1 s.d. N
+        for (let i = 0; i < ordered.length; i++) {
+          await client.from('questions')
+            .update({ original_number: i + 1 })
+            .eq('id', ordered[i].id);
         }
       }
 
