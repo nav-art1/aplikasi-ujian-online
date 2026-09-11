@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL PENGERJAAN UJIAN: TOMBOL PILIH DI KIRI SEJAJAR TEKS (FLEX-ROW)
+// MODUL UJIAN SISWA: FIX SCROLL, TOMBOL KIRI SEJAJAR, PGK & SINKRONISASI SHEET
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -177,7 +177,6 @@ const ExamRunnerModule = {
         q.options = optionsMap[q.id] || [];
       });
 
-      // 1. Pengacakan Butir Soal per Tipe
       const shouldRandomizeQuestions = (this.session.exam.randomize_questions === true || this.session.exam.randomize_questions === 'true');
       if (shouldRandomizeQuestions) {
         this.questions = this.shuffleQuestionsByType(qData);
@@ -185,7 +184,6 @@ const ExamRunnerModule = {
         this.questions = qData;
       }
 
-      // 2. Pengacakan Isi Opsi Jawaban (Label A, B, C, D tetap urut)
       const shouldRandomizeOptions = (this.session.exam.randomize_options === true || this.session.exam.randomize_options === 'true');
       const standardLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
@@ -257,7 +255,7 @@ const ExamRunnerModule = {
     return arr;
   },
 
-  // RENDER SOAL: TOMBOL CHECKBOX/RADIO PASTI DI KIRI SEJAJAR DENGAN TEKS
+  // RENDER SOAL: SCROLL BERJALAN MULUS & CHECKBOX/RADIO SEJAJAR
   renderCurrentQuestion() {
     if (!this.questions || this.questions.length === 0) return;
     const q = this.questions[this.currentIndex];
@@ -317,11 +315,10 @@ const ExamRunnerModule = {
       const isChecked = currentAns.keys.includes(optKey);
       const letterLabel = opt.display_label || opt.option_label;
 
-      // Inline style untuk mengunci tombol agar selalu di sebelah kiri teks secara horizontal
       optionsHtml += `
-        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${optKey}" style="display: flex !important; flex-direction: row !important; align-items: flex-start !important; gap: 12px !important; cursor: pointer; padding: 12px 16px; margin-bottom: 10px; border-radius: 8px;">
-          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${optKey}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${optKey}', ${isPgk})" style="margin: 4px 0 0 0 !important; flex-shrink: 0; width: 18px; height: 18px; cursor: pointer;">
-          <div style="flex-grow: 1; display: inline-block; line-height: 1.5;">
+        <label class="option-item ${isChecked ? 'selected' : ''}" data-key="${optKey}">
+          <input type="${isPgk ? 'checkbox' : 'radio'}" ${isPgk ? '' : 'name="active_option"'} value="${optKey}" ${isChecked ? 'checked' : ''} onchange="ExamRunnerModule.handleOptionSelect('${q.id}', '${optKey}', ${isPgk})">
+          <div class="option-text-wrapper">
             <strong style="margin-right: 4px;">${letterLabel}.</strong> <span class="math-opt-text">${opt.content}</span>
           </div>
         </label>
@@ -447,6 +444,7 @@ const ExamRunnerModule = {
     }
   },
 
+  // PENILAIAN DENGAN SINKRONISASI ANALISIS BUTIR SOAL KE SPREADSHEET
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -478,11 +476,9 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // 1. Ekstrak Kunci Pilihan Siswa
         const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
         const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
-        // 2. Ekstrak Kunci Benar
         let trueKeys = [];
         if (q.correct_keys) {
           const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
@@ -497,7 +493,6 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // PG Biasa: 1 Kunci
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
@@ -505,7 +500,6 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // PGK (Multi Kunci)
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
@@ -572,7 +566,7 @@ const ExamRunnerModule = {
 
       if (attErr) throw attErr;
 
-      // 2. Simpan Detail Jawaban
+      // 2. Simpan Detail Jawaban Siswa
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -584,7 +578,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Susun Data Spreadsheet
+      // 3. Susun Data Spreadsheet: Urut No. 1 s.d. N Asli
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -605,7 +599,7 @@ const ExamRunnerModule = {
 
           const payload = {
             student_name: this.session.student.full_name,
-            student_number: this.session.student.student_number,
+            student_number: this.session.student.student_number || "-",
             attendance_number: this.session.student.attendance_number || "-",
             class_name: this.session.student.class_name,
             exam_title: this.session.exam.title,
@@ -620,18 +614,19 @@ const ExamRunnerModule = {
             item_analysis: itemAnalysisData
           };
 
-          fetch(this.session.exam.spreadsheet_url, {
+          // Gunakan fetch dengan mode no-cors dan payload JSON terstruktur
+          await fetch(this.session.exam.spreadsheet_url, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
-          }).catch(err => console.warn("Spreadsheet Notice:", err));
+          });
         } catch (e) {
-          console.warn("Gagal sinkron spreadsheet:", e);
+          console.warn("Spreadsheet webhook notice:", e);
         }
       }
 
-      // 4. Buka Halaman selesai.html
+      // 4. Buka Halaman Selesai
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
