@@ -1,5 +1,6 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: PINDAH POSISI PAKET STIMULUS UTUH & AUTO RE-INDEX
+// MODUL DASHBOARD GURU: EDIT NAMA UJIAN, DUPLIKAT UJIAN KE KELAS LAIN,
+// PINDAH POSISI PAKET SOAL, PENOMORAN OTOMATIS & SINKRONISASI SPREADSHEET
 // ==========================================================================
 
 const GuruModule = {
@@ -226,7 +227,6 @@ const GuruModule = {
         return;
       }
 
-      // Pertahankan rumpun stimulus tetap berdampingan
       const ordered = [];
       const visited = new Set();
       for (const q of allQ) {
@@ -252,15 +252,12 @@ const GuruModule = {
     }
   },
 
-  // =========================================================================
-  // FIX PRESISI: PINDAH POSISI SOAL / PAKET STIMULUS LENGKAP TANPA PECAH RUMPUN
-  // =========================================================================
+  // PINDAH POSISI PAKET STIMULUS ATAU SOAL MANDIRI TANPA TERPECAH
   async moveQuestionPosition(questionId, examId, direction) {
     this.showLoader("Menata ulang posisi soal...");
     const client = getSupabaseClient();
 
     try {
-      // 1. Ambil semua soal pada ujian ini terurut nomor
       const { data: allQuestions, error: fetchErr } = await client
         .from('questions')
         .select('id, original_number, stimulus_group_id')
@@ -270,7 +267,6 @@ const GuruModule = {
       if (fetchErr) throw fetchErr;
       if (!allQuestions || allQuestions.length === 0) return;
 
-      // 2. Susun unit-unit rumpun (soal stimulus jadi 1 blok array, soal mandiri 1 blok array)
       const units = [];
       const visitedStim = new Set();
 
@@ -284,34 +280,27 @@ const GuruModule = {
         }
       }
 
-      // 3. Temukan unit mana yang berisi soal yang sedang diklik
       const unitIndex = units.findIndex(u => u.some(q => q.id === questionId));
       if (unitIndex === -1) return;
 
       const targetUnitIndex = unitIndex + direction;
-
-      // Cek batas atas dan bawah
       if (targetUnitIndex < 0 || targetUnitIndex >= units.length) {
         this.hideLoader();
         return;
       }
 
-      // 4. Tukar posisi kedua unit tersebut dalam array
       const temp = units[unitIndex];
       units[unitIndex] = units[targetUnitIndex];
       units[targetUnitIndex] = temp;
 
-      // 5. Ratakan kembali susunan unit menjadi daftar soal urut baru
       const flattened = units.flat();
 
-      // Gunakan penomoran offset sementara agar tidak terjadi konflik angka unik
       for (let i = 0; i < flattened.length; i++) {
         await client.from('questions')
           .update({ original_number: 10000 + i + 1 })
           .eq('id', flattened[i].id);
       }
 
-      // Terapkan nomor urut akhir (1, 2, 3, ...)
       for (let i = 0; i < flattened.length; i++) {
         await client.from('questions')
           .update({ original_number: i + 1 })
@@ -344,6 +333,7 @@ const GuruModule = {
     this.setupImportStudentEventListeners();
     this.setupClassEventListeners();
     this.setupExamEventListeners();
+    this.setupDuplicateExamEventListeners();
     this.setupBankSoalEventListeners();
     this.setupBulkScoreEventListeners();
     this.setupStimulusEventListeners();
@@ -405,7 +395,7 @@ const GuruModule = {
     let optionsHtml = '<option value="">-- Pilih Kelas --</option>';
     this.classesList.forEach(c => optionsHtml += `<option value="${c.id}">${c.class_name}</option>`);
 
-    ['student-class-filter', 'edit-student-class-id', 'exam-class-id'].forEach(id => {
+    ['student-class-filter', 'edit-student-class-id', 'exam-class-id', 'edit-exam-class-id', 'duplicate-target-class-id'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = optionsHtml;
     });
@@ -757,7 +747,8 @@ const GuruModule = {
           <td>${antiCheatBadge}</td>
           <td><span class="badge ${ex.is_active ? 'badge-success' : 'badge-danger'}">${ex.is_active ? 'Aktif' : 'Tutup'}</span></td>
           <td>
-            <button type="button" class="btn btn-secondary btn-sm" title="Edit Pengaturan" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
+            <button type="button" class="btn btn-secondary btn-sm" title="Edit Informasi & Pengaturan Ujian" onclick="GuruModule.openEditExamSettingsModal('${ex.id}')">⚙️ Atur</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="background-color: #4338ca;" title="Duplikat Soal Ujian ini ke Kelas Lain" onclick="GuruModule.openDuplicateExamModal('${ex.id}')">📋 Salin</button>
             <button type="button" class="btn ${ex.is_active ? 'btn-warning' : 'btn-secondary'} btn-sm" onclick="GuruModule.toggleExamStatus('${ex.id}', ${ex.is_active})">${ex.is_active ? 'Tutup' : 'Buka'}</button>
             <button type="button" class="btn btn-danger btn-sm" onclick="GuruModule.deleteExam('${ex.id}', '${ex.title}')">Hapus</button>
           </td>
@@ -767,12 +758,16 @@ const GuruModule = {
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
   },
 
+  // BUKA MODAL EDIT PENGATURAN + EDIT NAMA UJIAN
   openEditExamSettingsModal(examId) {
     const exam = this.examsList.find(e => e.id === examId);
     if (!exam) return;
 
     document.getElementById("edit-exam-id").value = exam.id;
-    document.getElementById("edit-exam-title-display").innerText = `${exam.title} (${exam.subject || '-'})`;
+    document.getElementById("edit-exam-title").value = exam.title || '';
+    document.getElementById("edit-exam-subject").value = exam.subject || '';
+    document.getElementById("edit-exam-duration").value = exam.duration_minutes || 60;
+    document.getElementById("edit-exam-class-id").value = exam.class_id || '';
     document.getElementById("edit-exam-token").value = exam.token || '';
     document.getElementById("edit-exam-randomize-questions").checked = (exam.randomize_questions !== false && exam.randomize_questions !== 'false');
     document.getElementById("edit-exam-randomize-options").checked = (exam.randomize_options !== false && exam.randomize_options !== 'false');
@@ -851,21 +846,31 @@ const GuruModule = {
       document.getElementById("edit-exam-token").value = this.generateExamToken();
     });
 
+    // SIMPAN EDIT PENGATURAN & NAMA UJIAN
     document.getElementById("form-edit-exam-settings")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("edit-exam-id").value;
+      const title = document.getElementById("edit-exam-title").value.trim();
+      const subject = document.getElementById("edit-exam-subject").value.trim();
+      const duration = parseInt(document.getElementById("edit-exam-duration").value, 10);
+      const classId = document.getElementById("edit-exam-class-id").value;
       const newToken = document.getElementById("edit-exam-token").value.trim().toUpperCase();
       const randomizeQ = Boolean(document.getElementById("edit-exam-randomize-questions").checked);
       const randomizeOpt = Boolean(document.getElementById("edit-exam-randomize-options").checked);
       const antiCheat = Boolean(document.getElementById("edit-exam-anti-cheat").checked);
       const maxViolations = parseInt(document.getElementById("edit-exam-max-violations").value, 10) || 3;
 
+      if (!title) return alert("Judul ujian tidak boleh kosong!");
       if (!newToken) return alert("Token ujian tidak boleh kosong!");
 
-      this.showLoader("Memperbarui pengaturan ujian...");
+      this.showLoader("Menyimpan perubahan informasi & pengaturan ujian...");
       const client = getSupabaseClient();
       try {
         await client.from('exams').update({
+          title: title,
+          subject: subject,
+          duration_minutes: duration,
+          class_id: classId,
           token: newToken,
           randomize_questions: randomizeQ,
           randomize_options: randomizeOpt,
@@ -875,11 +880,136 @@ const GuruModule = {
 
         closeEditSettings();
         await this.loadExamsTable();
-        alert(`Pengaturan berhasil disimpan! Token: "${newToken}"`);
+        await this.loadBankSoalExamFilter();
+        alert(`Informasi ujian "${title}" berhasil diperbarui!`);
       } catch (err) {
         alert(`Gagal update: ${err.message}`);
       } finally {
         this.hideLoader();
+      }
+    });
+  },
+
+  // =========================================================================
+  // FITUR: DUPLIKAT UJIAN BESERTA SELURUH SOAL & STIMULUS KE KELAS LAIN
+  // =========================================================================
+  openDuplicateExamModal(sourceExamId) {
+    const exam = this.examsList.find(e => e.id === sourceExamId);
+    if (!exam) return;
+
+    document.getElementById("duplicate-source-exam-id").value = exam.id;
+    document.getElementById("duplicate-source-exam-title").innerText = `${exam.title} (${exam.subject || '-'}) - Kelas ${exam.classes ? exam.classes.class_name : 'Semua Kelas'}`;
+    document.getElementById("duplicate-new-token").value = this.generateExamToken();
+    document.getElementById("modal-duplicate-exam").classList.remove("d-none");
+  },
+
+  setupDuplicateExamEventListeners() {
+    const modal = document.getElementById("modal-duplicate-exam");
+    const closeModal = () => modal.classList.add("d-none");
+
+    document.getElementById("btn-close-modal-duplicate-exam")?.addEventListener("click", closeModal);
+    document.getElementById("btn-cancel-duplicate-exam")?.addEventListener("click", closeModal);
+    document.getElementById("btn-generate-duplicate-token")?.addEventListener("click", () => {
+      document.getElementById("duplicate-new-token").value = this.generateExamToken();
+    });
+
+    document.getElementById("form-duplicate-exam")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const sourceExamId = document.getElementById("duplicate-source-exam-id").value;
+      const targetClassId = document.getElementById("duplicate-target-class-id").value;
+      const newToken = document.getElementById("duplicate-new-token").value.trim().toUpperCase();
+
+      if (!targetClassId) return alert("Pilih kelas tujuan terlebih dahulu!");
+      if (!newToken) return alert("Token baru tidak boleh kosong!");
+
+      const sourceExam = this.examsList.find(e => e.id === sourceExamId);
+      if (!sourceExam) return;
+
+      const targetClass = this.classesList.find(c => c.id === targetClassId);
+      const targetClassName = targetClass ? targetClass.class_name : 'Kelas';
+
+      this.showLoader(`Menyalin seluruh butir soal ke ${targetClassName}...`);
+      const client = getSupabaseClient();
+
+      try {
+        // 1. Buat sesi ujian baru untuk kelas target
+        const { data: newExam, error: examErr } = await client.from('exams').insert({
+          teacher_id: this.currentTeacher.id,
+          class_id: targetClassId,
+          title: sourceExam.title,
+          subject: sourceExam.subject,
+          description: sourceExam.description,
+          duration_minutes: sourceExam.duration_minutes,
+          token: newToken,
+          randomize_questions: sourceExam.randomize_questions,
+          randomize_options: sourceExam.randomize_options,
+          anti_cheat: sourceExam.anti_cheat,
+          max_violations: sourceExam.max_violations,
+          is_active: true
+        }).select().single();
+
+        if (examErr) throw examErr;
+
+        // 2. Ambil dan salin grup stimulus asal
+        const { data: oldStimuli } = await client.from('stimulus_groups').select('*').eq('exam_id', sourceExamId);
+        const stimMap = {};
+
+        if (oldStimuli && oldStimuli.length > 0) {
+          for (const stim of oldStimuli) {
+            const { data: newStim } = await client.from('stimulus_groups').insert({
+              exam_id: newExam.id,
+              title: stim.title,
+              content: stim.content,
+              image_url: stim.image_url
+            }).select().single();
+            if (newStim) stimMap[stim.id] = newStim.id;
+          }
+        }
+
+        // 3. Ambil seluruh butir soal dan opsi dari ujian asal
+        const { data: oldQuestions } = await client.from('questions').select('*, options(*)').eq('exam_id', sourceExamId).order('original_number', { ascending: true });
+
+        if (oldQuestions && oldQuestions.length > 0) {
+          for (const q of oldQuestions) {
+            const newStimId = q.stimulus_group_id ? (stimMap[q.stimulus_group_id] || null) : null;
+
+            const { data: newQ, error: qErr } = await client.from('questions').insert({
+              exam_id: newExam.id,
+              stimulus_group_id: newStimId,
+              original_number: q.original_number,
+              question_type: q.question_type,
+              points: q.points,
+              pgk_score_err1: q.pgk_score_err1,
+              pgk_score_err2: q.pgk_score_err2,
+              pgk_score_err3: q.pgk_score_err3,
+              image_url: q.image_url,
+              content: q.content,
+              correct_keys: q.correct_keys
+            }).select().single();
+
+            if (qErr) throw qErr;
+
+            if (q.options && q.options.length > 0) {
+              const newOptions = q.options.map(o => ({
+                question_id: newQ.id,
+                option_label: o.option_label,
+                content: o.content,
+                is_correct: o.is_correct
+              }));
+              await client.from('options').insert(newOptions);
+            }
+          }
+        }
+
+        this.hideLoader();
+        closeModal();
+        alert(`✅ Sukses menduplikat ujian ke kelas ${targetClassName}!\n\nToken Ujian Baru: ${newToken}\nSilakan buka menu "Hasil Ujian" untuk menautkan URL Spreadsheet kelas ${targetClassName} jika ingin dipisahkan.`);
+        await this.loadExamsTable();
+        await this.loadBankSoalExamFilter();
+        await this.loadQuickStats();
+      } catch (err) {
+        this.hideLoader();
+        alert(`Gagal menduplikat ujian: ${err.message}`);
       }
     });
   },
@@ -983,11 +1113,14 @@ const GuruModule = {
     const questionExamSelect = document.getElementById("question-exam-select");
     const client = getSupabaseClient();
 
-    const { data: exams } = await client.from('exams').select('id, title, subject').eq('teacher_id', this.currentTeacher.id).order('created_at', { ascending: false });
+    const { data: exams } = await client.from('exams').select('id, title, subject, classes(class_name)').eq('teacher_id', this.currentTeacher.id).order('created_at', { ascending: false });
     this.examsList = exams || [];
 
     let opts = '<option value="">-- Pilih Sesi Ujian --</option>';
-    this.examsList.forEach(e => opts += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`);
+    this.examsList.forEach(e => {
+      const clsName = e.classes ? e.classes.class_name : 'Semua Kelas';
+      opts += `<option value="${e.id}">${e.title} [${clsName}] (${e.subject || '-'})</option>`;
+    });
 
     if (filterSelect) filterSelect.innerHTML = opts;
     if (importSelect) importSelect.innerHTML = opts;
@@ -999,7 +1132,7 @@ const GuruModule = {
         if (filterSelect) filterSelect.value = first.id;
         if (importSelect) importSelect.value = first.id;
         if (questionExamSelect) questionExamSelect.value = first.id;
-        this.setExamActive(first.id, `${first.title} (${first.subject || '-'})`);
+        this.setExamActive(first.id, first.title);
         await this.loadBankSoalContent(first.id);
       } else {
         if (filterSelect) filterSelect.value = this.selectedExamId;
@@ -1073,7 +1206,6 @@ const GuruModule = {
         ? `<div style="text-align: center; margin: 10px 0;"><img src="${stim.image_url}" alt="Gambar Stimulus" style="max-height: 220px; max-width: 100%; border-radius: 6px; border: 1px solid var(--border-color);"></div>` 
         : '';
 
-      // Hitung rentang nomor soal dalam stimulus ini
       const stimNumbers = stimQs.map(q => q.original_number).sort((a, b) => a - b);
       const numberBadge = stimNumbers.length > 0 
         ? `<span class="badge badge-secondary" style="margin-left: 8px;">Soal No. ${stimNumbers[0]} - ${stimNumbers[stimNumbers.length - 1]}</span>` 
@@ -1113,7 +1245,6 @@ const GuruModule = {
     this.renderMath(container);
   },
 
-  // RENDER BUTIR SOAL DENGAN TOMBOL PINDAH POSISI PAKET (⬆️ / ⬇️)
   renderQuestionItem(q, examId, totalCount = 0, isPartOfStimulus = false) {
     let opts = '';
     (q.options || []).forEach(o => {
@@ -1159,7 +1290,6 @@ const GuruModule = {
     `;
   },
 
-  // HAPUS SOAL DENGAN MENJAGA RUMPUN STIMULUS DAN MENATA ULANG PENOMORAN (1 s.d. N)
   async deleteQuestion(id, examId) {
     if (!confirm("Hapus butir soal ini? Penomoran soal lainnya akan otomatis menyesuaikan.")) return;
     this.showLoader("Menghapus butir soal...");
@@ -1177,7 +1307,6 @@ const GuruModule = {
       if (fetchErr) throw fetchErr;
 
       if (allQuestions && allQuestions.length > 0) {
-        // Susun urut dengan menjaga paket stimulus tetap berdampingan
         const ordered = [];
         const visited = new Set();
         for (const q of allQuestions) {
@@ -1190,14 +1319,12 @@ const GuruModule = {
           }
         }
 
-        // Simpan nomor offset sementara untuk menghindari bentrok angka unik
         for (let i = 0; i < ordered.length; i++) {
           await client.from('questions')
             .update({ original_number: 10000 + i + 1 })
             .eq('id', ordered[i].id);
         }
 
-        // Terapkan penomoran rapi 1 s.d. N
         for (let i = 0; i < ordered.length; i++) {
           await client.from('questions')
             .update({ original_number: i + 1 })
@@ -1333,14 +1460,17 @@ const GuruModule = {
 
     if (examSelect && this.examsList.length > 0) {
       let opts = '<option value="">-- Pilih Sesi Ujian --</option>';
-      this.examsList.forEach(e => opts += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`);
+      this.examsList.forEach(e => {
+        const clsName = e.classes ? e.classes.class_name : 'Semua Kelas';
+        opts += `<option value="${e.id}">${e.title} [${clsName}] (${e.subject || '-'})</option>`;
+      });
       examSelect.innerHTML = opts;
 
       if (this.selectedExamId) {
         examSelect.value = this.selectedExamId;
       } else {
         this.selectedExamId = this.examsList[0].id;
-        this.selectedExamTitle = `${this.examsList[0].title} (${this.examsList[0].subject || '-'})`;
+        this.selectedExamTitle = this.examsList[0].title;
         examSelect.value = this.selectedExamId;
       }
     }
@@ -1819,7 +1949,10 @@ const GuruModule = {
     if (!sel) return;
 
     let opts = '<option value="">-- Pilih Sesi Ujian --</option>';
-    this.examsList.forEach(e => opts += `<option value="${e.id}">${e.title} (${e.subject || '-'})</option>`);
+    this.examsList.forEach(e => {
+      const clsName = e.classes ? e.classes.class_name : 'Semua Kelas';
+      opts += `<option value="${e.id}">${e.title} [${clsName}] (${e.subject || '-'})</option>`;
+    });
     sel.innerHTML = opts;
 
     if (this.selectedExamId) {
@@ -2008,7 +2141,7 @@ const GuruModule = {
 
             const payload = {
               student_name: st.full_name,
-              student_number: st.student_number,
+              student_number: st.student_number || "-",
               attendance_number: st.attendance_number || "-",
               class_name: st.classes ? st.classes.class_name : '-',
               exam_title: examInfo.title,
