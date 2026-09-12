@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL UJIAN SISWA: FIX SCROLL, TOMBOL KIRI SEJAJAR, PGK & SINKRONISASI SHEET
+// MODUL UJIAN SISWA: FIX SCROLL LOMPAT KE ATAS SAAT PILIH JAWABAN
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -255,7 +255,6 @@ const ExamRunnerModule = {
     return arr;
   },
 
-  // RENDER SOAL: SCROLL BERJALAN MULUS & CHECKBOX/RADIO SEJAJAR
   renderCurrentQuestion() {
     if (!this.questions || this.questions.length === 0) return;
     const q = this.questions[this.currentIndex];
@@ -334,25 +333,39 @@ const ExamRunnerModule = {
     document.getElementById("btn-next-question")?.classList.toggle("d-none", isLast);
     document.getElementById("btn-finish-exam")?.classList.toggle("d-none", !isLast);
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // scrollTo DIHAPUS DARI SINI AGAR TIDAK MELOMPAT SAAT MEMILIH OPSI
   },
 
+  // FIX: MEMPERBARUI STATUS CENTANG LANGSUNG DI DOM TANPA ME-RENDER ULANG (SCROLL TETAP DIAM)
   handleOptionSelect(questionId, optionKey, isPgk) {
     if (!this.userAnswers[questionId]) this.userAnswers[questionId] = { keys: [], isDoubt: false };
 
     if (!isPgk) {
       this.userAnswers[questionId].keys = [optionKey];
+      // Update visual opsi radio secara instan tanpa reload halaman
+      document.querySelectorAll("#display-options-list .option-item").forEach(item => {
+        if (item.getAttribute("data-key") === optionKey) {
+          item.classList.add("selected");
+        } else {
+          item.classList.remove("selected");
+        }
+      });
     } else {
       const keys = this.userAnswers[questionId].keys || [];
       const idx = keys.indexOf(optionKey);
       if (idx > -1) keys.splice(idx, 1);
       else keys.push(optionKey);
       this.userAnswers[questionId].keys = keys.sort();
+
+      // Update visual opsi checkbox secara instan tanpa reload halaman
+      const targetItem = document.querySelector(`#display-options-list .option-item[data-key="${optionKey}"]`);
+      if (targetItem) {
+        targetItem.classList.toggle("selected", keys.includes(optionKey));
+      }
     }
 
     this.saveLocalAnswers();
-    this.renderCurrentQuestion();
-    this.renderGridNumbers();
+    this.renderGridNumbers(); // Hanya mengupdate warna nomor di daftar nomor (tidak mengganggu scroll soal)
   },
 
   renderGridNumbers() {
@@ -375,21 +388,25 @@ const ExamRunnerModule = {
     container.innerHTML = gridHtml;
   },
 
+  // SCROLL KE ATAS HANYA SAAT BENAR-BENAR BERPINDAH NOMOR SOAL
   navigate(direction) {
     const target = this.currentIndex + direction;
     if (target >= 0 && target < this.questions.length) {
       this.currentIndex = target;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
+      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll halus hanya saat ganti nomor
     }
   },
 
+  // SCROLL KE ATAS HANYA SAAT LOMPAT NOMOR SOAL DARI DAFTAR NOMOR
   jumpToQuestion(index) {
     if (index >= 0 && index < this.questions.length) {
       this.currentIndex = index;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
       document.getElementById("drawer-grid")?.classList.add("d-none");
+      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll halus hanya saat ganti nomor
     }
   },
 
@@ -444,7 +461,6 @@ const ExamRunnerModule = {
     }
   },
 
-  // PENILAIAN DENGAN SINKRONISASI ANALISIS BUTIR SOAL KE SPREADSHEET
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -614,7 +630,6 @@ const ExamRunnerModule = {
             item_analysis: itemAnalysisData
           };
 
-          // Gunakan fetch dengan mode no-cors dan payload JSON terstruktur
           await fetch(this.session.exam.spreadsheet_url, {
             method: 'POST',
             mode: 'no-cors',
