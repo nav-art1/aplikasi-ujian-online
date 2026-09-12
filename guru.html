@@ -62,7 +62,7 @@
       </header>
 
       <div class="content-body">
-        <!-- SEKSI 1: DASHBOARD (KARTU STATISTIK RAPI) -->
+        <!-- SEKSI 1: DASHBOARD -->
         <section id="panel-dashboard" class="menu-panel">
           <div class="stats-grid">
             <div class="stat-card">
@@ -79,14 +79,81 @@
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-header"><span class="card-title">Petunjuk Penggunaan Panel Guru</span></div>
-            <ol style="margin-left: 20px; color: var(--text-main); line-height: 1.8;">
-              <li>Atur jadwal, token, nama ujian, durasi, opsi acak, dan proteksi anti-curang di menu <strong>Ujian</strong> menggunakan tombol <strong>⚙️ Atur</strong>.</li>
-              <li>Untuk menggunakan 1 paket soal yang sama ke kelas lain, gunakan tombol <strong>📋 Salin</strong> pada tabel ujian.</li>
-              <li>Kelola butir soal dan atur posisi urutan (⬆️ / ⬇️) di menu <strong>Bank Soal</strong>.</li>
-              <li>Pantau rekap nilai ujian dan integrasikan Google Spreadsheet di menu <strong>Hasil Ujian</strong>.</li>
-            </ol>
+          <!-- PANDUAN PENGGUNAAN LENGKAP & SISTEMATIS -->
+          <div class="card" style="line-height: 1.7;">
+            <div class="card-header">
+              <span class="card-title" style="color: var(--primary-color);">📘 Panduan Lengkap Penggunaan Aplikasi Ujian Online</span>
+            </div>
+
+            <!-- TAHAP 1 -->
+            <div style="margin-bottom: 22px;">
+              <h4 style="color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: var(--primary-color); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem;">1</span>
+                Tahap Persiapan Data (Kelas & Siswa)
+              </h4>
+              <ul style="margin-left: 36px; color: var(--text-main);">
+                <li>Buka menu <strong>Kelas</strong> terlebih dahulu untuk mendaftarkan rombongan belajar (misal: <em>VII A, VII B</em>).</li>
+                <li>Buka menu <strong>Siswa</strong> untuk memasukkan peserta ujian. Anda dapat menginput satu per satu atau menggunakan tombol <strong>📂 Import Siswa via Excel</strong> dengan template yang telah disediakan.</li>
+                <li>Pastikan setiap siswa memiliki <strong>Nomor Absen</strong> yang tepat karena nomor absen menjadi identitas utama siswa saat masuk ke lembar ujian.</li>
+              </ul>
+            </div>
+
+            <!-- TAHAP 2 -->
+            <div style="margin-bottom: 22px;">
+              <h4 style="color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: var(--primary-color); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem;">2</span>
+                Pembuatan & Pengaturan Sesi Ujian
+              </h4>
+              <ul style="margin-left: 36px; color: var(--text-main);">
+                <li>Buka menu <strong>Ujian</strong> &rarr; klik <strong>+ Buat Ujian Baru</strong>.</li>
+                <li>Tentukan <strong>Judul Ujian</strong>, <strong>Mata Pelajaran</strong>, <strong>Target Kelas</strong>, dan <strong>Durasi</strong> pengerjaan.</li>
+                <li><strong>Token Ujian:</strong> Bagikan kode token ini ke siswa saat ujian akan dimulai. Anda bisa menggantinya kapan saja lewat tombol <strong>⚙️ Atur</strong>.</li>
+                <li><strong>Proteksi Anti-Curang:</strong> Bila diaktifkan, sistem akan mendeteksi jika siswa membuka tab lain, membagi layar (*split screen*), atau membuka jendela mengambang. Jika pelanggaran melebihi batas maksimal, lembar ujian siswa akan langsung dikunci dan dikumpulkan paksa.</li>
+                <li><strong>Gunakan 1 Paket Soal untuk Kelas Lain:</strong> Gunakan tombol <strong>📋 Salin</strong> pada tabel ujian untuk menduplikasi seluruh soal ke kelas paralel lain dengan token dan spreadsheet terpisah.</li>
+              </ul>
+            </div>
+
+            <!-- TAHAP 3 -->
+            <div style="margin-bottom: 22px;">
+              <h4 style="color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: var(--primary-color); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem;">3</span>
+                Pengelolaan Soal, Stimulus & Pembobotan Skor
+              </h4>
+              <ul style="margin-left: 36px; color: var(--text-main);">
+                <li><strong>Soal Pilihan Ganda (PG):</strong> Memiliki 1 kunci jawaban benar. Skor benar penuh diberikan jika jawaban siswa sesuai.</li>
+                <li><strong>Soal PG Kompleks (PGK):</strong> Memiliki lebih dari 1 kunci jawaban benar (opsi bisa A s.d. F). Guru memiliki kebebasan penuh menentukan skor bertingkat:
+                  <ul style="margin-top: 4px; margin-left: 20px;">
+                    <li><em>Benar Semua</em> (misal: 4 poin)</li>
+                    <li><em>Salah 1 opsi</em> (misal: 2 poin)</li>
+                    <li><em>Salah 2 opsi</em> (misal: 0 atau 1 poin)</li>
+                    <li><em>Salah 3 opsi</em> (misal: 0 poin)</li>
+                  </ul>
+                </li>
+                <li><strong>⚡ Samakan Skor Massal:</strong> Di menu Bank Soal, gunakan tombol ini untuk mengubah seluruh bobot soal PG dan PGK pada ujian tersebut secara serentak tanpa perlu mengedit satu per satu.</li>
+                <li><strong>Soal dengan Wacana / Stimulus:</strong> Buat stimulus terlebih dahulu lewat tombol <strong>+ Buat Stimulus</strong> di Bank Soal. Soal-soal yang terhubung ke wacana tersebut akan otomatis menjadi satu kelompok rumpun.</li>
+                <li><strong>Mengatur Posisi Urutan Soal (⬆️ / ⬇️):</strong> Gunakan tombol panah pada setiap butir soal. Jika soal berada dalam kelompok stimulus, seluruh paket stimulus akan berpindah bersama tanpa memecah wacana.</li>
+                <li><strong>Menghapus Soal:</strong> Jika suatu soal dihapus, nomor urut soal di bawahnya akan otomatis menyesuaikan secara rapi dari 1 s.d. selesai.</li>
+              </ul>
+            </div>
+
+            <!-- TAHAP 4 -->
+            <div>
+              <h4 style="color: #1e293b; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span style="background: var(--primary-color); color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem;">4</span>
+                Pemantauan Nilai & Google Spreadsheet Otomatis
+              </h4>
+              <ul style="margin-left: 36px; color: var(--text-main);">
+                <li>Buka menu <strong>Hasil Ujian</strong> lalu pilih sesi ujian yang sedang berjalan.</li>
+                <li><strong>Integrasi Google Spreadsheet:</strong> Salin kode skrip yang tersedia, tempelkan ke Apps Script di Google Drive Anda, lakukan <em>Deploy Web App</em>, lalu tempelkan URL-nya ke kolom yang disediakan.</li>
+                <li>Setiap siswa yang mengumpulkan ujian akan otomatis terdata secara *real-time* di dua lembar sheet:
+                  <ul style="margin-top: 4px; margin-left: 20px;">
+                    <li><strong>Sheet Rekap Nilai:</strong> Memuat nama, kelas, absen, nilai akhir skala 0–100, dan status kejujuran/pelanggaran.</li>
+                    <li><strong>Sheet Analisis Soal:</strong> Memuat rincian opsi yang dipilih siswa pada setiap butir soal beserta perolehan poinnya (contoh: <code>A,C (4)</code> atau <code>B (0)</code>).</li>
+                  </ul>
+                </li>
+                <li>Tersedia tombol <strong>🚀 Kirim Ulang Semua Nilai ke Spreadsheet</strong> untuk mengirim kembali seluruh rekap pengerjaan jika dibutuhkan.</li>
+              </ul>
+            </div>
           </div>
         </section>
 
@@ -202,7 +269,7 @@
           </div>
         </div>
 
-        <!-- MODAL EDIT PENGATURAN & NAMA UJIAN (LENGKAP EDIT JUDUL, MAPEL, KELAS, DURASI) -->
+        <!-- MODAL EDIT PENGATURAN & NAMA UJIAN -->
         <div id="modal-edit-exam-settings" class="modal-overlay d-none">
           <div class="modal-content" style="max-width: 600px;">
             <div class="card-header" style="margin-bottom: 15px;">
@@ -234,7 +301,6 @@
                 </div>
               </div>
 
-              <!-- INPUT TOKEN UJIAN -->
               <div class="form-group" style="background: #ffffff; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
                 <label for="edit-exam-token" style="font-weight: 700; color: var(--primary-color); display: block; margin-bottom: 6px;">🔑 Token Ujian Siswa:</label>
                 <div style="display: flex; gap: 8px;">
