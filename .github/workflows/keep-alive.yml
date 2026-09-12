@@ -1,16 +1,17 @@
-name: Supabase Keep Alive
+name: Keep Alive Supabase & Repo
 
 on:
   schedule:
-    # Berjalan otomatis setiap 3 hari sekali pada jam 00:00 UTC
+    # Tetap jalan tiap 3 hari untuk menjaga Supabase
     - cron: '0 0 */3 * *'
-  workflow_dispatch: # Memungkinkan Anda menjalankan manual lewat tombol jika mau tes
+  workflow_dispatch:
 
 jobs:
-  ping-supabase:
+  keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase REST API
+      # 1. Selalu bangunkan Supabase
+      - name: Ping Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -18,3 +19,24 @@ jobs:
           curl -X GET "${SUPABASE_URL}/rest/v1/classes?select=id&limit=1" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}"
+
+      # 2. Checkout kode
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      # 3. Commit hanya di akhir bulan ganjil (sekitar 50-60 hari sekali)
+      - name: Auto-commit Jarang
+        run: |
+          MONTH=$(date +%-m)
+          DAY=$(date +%-d)
+          # Contoh: Hanya commit tiap bulan ke-2, ke-4, dst pada tanggal 1
+          if [ $((MONTH % 2)) -eq 0 ] && [ "$DAY" -le 3 ]; then
+            date -u > heartbeat.txt
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add heartbeat.txt
+            git commit -m "chore: heartbeat [skip ci]" || echo "No changes"
+            git push
+          else
+            echo "Ping Supabase sukses. Lewati commit agar riwayat git bersih."
+          fi
