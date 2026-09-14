@@ -1047,13 +1047,23 @@ const GuruModule = {
   },
 
   // FIX: PASTIKAN PARSING FLOAT DAN TOLERANSI ANGKA 0 BERJALAN SEMPURNA
+  // =========================================================================
+  // FIX PERMANEN: TOMBOL SAMAKAN SKOR MASSAL (KEBAL FORMAT & TIPE DATA)
+  // =========================================================================
   setupBulkScoreEventListeners() {
     const modal = document.getElementById("modal-bulk-score");
-    const closeModal = () => modal.classList.add("d-none");
+    const closeModal = () => modal?.classList.add("d-none");
 
     document.getElementById("btn-open-modal-bulk-score")?.addEventListener("click", () => {
-      if (!this.selectedExamId) return alert("Pilih sesi ujian terlebih dahulu di dropdown atas!");
-      modal.classList.remove("d-none");
+      // Ambil examId dari filter aktif jika this.selectedExamId belum terisi
+      const activeExamSelect = document.getElementById("bank-exam-filter");
+      const currentExamId = this.selectedExamId || (activeExamSelect ? activeExamSelect.value : null);
+
+      if (!currentExamId) {
+        return alert("Pilih sesi ujian terlebih dahulu di dropdown atas!");
+      }
+      this.selectedExamId = currentExamId;
+      modal?.classList.remove("d-none");
     });
 
     document.getElementById("btn-close-modal-bulk-score")?.addEventListener("click", closeModal);
@@ -1061,51 +1071,98 @@ const GuruModule = {
 
     document.getElementById("form-bulk-score")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (!this.selectedExamId) return;
 
-      const rawPg = document.getElementById("bulk-score-pg").value;
-      const rawPgkFull = document.getElementById("bulk-score-pgk-full").value;
-      const rawPgkErr1 = document.getElementById("bulk-score-pgk-err1").value;
-      const rawPgkErr2 = document.getElementById("bulk-score-pgk-err2").value;
-      const rawPgkErr3 = document.getElementById("bulk-score-pgk-err3").value;
+      const activeExamSelect = document.getElementById("bank-exam-filter");
+      const targetExamId = this.selectedExamId || (activeExamSelect ? activeExamSelect.value : null);
 
-      const toFloat = (val, def) => {
-        const parsed = parseFloat(val);
-        return isNaN(parsed) ? def : parsed;
+      if (!targetExamId) {
+        return alert("Sesi ujian tidak terdeteksi. Silakan pilih ujian terlebih dahulu.");
+      }
+
+      // Helper konversi aman: ubah koma jadi titik dan pastikan angka valid
+      const cleanNumber = (elementId, defaultValue) => {
+        const el = document.getElementById(elementId);
+        if (!el || el.value === undefined || el.value === null || String(el.value).trim() === '') {
+          return defaultValue;
+        }
+        const normalized = String(el.value).trim().replace(',', '.');
+        const parsed = parseFloat(normalized);
+        return isNaN(parsed) ? defaultValue : parsed;
       };
 
-      const scorePg = toFloat(rawPg, 2.0);
-      const scorePgkFull = toFloat(rawPgkFull, 4.0);
-      const scorePgkErr1 = toFloat(rawPgkErr1, 2.0);
-      const scorePgkErr2 = toFloat(rawPgkErr2, 0.0);
-      const scorePgkErr3 = toFloat(rawPgkErr3, 0.0);
+      const scorePg     = cleanNumber("bulk-score-pg", 2.0);
+      const scorePgkFull = cleanNumber("bulk-score-pgk-full", 4.0);
+      const scorePgkErr1 = cleanNumber("bulk-score-pgk-err1", 2.0);
+      const scorePgkErr2 = cleanNumber("bulk-score-pgk-err2", 0.0);
+      const scorePgkErr3 = cleanNumber("bulk-score-pgk-err3", 0.0);
 
-      this.showLoader("Menerapkan skor massal ke seluruh soal...");
+      this.showLoader("Menerapkan skor massal ke seluruh butir soal...");
       const client = getSupabaseClient();
-      try {
-        // 1. Terapkan ke semua soal PG
-        const { error: errPg } = await client.from('questions')
-          .update({ points: scorePg })
-          .eq('exam_id', this.selectedExamId)
-          .eq('question_type', 'pg');
-        if (errPg) throw errPg;
 
-        // 2. Terapkan ke semua soal PGK
-        const { error: errPgk } = await client.from('questions')
-          .update({
-            points: scorePgkFull,
-            pgk_score_err1: scorePgkErr1,
-            pgk_score_err2: scorePgkErr2,
-            pgk_score_err3: scorePgkErr3
-          })
-          .eq('exam_id', this.selectedExamId)
-          .eq('question_type', 'pgk');
-        if (errPgk) throw errPgk;
+      try {
+        // 1. Ambil semua pertanyaan di ujian ini untuk dicocokkan tipe soalnya secara presisi
+        const { data: qList, error: fetchErr } = await client
+          .from('questions')
+          .select('id, question_type')
+          .eq('exam_id', targetExamId);
+
+        if (fetchErr) throw fetchErr;
+
+        if (!qList || qList.length === 0) {
+          this.hideLoader();
+          return alert("Tidak ada butir soal pada ujian ini.");
+        }
+
+        // Pisahkan ID berdasarkan tipe soal (kebal huruf besar/kecil)
+        const pgIds = [];
+        const pgkIds = [];
+
+        qList.forEach(q => {
+          const type = String(q.question_type || '').toLowerCase().trim();
+          if (type === 'pgk') {
+            pgkIds.push(q.id);
+          } else {
+            pgIds.push(q.id);
+          }
+        });
+
+        // 2. Update Soal PG
+        if (pgIds.length > 0) {
+          const { error: errPg } = await client
+            .from('questions')
+            .update({ points: scorePg })
+            .in('id', pgIds);
+
+          if (errPg) throw errPg;
+        }
+
+        // 3. Update Soal PGK (Memastikan kolom terisi angka numerik)
+        if (pgkIds.length > 0) {
+          const { error: errPgk } = await client
+            .from('questions')
+            .update({
+              points: scorePgkFull,
+              pgk_score_err1: scorePgkErr1,
+              pgk_score_err2: scorePgkErr2,
+              pgk_score_err3: scorePgkErr3
+            })
+            .in('id', pgkIds);
+
+          if (errPgk) throw errPgk;
+        }
 
         this.hideLoader();
-        alert(`✅ Sukses menerapkan skor serentak!\n\nPG: ${scorePg} poin\nPGK Benar: ${scorePgkFull} poin | Salah 1: ${scorePgkErr1} poin | Salah 2: ${scorePgkErr2} poin | Salah 3: ${scorePgkErr3} poin`);
+        alert(`✅ Skor Berhasil Disimpan ke Database!\n\n` +
+              `• PG: ${scorePg} poin (${pgIds.length} soal)\n` +
+              `• PGK Penuh: ${scorePgkFull} poin\n` +
+              `• PGK Salah 1: ${scorePgkErr1} poin\n` +
+              `• PGK Salah 2: ${scorePgkErr2} poin\n` +
+              `• PGK Salah 3: ${scorePgkErr3} poin\n` +
+              `(${pgkIds.length} soal PGK diperbarui)`);
+
         closeModal();
-        await this.loadBankSoalContent(this.selectedExamId);
+        await this.loadBankSoalContent(targetExamId);
+
       } catch (err) {
         this.hideLoader();
         alert(`Gagal menerapkan skor massal: ${err.message}`);
