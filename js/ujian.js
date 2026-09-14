@@ -533,6 +533,15 @@ const ExamRunnerModule = {
           const wrongCount  = selectedKeys.filter(k => !trueKeys.includes(k)).length;
           const totalErrors = missedCount + wrongCount;
 
+          alert(
+            "--- HASIL CEK PGK SOAL INI ---\n" +
+            "1. Kunci Benar: " + JSON.stringify(trueKeys) + "\n" +
+            "2. Jawaban Siswa: " + JSON.stringify(selectedKeys) + "\n" +
+            "3. Total Meleset (Error): " + totalErrors + "\n" +
+            "4. Angka Salah 1 di DB: " + scoreErr1 + "\n" +
+            "5. Skor yang Diberikan: " + (totalErrors === 1 ? scoreErr1 : (totalErrors === 0 ? scoreFull : 0))
+          );
+
           if (selectedKeys.length === 0) {
             scoreEarned = 0;
             isCorrect = false;
