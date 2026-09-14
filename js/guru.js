@@ -1055,7 +1055,6 @@ const GuruModule = {
     const closeModal = () => modal?.classList.add("d-none");
 
     document.getElementById("btn-open-modal-bulk-score")?.addEventListener("click", () => {
-      // Ambil examId dari filter aktif jika this.selectedExamId belum terisi
       const activeExamSelect = document.getElementById("bank-exam-filter");
       const currentExamId = this.selectedExamId || (activeExamSelect ? activeExamSelect.value : null);
 
@@ -1079,54 +1078,51 @@ const GuruModule = {
         return alert("Sesi ujian tidak terdeteksi. Silakan pilih ujian terlebih dahulu.");
       }
 
-      // Helper konversi aman: ubah koma jadi titik dan pastikan angka valid
-      const cleanNumber = (elementId, defaultValue) => {
-        const el = document.getElementById(elementId);
-        if (!el || el.value === undefined || el.value === null || String(el.value).trim() === '') {
-          return defaultValue;
-        }
-        const normalized = String(el.value).trim().replace(',', '.');
-        const parsed = parseFloat(normalized);
-        return isNaN(parsed) ? defaultValue : parsed;
+      // Ambil angka persis sesuai yang Anda ketik di modal pop-up
+      const toNum = (id, def) => {
+        const val = document.getElementById(id)?.value;
+        if (val === undefined || val === null || String(val).trim() === '') return def;
+        const parsed = parseFloat(String(val).replace(',', '.'));
+        return isNaN(parsed) ? def : parsed;
       };
 
-      const scorePg     = cleanNumber("bulk-score-pg", 2.0);
-      const scorePgkFull = cleanNumber("bulk-score-pgk-full", 4.0);
-      const scorePgkErr1 = cleanNumber("bulk-score-pgk-err1", 2.0);
-      const scorePgkErr2 = cleanNumber("bulk-score-pgk-err2", 0.0);
-      const scorePgkErr3 = cleanNumber("bulk-score-pgk-err3", 0.0);
+      const scorePg      = toNum("bulk-score-pg", 2.0);
+      const scorePgkFull = toNum("bulk-score-pgk-full", 4.0);
+      const scorePgkErr1 = toNum("bulk-score-pgk-err1", 2.0);
+      const scorePgkErr2 = toNum("bulk-score-pgk-err2", 0.0);
+      const scorePgkErr3 = toNum("bulk-score-pgk-err3", 0.0);
 
-      this.showLoader("Menerapkan skor massal ke seluruh butir soal...");
+      this.showLoader("Menerapkan skor massal ke database...");
       const client = getSupabaseClient();
 
       try {
-        // 1. Ambil semua pertanyaan di ujian ini untuk dicocokkan tipe soalnya secara presisi
-        const { data: qList, error: fetchErr } = await client
+        // Ambil semua butir soal di ujian ini
+        const { data: allQ, error: fetchErr } = await client
           .from('questions')
           .select('id, question_type')
           .eq('exam_id', targetExamId);
 
         if (fetchErr) throw fetchErr;
 
-        if (!qList || qList.length === 0) {
+        if (!allQ || allQ.length === 0) {
           this.hideLoader();
-          return alert("Tidak ada butir soal pada ujian ini.");
+          return alert("Belum ada butir soal di ujian ini.");
         }
 
-        // Pisahkan ID berdasarkan tipe soal (kebal huruf besar/kecil)
+        // Pisahkan ID secara aman tanpa terpengaruh huruf besar / kecil (PG vs pg, PGK vs pgk)
         const pgIds = [];
         const pgkIds = [];
 
-        qList.forEach(q => {
-          const type = String(q.question_type || '').toLowerCase().trim();
-          if (type === 'pgk') {
+        allQ.forEach(q => {
+          const t = String(q.question_type || '').toLowerCase().trim();
+          if (t === 'pgk') {
             pgkIds.push(q.id);
           } else {
             pgIds.push(q.id);
           }
         });
 
-        // 2. Update Soal PG
+        // 1. Simpan skor soal PG biasa
         if (pgIds.length > 0) {
           const { error: errPg } = await client
             .from('questions')
@@ -1136,7 +1132,7 @@ const GuruModule = {
           if (errPg) throw errPg;
         }
 
-        // 3. Update Soal PGK (Memastikan kolom terisi angka numerik)
+        // 2. Simpan skor soal PGK (Poin Benar, Salah 1, Salah 2, Salah 3)
         if (pgkIds.length > 0) {
           const { error: errPgk } = await client
             .from('questions')
@@ -1153,23 +1149,23 @@ const GuruModule = {
 
         this.hideLoader();
         alert(`✅ Skor Berhasil Disimpan ke Database!\n\n` +
-              `• PG: ${scorePg} poin (${pgIds.length} soal)\n` +
-              `• PGK Penuh: ${scorePgkFull} poin\n` +
+              `• PG: ${scorePg} poin\n` +
+              `• PGK Benar Penuh: ${scorePgkFull} poin\n` +
               `• PGK Salah 1: ${scorePgkErr1} poin\n` +
               `• PGK Salah 2: ${scorePgkErr2} poin\n` +
-              `• PGK Salah 3: ${scorePgkErr3} poin\n` +
-              `(${pgkIds.length} soal PGK diperbarui)`);
+              `• PGK Salah 3: ${scorePgkErr3} poin\n\n` +
+              `(${pgkIds.length} butir soal PGK sudah diperbarui)`);
 
         closeModal();
         await this.loadBankSoalContent(targetExamId);
 
       } catch (err) {
         this.hideLoader();
-        alert(`Gagal menerapkan skor massal: ${err.message}`);
+        alert(`Gagal menyimpan skor massal: ${err.message}`);
       }
     });
   },
-
+  
   async loadBankSoalExamFilter() {
     const filterSelect = document.getElementById("bank-exam-filter");
     const importSelect = document.getElementById("import-exam-select");
