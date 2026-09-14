@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL UJIAN SISWA: FIX PERHITUNGAN SKOR BERTINGKAT PGK (SALAH 1, 2, 3)
+// MODUL UJIAN SISWA: PERBAIKAN AKURAT PENILAIAN PGK BERTINGKAT
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -250,7 +250,7 @@ const ExamRunnerModule = {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+      [arr[j], arr[i]] = [arr[i], arr[j]];
     }
     return arr;
   },
@@ -455,7 +455,26 @@ const ExamRunnerModule = {
   },
 
   // =========================================================================
-  // FIX PRESISI: PENILAIAN SKOR BERTINGKAT PGK (SALAH 1, 2, 3) DENGAN TOLERANSI NILAI 0
+  // NORMALISASI KUNCI JAWABAN (MEMECAH FORMAT APAPUN MENJADI ARRAY BERSIH)
+  // =========================================================================
+  extractCleanKeys(input) {
+    if (!input) return [];
+    if (Array.isArray(input)) {
+      return input
+        .flatMap(item => String(item).split(/[,;\s]+/))
+        .map(k => k.toUpperCase().trim())
+        .filter(k => k.length > 0 && ['A','B','C','D','E','F'].includes(k));
+    }
+    // Jika string: hapus karakter kurung siku/kurawal lalu split
+    const cleanStr = String(input).replace(/[\[\]\{\}"']/g, '');
+    return cleanStr
+      .split(/[,;\s]+/)
+      .map(k => k.toUpperCase().trim())
+      .filter(k => k.length > 0 && ['A','B','C','D','E','F'].includes(k));
+  },
+
+  // =========================================================================
+  // PENILAIAN PRESISI PG & PGK BERTINGKAT
   // =========================================================================
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
@@ -488,17 +507,16 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // Bersihkan dan normalkan format opsi siswa
-        const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
-        const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
+        // Ekstrak opsi siswa menjadi array huruf bersih
+        const selectedKeys = this.extractCleanKeys(userAns.keys);
 
-        // Bersihkan dan normalkan format kunci benar
-        let trueKeys = [];
-        if (q.correct_keys) {
-          const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
-          trueKeys = rawTrue.map(k => String(k).toUpperCase().trim()).filter(Boolean);
-        } else if (q.options && q.options.length > 0) {
-          trueKeys = q.options.filter(o => o.is_correct).map(o => String(o.option_label).toUpperCase().trim());
+        // Ekstrak kunci jawaban benar dari correct_keys atau dari tabel options
+        let trueKeys = this.extractCleanKeys(q.correct_keys);
+        if (trueKeys.length === 0 && q.options && q.options.length > 0) {
+          trueKeys = q.options
+            .filter(o => o.is_correct)
+            .map(o => (o.option_label || '').toUpperCase().trim())
+            .filter(Boolean);
         }
 
         let scoreEarned = 0;
@@ -507,7 +525,7 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
-          // Pilihan Ganda (PG 1 Kunci)
+          // --- PILIHAN GANDA BIASA (PG) ---
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
@@ -515,48 +533,51 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
-          // PG Kompleks (PGK Multi Kunci Bertingkat)
-          // Hitung berapa opsi benar yang tidak dipilih (missed) dan berapa opsi salah yang dipilih (wrong)
+          // --- PILIHAN GANDA KOMPLEKS (PGK) ---
+          // Hitung selisih:
+          // missed = kunci benar yang tidak dicentang siswa
+          // wrong  = opsi salah yang malah dicentang siswa
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
-          // Helper pembacaan skor bertingkat guru (mendukung angka desimal & angka 0 secara valid)
-          const readTierScore = (val, fallback) => {
+          // Helper pembacaan skor bertingkat guru
+          const getScoreValue = (val, fallback) => {
             if (val !== undefined && val !== null && String(val).trim() !== '') {
-              const num = parseFloat(val);
-              return isNaN(num) ? fallback : num;
+              const parsed = parseFloat(val);
+              return isNaN(parsed) ? fallback : parsed;
             }
             return fallback;
           };
 
-          const scoreErr1 = readTierScore(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
-          const scoreErr2 = readTierScore(q.pgk_score_err2, 0.0);
-          const scoreErr3 = readTierScore(q.pgk_score_err3, 0.0);
+          // Nilai bertingkat yang telah disetel oleh guru
+          const scoreErr1 = getScoreValue(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
+          const scoreErr2 = getScoreValue(q.pgk_score_err2, 0.0);
+          const scoreErr3 = getScoreValue(q.pgk_score_err3, 0.0);
 
           if (selectedKeys.length === 0) {
-            // Siswa tidak memilih sama sekali = 0
+            // Siswa tidak menjawab sama sekali
             scoreEarned = 0;
             isCorrect = false;
           } else if (totalErrors === 0) {
-            // Benar Semua
+            // BENAR SEMUA
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 opsi
+            // SALAH 1 (kurang 1 atau lebih 1)
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // Salah 2 opsi
+            // SALAH 2
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // Salah 3 opsi
+            // SALAH 3
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
-            // Salah 4 atau lebih
+            // SALAH 4 ATAU LEBIH
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -605,7 +626,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Susun Data Spreadsheet: Urut No. 1 s.d. N Asli
+      // 3. Kirim ke Webhook Google Spreadsheet
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -652,7 +673,7 @@ const ExamRunnerModule = {
         }
       }
 
-      // 4. Buka Halaman Selesai
+      // 4. Masuk ke Halaman Selesai
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
