@@ -1,6 +1,5 @@
 // ==========================================================================
-// MODUL DASHBOARD GURU: EDIT NAMA UJIAN, DUPLIKAT UJIAN KE KELAS LAIN,
-// PINDAH POSISI PAKET SOAL, PENOMORAN OTOMATIS & SINKRONISASI SPREADSHEET
+// MODUL DASHBOARD GURU: PERBAIKAN AKURASI SAMAKAN SKOR MASSAL PG & PGK
 // ==========================================================================
 
 const GuruModule = {
@@ -252,7 +251,6 @@ const GuruModule = {
     }
   },
 
-  // PINDAH POSISI PAKET STIMULUS ATAU SOAL MANDIRI TANPA TERPECAH
   async moveQuestionPosition(questionId, examId, direction) {
     this.showLoader("Menata ulang posisi soal...");
     const client = getSupabaseClient();
@@ -758,7 +756,6 @@ const GuruModule = {
     if (tableBody) tableBody.innerHTML = rowsHtml || '<tr><td colspan="9" class="text-center text-muted">Belum ada ujian.</td></tr>';
   },
 
-  // BUKA MODAL EDIT PENGATURAN + EDIT NAMA UJIAN
   openEditExamSettingsModal(examId) {
     const exam = this.examsList.find(e => e.id === examId);
     if (!exam) return;
@@ -846,7 +843,6 @@ const GuruModule = {
       document.getElementById("edit-exam-token").value = this.generateExamToken();
     });
 
-    // SIMPAN EDIT PENGATURAN & NAMA UJIAN
     document.getElementById("form-edit-exam-settings")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const examId = document.getElementById("edit-exam-id").value;
@@ -890,9 +886,6 @@ const GuruModule = {
     });
   },
 
-  // =========================================================================
-  // FITUR: DUPLIKAT UJIAN BESERTA SELURUH SOAL & STIMULUS KE KELAS LAIN
-  // =========================================================================
   openDuplicateExamModal(sourceExamId) {
     const exam = this.examsList.find(e => e.id === sourceExamId);
     if (!exam) return;
@@ -932,7 +925,6 @@ const GuruModule = {
       const client = getSupabaseClient();
 
       try {
-        // 1. Buat sesi ujian baru untuk kelas target
         const { data: newExam, error: examErr } = await client.from('exams').insert({
           teacher_id: this.currentTeacher.id,
           class_id: targetClassId,
@@ -950,7 +942,6 @@ const GuruModule = {
 
         if (examErr) throw examErr;
 
-        // 2. Ambil dan salin grup stimulus asal
         const { data: oldStimuli } = await client.from('stimulus_groups').select('*').eq('exam_id', sourceExamId);
         const stimMap = {};
 
@@ -966,7 +957,6 @@ const GuruModule = {
           }
         }
 
-        // 3. Ambil seluruh butir soal dan opsi dari ujian asal
         const { data: oldQuestions } = await client.from('questions').select('*, options(*)').eq('exam_id', sourceExamId).order('original_number', { ascending: true });
 
         if (oldQuestions && oldQuestions.length > 0) {
@@ -1056,6 +1046,7 @@ const GuruModule = {
     if (linkTambahSoal) linkTambahSoal.click();
   },
 
+  // FIX: PASTIKAN PARSING FLOAT DAN TOLERANSI ANGKA 0 BERJALAN SEMPURNA
   setupBulkScoreEventListeners() {
     const modal = document.getElementById("modal-bulk-score");
     const closeModal = () => modal.classList.add("d-none");
@@ -1072,37 +1063,52 @@ const GuruModule = {
       e.preventDefault();
       if (!this.selectedExamId) return;
 
-      const scorePg = parseFloat(document.getElementById("bulk-score-pg").value);
-      const scorePgkFull = parseFloat(document.getElementById("bulk-score-pgk-full").value);
-      const scorePgkErr1 = parseFloat(document.getElementById("bulk-score-pgk-err1").value);
-      const scorePgkErr2 = parseFloat(document.getElementById("bulk-score-pgk-err2").value);
-      const scorePgkErr3 = parseFloat(document.getElementById("bulk-score-pgk-err3").value);
+      const rawPg = document.getElementById("bulk-score-pg").value;
+      const rawPgkFull = document.getElementById("bulk-score-pgk-full").value;
+      const rawPgkErr1 = document.getElementById("bulk-score-pgk-err1").value;
+      const rawPgkErr2 = document.getElementById("bulk-score-pgk-err2").value;
+      const rawPgkErr3 = document.getElementById("bulk-score-pgk-err3").value;
 
-      this.showLoader("Menerapkan skor massal...");
+      const toFloat = (val, def) => {
+        const parsed = parseFloat(val);
+        return isNaN(parsed) ? def : parsed;
+      };
+
+      const scorePg = toFloat(rawPg, 2.0);
+      const scorePgkFull = toFloat(rawPgkFull, 4.0);
+      const scorePgkErr1 = toFloat(rawPgkErr1, 2.0);
+      const scorePgkErr2 = toFloat(rawPgkErr2, 0.0);
+      const scorePgkErr3 = toFloat(rawPgkErr3, 0.0);
+
+      this.showLoader("Menerapkan skor massal ke seluruh soal...");
       const client = getSupabaseClient();
       try {
-        await client.from('questions')
-          .update({ points: isNaN(scorePg) ? 2.0 : scorePg })
+        // 1. Terapkan ke semua soal PG
+        const { error: errPg } = await client.from('questions')
+          .update({ points: scorePg })
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pg');
+        if (errPg) throw errPg;
 
-        await client.from('questions')
+        // 2. Terapkan ke semua soal PGK
+        const { error: errPgk } = await client.from('questions')
           .update({
-            points: isNaN(scorePgkFull) ? 4.0 : scorePgkFull,
-            pgk_score_err1: isNaN(scorePgkErr1) ? 0 : scorePgkErr1,
-            pgk_score_err2: isNaN(scorePgkErr2) ? 0 : scorePgkErr2,
-            pgk_score_err3: isNaN(scorePgkErr3) ? 0 : scorePgkErr3
+            points: scorePgkFull,
+            pgk_score_err1: scorePgkErr1,
+            pgk_score_err2: scorePgkErr2,
+            pgk_score_err3: scorePgkErr3
           })
           .eq('exam_id', this.selectedExamId)
           .eq('question_type', 'pgk');
+        if (errPgk) throw errPgk;
 
         this.hideLoader();
-        alert("✅ Skor seluruh butir PG & PGK berhasil disamakan!");
+        alert(`✅ Sukses menerapkan skor serentak!\n\nPG: ${scorePg} poin\nPGK Benar: ${scorePgkFull} poin | Salah 1: ${scorePgkErr1} poin | Salah 2: ${scorePgkErr2} poin | Salah 3: ${scorePgkErr3} poin`);
         closeModal();
         await this.loadBankSoalContent(this.selectedExamId);
       } catch (err) {
         this.hideLoader();
-        alert(`Gagal: ${err.message}`);
+        alert(`Gagal menerapkan skor massal: ${err.message}`);
       }
     });
   },
@@ -1252,9 +1258,9 @@ const GuruModule = {
     });
 
     const isPgk = q.question_type === 'pgk';
-    const err1Val = q.pgk_score_err1 !== null ? q.pgk_score_err1 : 0;
-    const err2Val = q.pgk_score_err2 !== null ? q.pgk_score_err2 : 0;
-    const err3Val = q.pgk_score_err3 !== null ? q.pgk_score_err3 : 0;
+    const err1Val = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? q.pgk_score_err1 : 0;
+    const err2Val = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? q.pgk_score_err2 : 0;
+    const err3Val = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? q.pgk_score_err3 : 0;
 
     const scoreBadge = isPgk
       ? `<small style="display:block; color: #854d0e; font-size: 0.8rem; margin-top: 2px;">(Benar: ${q.points}p | Salah 1: ${err1Val}p | Salah 2: ${err2Val}p | Salah 3: ${err3Val}p)</small>`
@@ -2118,11 +2124,20 @@ const GuruModule = {
                     const wrong = sKeys.filter(k => !trueKeys.includes(k)).length;
                     const totalErrors = missed + wrong;
                     
-                    const err1Val = (q.pgk_score_err1 !== null && q.pgk_score_err1 !== undefined) ? parseFloat(q.pgk_score_err1) : 0;
-                    const err2Val = (q.pgk_score_err2 !== null && q.pgk_score_err2 !== undefined) ? parseFloat(q.pgk_score_err2) : 0;
-                    const err3Val = (q.pgk_score_err3 !== null && q.pgk_score_err3 !== undefined) ? parseFloat(q.pgk_score_err3) : 0;
+                    const readScore = (v, def) => {
+                      if (v !== undefined && v !== null && String(v).trim() !== '') {
+                        const n = parseFloat(v);
+                        return isNaN(n) ? def : n;
+                      }
+                      return def;
+                    };
 
-                    if (totalErrors === 0 && sKeys.length > 0) earned = maxP;
+                    const err1Val = readScore(q.pgk_score_err1, 0);
+                    const err2Val = readScore(q.pgk_score_err2, 0);
+                    const err3Val = readScore(q.pgk_score_err3, 0);
+
+                    if (sKeys.length === 0) earned = 0;
+                    else if (totalErrors === 0) earned = maxP;
                     else if (totalErrors === 1) earned = err1Val;
                     else if (totalErrors === 2) earned = err2Val;
                     else if (totalErrors === 3) earned = err3Val;
