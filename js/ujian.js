@@ -494,54 +494,31 @@ const optionsContainer = document.getElementById("display-options-list");
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
 
-        // 1. Ambil opsi pilihan siswa
-        let selectedRaw = Array.isArray(userAns.keys) ? userAns.keys : [];
-        let selectedKeys = selectedRaw.map(k => String(k).toUpperCase().trim()).filter(Boolean);
+        // 1. Ambil pilihan siswa (murni huruf A-F)
+        let selectedKeys = (Array.isArray(userAns.keys) ? userAns.keys : [])
+          .map(k => String(k).toUpperCase().trim())
+          .filter(k => /^[A-F]$/.test(k));
 
-        // 2. Ambil kunci benar dari options yang is_correct = true
-        let trueLabels = [];
-        let trueIds = [];
-
+        // 2. Ambil kunci benar dari options (HANYA huruf label A-F, tanpa mencampur ID!)
+        let trueKeys = [];
         if (q.options && q.options.length > 0) {
           q.options.forEach(o => {
             const isCorr = (o.is_correct === true || o.is_correct === 'true' || o.is_correct === 1);
-            if (isCorr) {
-              if (o.option_label) trueLabels.push(String(o.option_label).toUpperCase().trim());
-              if (o.id) trueIds.push(String(o.id).toUpperCase().trim());
+            const lbl = String(o.original_label || o.option_label || '').toUpperCase().trim();
+            if (isCorr && /^[A-F]$/.test(lbl)) {
+              trueKeys.push(lbl);
             }
           });
         }
 
-        // Fallback jika membaca correct_keys teks (A, B, C)
-        if (trueLabels.length === 0 && q.correct_keys) {
+        // Cadangan jika options tidak memiliki is_correct
+        if (trueKeys.length === 0 && q.correct_keys) {
           const rawK = Array.isArray(q.correct_keys) ? q.correct_keys.join(',') : String(q.correct_keys);
-          trueLabels = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
+          trueKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
         }
 
-        trueLabels = [...new Set(trueLabels)];
-        trueIds = [...new Set(trueIds)];
-
-        // 3. Normalisasi: Terjemahkan pilihan siswa ke huruf abjad murni (A, B, C)
-        let studentLabels = [];
-        if (q.options && q.options.length > 0) {
-          selectedKeys.forEach(k => {
-            const matchedOpt = q.options.find(o => 
-              String(o.id).toUpperCase().trim() === k || 
-              String(o.option_label).toUpperCase().trim() === k ||
-              String(o.original_label).toUpperCase().trim() === k
-            );
-            if (matchedOpt && matchedOpt.option_label) {
-              studentLabels.push(String(matchedOpt.option_label).toUpperCase().trim());
-            } else if (/^[A-F]$/.test(k)) {
-              studentLabels.push(k);
-            }
-          });
-        } else {
-          studentLabels = selectedKeys.filter(k => /^[A-F]$/.test(k));
-        }
-
-        studentLabels = [...new Set(studentLabels)].sort();
-        const finalTrueKeys = [...trueLabels].sort();
+        trueKeys = [...new Set(trueKeys)].sort();
+        selectedKeys = [...new Set(selectedKeys)].sort();
 
         let scoreEarned = 0;
         let isCorrect = false;
@@ -549,7 +526,7 @@ const optionsContainer = document.getElementById("display-options-list");
 
         if (!isPgk) {
           // --- PILIHAN GANDA BIASA (PG) ---
-          if (studentLabels.length === 1 && finalTrueKeys.length === 1 && studentLabels[0] === finalTrueKeys[0]) {
+          if (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
@@ -561,29 +538,31 @@ const optionsContainer = document.getElementById("display-options-list");
           const scoreErr2 = parseFloat(q.pgk_score_err2) || 0;
           const scoreErr3 = parseFloat(q.pgk_score_err3) || 0;
 
-          // Hitung selisih kesalahan
-          const missed = finalTrueKeys.filter(k => !studentLabels.includes(k)).length;
-          const wrong  = studentLabels.filter(k => !finalTrueKeys.includes(k)).length;
+          // Hitung kesalahan murni:
+          // missed = kunci benar yang tidak dicentang siswa
+          // wrong  = opsi salah yang malah dicentang siswa
+          const missed = trueKeys.filter(k => !selectedKeys.includes(k)).length;
+          const wrong  = selectedKeys.filter(k => !trueKeys.includes(k)).length;
           const totalErrors = missed + wrong;
 
-          if (studentLabels.length === 0) {
+          if (selectedKeys.length === 0) {
             scoreEarned = 0;
             isCorrect = false;
           } else if (totalErrors === 0) {
-            // BENAR SEMUA
+            // Benar Semua
             scoreEarned = scoreFull;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // SALAH 1 -> Mengambil angka scoreErr1 (misal 3)
+            // Salah 1 -> Murni mengambil nilai salah 1 dari database
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // SALAH 2 -> Mengambil angka scoreErr2
+            // Salah 2 -> Murni mengambil nilai salah 2 dari database
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // SALAH 3 -> Mengambil angka scoreErr3
+            // Salah 3 -> Murni mengambil nilai salah 3 dari database
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
@@ -596,7 +575,7 @@ const optionsContainer = document.getElementById("display-options-list");
 
         studentAnswersPayload.push({
           question_id: q.id,
-          selected_keys: studentLabels,
+          selected_keys: selectedKeys,
           is_correct: isCorrect,
           score_earned: Number(scoreEarned.toFixed(2))
         });
