@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL UJIAN SISWA: FIX SCROLL LOMPAT KE ATAS SAAT PILIH JAWABAN
+// MODUL UJIAN SISWA: FIX PERHITUNGAN SKOR BERTINGKAT PGK (SALAH 1, 2, 3)
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -332,17 +332,13 @@ const ExamRunnerModule = {
     const isLast = this.currentIndex === this.questions.length - 1;
     document.getElementById("btn-next-question")?.classList.toggle("d-none", isLast);
     document.getElementById("btn-finish-exam")?.classList.toggle("d-none", !isLast);
-
-    // scrollTo DIHAPUS DARI SINI AGAR TIDAK MELOMPAT SAAT MEMILIH OPSI
   },
 
-  // FIX: MEMPERBARUI STATUS CENTANG LANGSUNG DI DOM TANPA ME-RENDER ULANG (SCROLL TETAP DIAM)
   handleOptionSelect(questionId, optionKey, isPgk) {
     if (!this.userAnswers[questionId]) this.userAnswers[questionId] = { keys: [], isDoubt: false };
 
     if (!isPgk) {
       this.userAnswers[questionId].keys = [optionKey];
-      // Update visual opsi radio secara instan tanpa reload halaman
       document.querySelectorAll("#display-options-list .option-item").forEach(item => {
         if (item.getAttribute("data-key") === optionKey) {
           item.classList.add("selected");
@@ -357,7 +353,6 @@ const ExamRunnerModule = {
       else keys.push(optionKey);
       this.userAnswers[questionId].keys = keys.sort();
 
-      // Update visual opsi checkbox secara instan tanpa reload halaman
       const targetItem = document.querySelector(`#display-options-list .option-item[data-key="${optionKey}"]`);
       if (targetItem) {
         targetItem.classList.toggle("selected", keys.includes(optionKey));
@@ -365,7 +360,7 @@ const ExamRunnerModule = {
     }
 
     this.saveLocalAnswers();
-    this.renderGridNumbers(); // Hanya mengupdate warna nomor di daftar nomor (tidak mengganggu scroll soal)
+    this.renderGridNumbers();
   },
 
   renderGridNumbers() {
@@ -388,25 +383,23 @@ const ExamRunnerModule = {
     container.innerHTML = gridHtml;
   },
 
-  // SCROLL KE ATAS HANYA SAAT BENAR-BENAR BERPINDAH NOMOR SOAL
   navigate(direction) {
     const target = this.currentIndex + direction;
     if (target >= 0 && target < this.questions.length) {
       this.currentIndex = target;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
-      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll halus hanya saat ganti nomor
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   },
 
-  // SCROLL KE ATAS HANYA SAAT LOMPAT NOMOR SOAL DARI DAFTAR NOMOR
   jumpToQuestion(index) {
     if (index >= 0 && index < this.questions.length) {
       this.currentIndex = index;
       this.renderCurrentQuestion();
       this.renderGridNumbers();
       document.getElementById("drawer-grid")?.classList.add("d-none");
-      window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll halus hanya saat ganti nomor
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   },
 
@@ -461,6 +454,9 @@ const ExamRunnerModule = {
     }
   },
 
+  // =========================================================================
+  // FIX PRESISI: PENILAIAN SKOR BERTINGKAT PGK (SALAH 1, 2, 3) DENGAN TOLERANSI NILAI 0
+  // =========================================================================
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -492,9 +488,11 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
+        // Bersihkan dan normalkan format opsi siswa
         const rawSelected = Array.isArray(userAns.keys) ? userAns.keys : String(userAns.keys || '').split(/[,;\s]+/);
         const selectedKeys = rawSelected.map(k => String(k).toUpperCase().trim()).filter(Boolean);
 
+        // Bersihkan dan normalkan format kunci benar
         let trueKeys = [];
         if (q.correct_keys) {
           const rawTrue = Array.isArray(q.correct_keys) ? q.correct_keys : String(q.correct_keys || '').split(/[,;\s]+/);
@@ -509,6 +507,7 @@ const ExamRunnerModule = {
         const isPgk = (q.question_type || '').toLowerCase() === 'pgk';
 
         if (!isPgk) {
+          // Pilihan Ganda (PG 1 Kunci)
           const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
           if (isMatch) {
             scoreEarned = qPoints;
@@ -516,36 +515,48 @@ const ExamRunnerModule = {
             correctCount++;
           }
         } else {
+          // PG Kompleks (PGK Multi Kunci Bertingkat)
+          // Hitung berapa opsi benar yang tidak dipilih (missed) dan berapa opsi salah yang dipilih (wrong)
           const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
           const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
           const totalErrors = missedKeys.length + wrongSelectedKeys.length;
 
-          const parseScore = (val, defaultVal) => {
-            if (val !== undefined && val !== null && val !== '') {
-              const parsed = parseFloat(val);
-              return isNaN(parsed) ? defaultVal : parsed;
+          // Helper pembacaan skor bertingkat guru (mendukung angka desimal & angka 0 secara valid)
+          const readTierScore = (val, fallback) => {
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
+              const num = parseFloat(val);
+              return isNaN(num) ? fallback : num;
             }
-            return defaultVal;
+            return fallback;
           };
 
-          const scoreErr1 = parseScore(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
-          const scoreErr2 = parseScore(q.pgk_score_err2, 0);
-          const scoreErr3 = parseScore(q.pgk_score_err3, 0);
+          const scoreErr1 = readTierScore(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
+          const scoreErr2 = readTierScore(q.pgk_score_err2, 0.0);
+          const scoreErr3 = readTierScore(q.pgk_score_err3, 0.0);
 
-          if (totalErrors === 0 && selectedKeys.length > 0) {
+          if (selectedKeys.length === 0) {
+            // Siswa tidak memilih sama sekali = 0
+            scoreEarned = 0;
+            isCorrect = false;
+          } else if (totalErrors === 0) {
+            // Benar Semua
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
+            // Salah 1 opsi
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
+            // Salah 2 opsi
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
+            // Salah 3 opsi
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
+            // Salah 4 atau lebih
             scoreEarned = 0;
             isCorrect = false;
           }
