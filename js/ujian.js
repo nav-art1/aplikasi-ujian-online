@@ -302,15 +302,16 @@ const ExamRunnerModule = {
       }
     }
 
-    const optionsContainer = document.getElementById("display-options-list");
-    const isPgk = q.question_type === 'pgk';
+const optionsContainer = document.getElementById("display-options-list");
+    // Deteksi kebal huruf besar/kecil (PGK maupun pgk)
+    const isPgk = String(q.question_type || '').toLowerCase().trim() === 'pgk';
     const currentAns = this.userAnswers[q.id] || { keys: [], isDoubt: false };
     
     const opts = q.displayOptions || q.options || [];
 
     let optionsHtml = '';
     opts.forEach(opt => {
-      const optKey = (opt.original_label || opt.option_label || '').toUpperCase().trim();
+      const optKey = String(opt.original_label || opt.option_label || opt.id).toUpperCase().trim();
       const isChecked = (currentAns.keys || []).includes(optKey);
       const letterLabel = opt.display_label || opt.option_label;
 
@@ -493,21 +494,27 @@ const ExamRunnerModule = {
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
 
-        // 1. Ambil pilihan siswa (huruf A-F rapi & berurutan)
+        // 1. Ambil opsi yang dicentang siswa
         let selectedKeys = (Array.isArray(userAns.keys) ? userAns.keys : [])
-          .map(k => String(k).toUpperCase().replace(/[^A-F]/g, ''))
-          .filter(k => k.length === 1)
-          .sort();
+          .map(k => String(k).toUpperCase().trim())
+          .filter(Boolean);
 
-        // 2. Ambil kunci asli soal (huruf A-F rapi & berurutan)
+        // 2. Kunci BENAR ASLI: Langsung ambil dari opsi centang benar (is_correct) di Bank Soal
         let trueKeys = [];
-        if (q.correct_keys) {
+        if (q.options && q.options.length > 0) {
+          trueKeys = q.options
+            .filter(o => o.is_correct === true || o.is_correct === 'true')
+            .map(o => String(o.option_label || o.id).toUpperCase().trim());
+        }
+        
+        // Cadangan jika opsi tidak memuat is_correct
+        if (trueKeys.length === 0 && q.correct_keys) {
           const rawK = Array.isArray(q.correct_keys) ? q.correct_keys.join(',') : String(q.correct_keys);
           trueKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
-        } else if (q.options && q.options.length > 0) {
-          trueKeys = q.options.filter(o => o.is_correct).map(o => String(o.option_label).toUpperCase().trim());
         }
+
         trueKeys = [...new Set(trueKeys)].sort();
+        selectedKeys = [...new Set(selectedKeys)].sort();
 
         let scoreEarned = 0;
         let isCorrect = false;
@@ -522,48 +529,37 @@ const ExamRunnerModule = {
           }
         } else {
           // --- PILIHAN GANDA KOMPLEKS (PGK) ---
-          // Murni mengambil angka yang Anda simpan di tombol Samakan Skor Massal
           const scoreFull = qPoints;
           const scoreErr1 = parseFloat(q.pgk_score_err1) || 0;
           const scoreErr2 = parseFloat(q.pgk_score_err2) || 0;
           const scoreErr3 = parseFloat(q.pgk_score_err3) || 0;
 
-          // Hitung berapa opsi yang meleset
+          // Hitung selisih kesalahan
           const missedCount = trueKeys.filter(k => !selectedKeys.includes(k)).length;
           const wrongCount  = selectedKeys.filter(k => !trueKeys.includes(k)).length;
           const totalErrors = missedCount + wrongCount;
-
-          alert(
-            "--- HASIL CEK PGK SOAL INI ---\n" +
-            "1. Kunci Benar: " + JSON.stringify(trueKeys) + "\n" +
-            "2. Jawaban Siswa: " + JSON.stringify(selectedKeys) + "\n" +
-            "3. Total Meleset (Error): " + totalErrors + "\n" +
-            "4. Angka Salah 1 di DB: " + scoreErr1 + "\n" +
-            "5. Skor yang Diberikan: " + (totalErrors === 1 ? scoreErr1 : (totalErrors === 0 ? scoreFull : 0))
-          );
 
           if (selectedKeys.length === 0) {
             scoreEarned = 0;
             isCorrect = false;
           } else if (totalErrors === 0) {
-            // BENAR SEMUA -> Ambil angka Benar Penuh
+            // BENAR SEMUA
             scoreEarned = scoreFull;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // SALAH 1 -> Ambil angka Salah 1 dari form Samakan Skor Massal
+            // SALAH 1 -> Langsung mengambil nilai dari database (misal: 3)
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // SALAH 2 -> Ambil angka Salah 2 dari form Samakan Skor Massal
+            // SALAH 2
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // SALAH 3 -> Ambil angka Salah 3 dari form Samakan Skor Massal
+            // SALAH 3
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
-            // SALAH 4 KE ATAS -> 0
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -577,9 +573,7 @@ const ExamRunnerModule = {
           is_correct: isCorrect,
           score_earned: Number(scoreEarned.toFixed(2))
         });
-      });
-      // Hitung skor akhir persentase skala 0 - 100
-      const finalPercentage = maxPossibleScore > 0 
+      });      const finalPercentage = maxPossibleScore > 0 
         ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
         : 0;
 
