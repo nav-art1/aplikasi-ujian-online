@@ -493,40 +493,43 @@ const optionsContainer = document.getElementById("display-options-list");
         maxPossibleScore += qPoints;
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
+        let selectedRaw = Array.isArray(userAns.keys) ? userAns.keys : [];
 
-        // 1. Ambil pilihan siswa (murni huruf A-F)
-        let selectedKeys = (Array.isArray(userAns.keys) ? userAns.keys : [])
-          .map(k => String(k).toUpperCase().trim())
-          .filter(k => /^[A-F]$/.test(k));
+        // 1. Kumpulkan semua opsi untuk soal ini
+        const optsList = q.displayOptions || q.options || [];
 
-        // 2. Ambil kunci benar dari options (HANYA huruf label A-F, tanpa mencampur ID!)
-        let trueKeys = [];
-        if (q.options && q.options.length > 0) {
-          q.options.forEach(o => {
-            const isCorr = (o.is_correct === true || o.is_correct === 'true' || o.is_correct === 1);
-            const lbl = String(o.original_label || o.option_label || '').toUpperCase().trim();
-            if (isCorr && /^[A-F]$/.test(lbl)) {
-              trueKeys.push(lbl);
-            }
-          });
-        }
+        // 2. Ambil KUNCI BENAR (Kumpulan opsi yang bernilai is_correct = true)
+        let correctOptKeys = [];
+        optsList.forEach(opt => {
+          const isCorr = (opt.is_correct === true || opt.is_correct === 'true' || opt.is_correct === 1);
+          if (isCorr) {
+            // Gunakan original_label atau option_label yang konsisten
+            const keyVal = String(opt.original_label || opt.option_label || '').toUpperCase().trim();
+            if (keyVal) correctOptKeys.push(keyVal);
+          }
+        });
 
-        // Cadangan jika options tidak memiliki is_correct
-        if (trueKeys.length === 0 && q.correct_keys) {
+        // Fallback jika is_correct di options kosong, ambil dari correct_keys
+        if (correctOptKeys.length === 0 && q.correct_keys) {
           const rawK = Array.isArray(q.correct_keys) ? q.correct_keys.join(',') : String(q.correct_keys);
-          trueKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
+          correctOptKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
         }
 
-        trueKeys = [...new Set(trueKeys)].sort();
-        selectedKeys = [...new Set(selectedKeys)].sort();
+        correctOptKeys = [...new Set(correctOptKeys)].sort();
+
+        // 3. Ambil JAWABAN SISWA
+        let studentAnsKeys = selectedRaw
+          .map(k => String(k).toUpperCase().trim())
+          .filter(Boolean);
+        studentAnsKeys = [...new Set(studentAnsKeys)].sort();
 
         let scoreEarned = 0;
         let isCorrect = false;
         const isPgk = String(q.question_type || '').toLowerCase().trim() === 'pgk';
 
         if (!isPgk) {
-          // --- PILIHAN GANDA BIASA (PG) ---
-          if (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]) {
+          // --- PILIHAN GANDA (PG) ---
+          if (studentAnsKeys.length === 1 && correctOptKeys.length === 1 && studentAnsKeys[0] === correctOptKeys[0]) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
@@ -538,14 +541,15 @@ const optionsContainer = document.getElementById("display-options-list");
           const scoreErr2 = parseFloat(q.pgk_score_err2) || 0;
           const scoreErr3 = parseFloat(q.pgk_score_err3) || 0;
 
-          // Hitung kesalahan murni:
-          // missed = kunci benar yang tidak dicentang siswa
-          // wrong  = opsi salah yang malah dicentang siswa
-          const missed = trueKeys.filter(k => !selectedKeys.includes(k)).length;
-          const wrong  = selectedKeys.filter(k => !trueKeys.includes(k)).length;
+          // Perhitungan selisih yang presisi:
+          // missed = kunci yang benar tapi tidak dipilih siswa
+          const missed = correctOptKeys.filter(k => !studentAnsKeys.includes(k)).length;
+          // wrong = opsi salah yang malah dipilih siswa
+          const wrong  = studentAnsKeys.filter(k => !correctOptKeys.includes(k)).length;
           const totalErrors = missed + wrong;
 
-          if (selectedKeys.length === 0) {
+          if (studentAnsKeys.length === 0) {
+            // Tidak menjawab sama sekali
             scoreEarned = 0;
             isCorrect = false;
           } else if (totalErrors === 0) {
@@ -554,18 +558,19 @@ const optionsContainer = document.getElementById("display-options-list");
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // Salah 1 -> Murni mengambil nilai salah 1 dari database
+            // SALAH 1 (Pasti mengambil scoreErr1 dari tombol massal)
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // Salah 2 -> Murni mengambil nilai salah 2 dari database
+            // SALAH 2 (Mengambil scoreErr2)
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // Salah 3 -> Murni mengambil nilai salah 3 dari database
+            // SALAH 3 (Mengambil scoreErr3)
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
+            // Salah 4 atau lebih
             scoreEarned = 0;
             isCorrect = false;
           }
@@ -575,7 +580,7 @@ const optionsContainer = document.getElementById("display-options-list");
 
         studentAnswersPayload.push({
           question_id: q.id,
-          selected_keys: selectedKeys,
+          selected_keys: studentAnsKeys,
           is_correct: isCorrect,
           score_earned: Number(scoreEarned.toFixed(2))
         });
