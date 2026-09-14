@@ -547,7 +547,16 @@ const optionsContainer = document.getElementById("display-options-list");
           // wrong = opsi salah yang malah dipilih siswa
           const wrong  = studentAnsKeys.filter(k => !correctOptKeys.includes(k)).length;
           const totalErrors = missed + wrong;
-
+if (isPgk) {
+  alert(
+    "BUKTI PENILAIAN PGK:\n" +
+    "- Kunci Sebenarnya : " + JSON.stringify(correctOptKeys) + "\n" +
+    "- Centang Siswa    : " + JSON.stringify(studentAnsKeys) + "\n" +
+    "- Salah Terhitung  : " + totalErrors + "\n" +
+    "- Nilai Diberikan  : " + (totalErrors === 1 ? scoreErr1 : (totalErrors === 0 ? scoreFull : 0))
+  );
+}
+          
           if (studentAnsKeys.length === 0) {
             // Tidak menjawab sama sekali
             scoreEarned = 0;
