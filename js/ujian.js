@@ -625,16 +625,30 @@ const optionsContainer = document.getElementById("display-options-list");
 
       if (attErr) throw attErr;
 
-      // 2. Simpan Detail Butir Jawaban
-      if (studentAnswersPayload.length > 0) {
+     // 2. Simpan Detail Jawaban (Kebal tipe data JSON / TEXT)
+      if (studentAnswersPayload.length > 0 && attemptData && attemptData.id) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
           question_id: a.question_id,
-          selected_keys: a.selected_keys,
-          is_correct: a.is_correct,
-          score_earned: a.score_earned
+          // Ubah array jadi string koma jika kolom Supabase bertipe TEXT
+          selected_keys: Array.isArray(a.selected_keys) ? a.selected_keys.join(',') : String(a.selected_keys || ''),
+          is_correct: !!a.is_correct,
+          score_earned: Number(parseFloat(a.score_earned || 0).toFixed(2))
         }));
-        await client.from('student_answers').insert(answersData);
+
+        const { error: ansErr } = await client.from('student_answers').insert(answersData);
+        if (ansErr) {
+          console.error("Gagal simpan student_answers:", ansErr);
+          // Coba simpan kembali dalam bentuk JSON murni jika format TEXT ditolak
+          const fallbackData = studentAnswersPayload.map(a => ({
+            attempt_id: attemptData.id,
+            question_id: a.question_id,
+            selected_keys: a.selected_keys,
+            is_correct: !!a.is_correct,
+            score_earned: Number(parseFloat(a.score_earned || 0).toFixed(2))
+          }));
+          await client.from('student_answers').insert(fallbackData);
+        }
       }
 
       // 3. Rekap ke Google Spreadsheet
