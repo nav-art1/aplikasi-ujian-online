@@ -502,21 +502,19 @@ const optionsContainer = document.getElementById("display-options-list");
         const userAns = this.userAnswers[q.id] || { keys: [] };
         let selectedRaw = Array.isArray(userAns.keys) ? userAns.keys : [];
 
-        // 1. Kumpulkan semua opsi untuk soal ini
+        // 1. Ambil opsi soal
         const optsList = q.displayOptions || q.options || [];
 
-        // 2. Ambil KUNCI BENAR (Kumpulan opsi yang bernilai is_correct = true)
+        // 2. Ambil Kunci Benar (is_correct = true)
         let correctOptKeys = [];
         optsList.forEach(opt => {
           const isCorr = (opt.is_correct === true || opt.is_correct === 'true' || opt.is_correct === 1);
           if (isCorr) {
-            // Gunakan original_label atau option_label yang konsisten
             const keyVal = String(opt.original_label || opt.option_label || '').toUpperCase().trim();
             if (keyVal) correctOptKeys.push(keyVal);
           }
         });
 
-        // Fallback jika is_correct di options kosong, ambil dari correct_keys
         if (correctOptKeys.length === 0 && q.correct_keys) {
           const rawK = Array.isArray(q.correct_keys) ? q.correct_keys.join(',') : String(q.correct_keys);
           correctOptKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
@@ -524,7 +522,7 @@ const optionsContainer = document.getElementById("display-options-list");
 
         correctOptKeys = [...new Set(correctOptKeys)].sort();
 
-        // 3. Ambil JAWABAN SISWA
+        // 3. Ambil Pilihan Siswa
         let studentAnsKeys = selectedRaw
           .map(k => String(k).toUpperCase().trim())
           .filter(Boolean);
@@ -535,7 +533,7 @@ const optionsContainer = document.getElementById("display-options-list");
         const isPgk = String(q.question_type || '').toLowerCase().trim() === 'pgk';
 
         if (!isPgk) {
-          // --- PILIHAN GANDA (PG) ---
+          // --- PILIHAN GANDA BIASA (PG) ---
           if (studentAnsKeys.length === 1 && correctOptKeys.length === 1 && studentAnsKeys[0] === correctOptKeys[0]) {
             scoreEarned = qPoints;
             isCorrect = true;
@@ -548,45 +546,38 @@ const optionsContainer = document.getElementById("display-options-list");
           const scoreErr2 = parseFloat(q.pgk_score_err2) || 0;
           const scoreErr3 = parseFloat(q.pgk_score_err3) || 0;
 
-          // Perhitungan selisih yang presisi:
-          // missed = kunci yang benar tapi tidak dipilih siswa
-          const missed = correctOptKeys.filter(k => !studentAnsKeys.includes(k)).length;
-          // wrong = opsi salah yang malah dipilih siswa
-          const wrong  = studentAnsKeys.filter(k => !correctOptKeys.includes(k)).length;
-          const totalErrors = missed + wrong;
-if (isPgk) {
-  alert(
-    "BUKTI PENILAIAN PGK:\n" +
-    "- Kunci Sebenarnya : " + JSON.stringify(correctOptKeys) + "\n" +
-    "- Centang Siswa    : " + JSON.stringify(studentAnsKeys) + "\n" +
-    "- Salah Terhitung  : " + totalErrors + "\n" +
-    "- Nilai Diberikan  : " + (totalErrors === 1 ? scoreErr1 : (totalErrors === 0 ? scoreFull : 0))
-  );
-}
+          // Hitung berapa opsi BENAR yang berhasil dicentang siswa
+          const correctChosen = studentAnsKeys.filter(k => correctOptKeys.includes(k)).length;
+          // Hitung berapa opsi SALAH yang keliru dicentang siswa
+          const wrongChosen   = studentAnsKeys.filter(k => !correctOptKeys.includes(k)).length;
+
+          // Selisih kekurangan opsi benar
+          const missingCount  = Math.max(0, correctOptKeys.length - correctChosen);
           
+          // Total toleransi kesalahan (jika siswa benar 2 dari 3, totalErrors bernilai 1)
+          const totalErrors = Math.max(missingCount, wrongChosen);
+
           if (studentAnsKeys.length === 0) {
-            // Tidak menjawab sama sekali
             scoreEarned = 0;
             isCorrect = false;
-          } else if (totalErrors === 0) {
-            // Benar Semua
+          } else if (correctChosen === correctOptKeys.length && wrongChosen === 0) {
+            // BENAR SEMUA
             scoreEarned = scoreFull;
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // SALAH 1 (Pasti mengambil scoreErr1 dari tombol massal)
+            // SALAH 1 (Benar 2 dari 3 kunci) -> Ambil nilai Salah 1 dari DB
             scoreEarned = scoreErr1;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // SALAH 2 (Mengambil scoreErr2)
+            // SALAH 2 (Benar 1 dari 3 kunci) -> Ambil nilai Salah 2 dari DB
             scoreEarned = scoreErr2;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // SALAH 3 (Mengambil scoreErr3)
+            // SALAH 3 -> Ambil nilai Salah 3 dari DB
             scoreEarned = scoreErr3;
             isCorrect = false;
           } else {
-            // Salah 4 atau lebih
             scoreEarned = 0;
             isCorrect = false;
           }
