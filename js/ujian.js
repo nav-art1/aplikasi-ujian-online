@@ -336,11 +336,14 @@ const optionsContainer = document.getElementById("display-options-list");
   },
 
   handleOptionSelect(questionId, optionKey, isPgk) {
-    if (!this.userAnswers[questionId]) this.userAnswers[questionId] = { keys: [], isDoubt: false };
+    if (!this.userAnswers[questionId]) {
+      this.userAnswers[questionId] = { keys: [], isDoubt: false };
+    }
 
     const cleanKey = String(optionKey).toUpperCase().trim();
 
     if (!isPgk) {
+      // Pilihan Ganda Biasa (Radio)
       this.userAnswers[questionId].keys = [cleanKey];
       document.querySelectorAll("#display-options-list .option-item").forEach(item => {
         if (item.getAttribute("data-key") === cleanKey) {
@@ -350,25 +353,29 @@ const optionsContainer = document.getElementById("display-options-list");
         }
       });
     } else {
-      let keys = this.userAnswers[questionId].keys || [];
-      const idx = keys.indexOf(cleanKey);
-      if (idx > -1) {
-        keys.splice(idx, 1);
-      } else {
-        keys.push(cleanKey);
-      }
-      this.userAnswers[questionId].keys = keys.sort();
+      // PGK (Checkbox) - Ambil langsung elemen checkbox-nya secara pasti
+      const currentCheckedKeys = [];
+      const checkboxes = document.querySelectorAll("#display-options-list input[type='checkbox']");
+      
+      checkboxes.forEach(cb => {
+        const itemVal = String(cb.value).toUpperCase().trim();
+        const parentLabel = cb.closest(".option-item");
+        
+        if (cb.checked) {
+          currentCheckedKeys.push(itemVal);
+          if (parentLabel) parentLabel.classList.add("selected");
+        } else {
+          if (parentLabel) parentLabel.classList.remove("selected");
+        }
+      });
 
-      const targetItem = document.querySelector(`#display-options-list .option-item[data-key="${cleanKey}"]`);
-      if (targetItem) {
-        targetItem.classList.toggle("selected", keys.includes(cleanKey));
-      }
+      this.userAnswers[questionId].keys = [...new Set(currentCheckedKeys)].sort();
     }
 
     this.saveLocalAnswers();
     this.renderGridNumbers();
   },
-
+  
   renderGridNumbers() {
     const container = document.getElementById("grid-numbers-container");
     if (!container) return;
