@@ -487,7 +487,88 @@ const ExamRunnerModule = {
       let correctCount = 0;
       const studentAnswersPayload = [];
 
-      this.questions.forEach((q) => {
+     this.questions.forEach((q) => {
+        const qPoints = parseFloat(q.points) || 4.0;
+        maxPossibleScore += qPoints;
+
+        const userAns = this.userAnswers[q.id] || { keys: [] };
+
+        // 1. Ambil pilihan siswa (huruf A-F rapi & berurutan)
+        let selectedKeys = (Array.isArray(userAns.keys) ? userAns.keys : [])
+          .map(k => String(k).toUpperCase().replace(/[^A-F]/g, ''))
+          .filter(k => k.length === 1)
+          .sort();
+
+        // 2. Ambil kunci asli soal (huruf A-F rapi & berurutan)
+        let trueKeys = [];
+        if (q.correct_keys) {
+          const rawK = Array.isArray(q.correct_keys) ? q.correct_keys.join(',') : String(q.correct_keys);
+          trueKeys = rawK.toUpperCase().replace(/[^A-F]/g, '').split('').filter(Boolean);
+        } else if (q.options && q.options.length > 0) {
+          trueKeys = q.options.filter(o => o.is_correct).map(o => String(o.option_label).toUpperCase().trim());
+        }
+        trueKeys = [...new Set(trueKeys)].sort();
+
+        let scoreEarned = 0;
+        let isCorrect = false;
+        const isPgk = String(q.question_type || '').toLowerCase().trim() === 'pgk';
+
+        if (!isPgk) {
+          // --- PILIHAN GANDA BIASA (PG) ---
+          if (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]) {
+            scoreEarned = qPoints;
+            isCorrect = true;
+            correctCount++;
+          }
+        } else {
+          // --- PILIHAN GANDA KOMPLEKS (PGK) ---
+          // Murni mengambil angka yang Anda simpan di tombol Samakan Skor Massal
+          const scoreFull = qPoints;
+          const scoreErr1 = parseFloat(q.pgk_score_err1) || 0;
+          const scoreErr2 = parseFloat(q.pgk_score_err2) || 0;
+          const scoreErr3 = parseFloat(q.pgk_score_err3) || 0;
+
+          // Hitung berapa opsi yang meleset
+          const missedCount = trueKeys.filter(k => !selectedKeys.includes(k)).length;
+          const wrongCount  = selectedKeys.filter(k => !trueKeys.includes(k)).length;
+          const totalErrors = missedCount + wrongCount;
+
+          if (selectedKeys.length === 0) {
+            scoreEarned = 0;
+            isCorrect = false;
+          } else if (totalErrors === 0) {
+            // BENAR SEMUA -> Ambil angka Benar Penuh
+            scoreEarned = scoreFull;
+            isCorrect = true;
+            correctCount++;
+          } else if (totalErrors === 1) {
+            // SALAH 1 -> Ambil angka Salah 1 dari form Samakan Skor Massal
+            scoreEarned = scoreErr1;
+            isCorrect = false;
+          } else if (totalErrors === 2) {
+            // SALAH 2 -> Ambil angka Salah 2 dari form Samakan Skor Massal
+            scoreEarned = scoreErr2;
+            isCorrect = false;
+          } else if (totalErrors === 3) {
+            // SALAH 3 -> Ambil angka Salah 3 dari form Samakan Skor Massal
+            scoreEarned = scoreErr3;
+            isCorrect = false;
+          } else {
+            // SALAH 4 KE ATAS -> 0
+            scoreEarned = 0;
+            isCorrect = false;
+          }
+        }
+
+        totalEarnedScore += scoreEarned;
+
+        studentAnswersPayload.push({
+          question_id: q.id,
+          selected_keys: selectedKeys,
+          is_correct: isCorrect,
+          score_earned: Number(scoreEarned.toFixed(2))
+        });
+      });
       // Hitung skor akhir persentase skala 0 - 100
       const finalPercentage = maxPossibleScore > 0 
         ? Math.round((totalEarnedScore / maxPossibleScore) * 100) 
