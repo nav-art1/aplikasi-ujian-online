@@ -1,5 +1,5 @@
 // ==========================================================================
-// MODUL UJIAN SISWA: PERBAIKAN AKURAT PENILAIAN PGK BERTINGKAT
+// MODUL UJIAN SISWA: PERBAIKAN LOGIKA SKOR BERTINGKAT PGK SESUAI SKOR GURU
 // ==========================================================================
 
 const ExamRunnerModule = {
@@ -250,7 +250,7 @@ const ExamRunnerModule = {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [arr[j], arr[i]] = [arr[i], arr[j]];
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
   },
@@ -454,28 +454,28 @@ const ExamRunnerModule = {
     }
   },
 
-  // =========================================================================
-  // NORMALISASI KUNCI JAWABAN (MEMECAH FORMAT APAPUN MENJADI ARRAY BERSIH)
-  // =========================================================================
-  extractCleanKeys(input) {
-    if (!input) return [];
-    if (Array.isArray(input)) {
-      return input
-        .flatMap(item => String(item).split(/[,;\s]+/))
-        .map(k => k.toUpperCase().trim())
-        .filter(k => k.length > 0 && ['A','B','C','D','E','F'].includes(k));
+  // FUNGSI NORMALISASI KUNCI: MENGHILANGKAN SEGALA KARAKTER SELAIN A-F
+  cleanLetterKeys(source) {
+    if (!source) return [];
+    let list = [];
+    if (Array.isArray(source)) {
+      list = source.map(s => String(s));
+    } else {
+      list = String(source).split(/[,;\s]+/);
     }
-    // Jika string: hapus karakter kurung siku/kurawal lalu split
-    const cleanStr = String(input).replace(/[\[\]\{\}"']/g, '');
-    return cleanStr
-      .split(/[,;\s]+/)
-      .map(k => k.toUpperCase().trim())
-      .filter(k => k.length > 0 && ['A','B','C','D','E','F'].includes(k));
+    const clean = [];
+    list.forEach(item => {
+      const matched = item.toUpperCase().match(/[A-F]/g);
+      if (matched) {
+        matched.forEach(ch => {
+          if (!clean.includes(ch)) clean.push(ch);
+        });
+      }
+    });
+    return clean.sort();
   },
 
-  // =========================================================================
-  // PENILAIAN PRESISI PG & PGK BERTINGKAT
-  // =========================================================================
+  // FUNGSI UTAMA PENILAIAN DENGAN PERHITUNGAN SKOR BERTINGKAT
   async finishExam(isAuto = false, isCheatForced = false) {
     if (!isAuto) {
       const unansweredCount = this.questions.filter(q => !this.userAnswers[q.id] || this.userAnswers[q.id].keys.length === 0).length;
@@ -502,21 +502,22 @@ const ExamRunnerModule = {
       const studentAnswersPayload = [];
 
       this.questions.forEach((q) => {
-        const qPoints = parseFloat(q.points) || 1.0;
+        const qPoints = (q.points !== null && q.points !== undefined && !isNaN(parseFloat(q.points))) 
+          ? parseFloat(q.points) 
+          : 4.0;
+        
         maxPossibleScore += qPoints;
 
         const userAns = this.userAnswers[q.id] || { keys: [] };
         
-        // Ekstrak opsi siswa menjadi array huruf bersih
-        const selectedKeys = this.extractCleanKeys(userAns.keys);
+        // 1. Ekstrak jawaban siswa
+        const selectedKeys = this.cleanLetterKeys(userAns.keys);
 
-        // Ekstrak kunci jawaban benar dari correct_keys atau dari tabel options
-        let trueKeys = this.extractCleanKeys(q.correct_keys);
+        // 2. Ekstrak kunci jawaban yang sah (dari correct_keys atau dari opsi is_correct)
+        let trueKeys = this.cleanLetterKeys(q.correct_keys);
         if (trueKeys.length === 0 && q.options && q.options.length > 0) {
-          trueKeys = q.options
-            .filter(o => o.is_correct)
-            .map(o => (o.option_label || '').toUpperCase().trim())
-            .filter(Boolean);
+          const optTrue = q.options.filter(o => o.is_correct).map(o => o.option_label);
+          trueKeys = this.cleanLetterKeys(optTrue);
         }
 
         let scoreEarned = 0;
@@ -526,37 +527,37 @@ const ExamRunnerModule = {
 
         if (!isPgk) {
           // --- PILIHAN GANDA BIASA (PG) ---
-          const isMatch = (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]);
-          if (isMatch) {
+          if (selectedKeys.length === 1 && trueKeys.length === 1 && selectedKeys[0] === trueKeys[0]) {
             scoreEarned = qPoints;
             isCorrect = true;
             correctCount++;
           }
         } else {
           // --- PILIHAN GANDA KOMPLEKS (PGK) ---
-          // Hitung selisih:
-          // missed = kunci benar yang tidak dicentang siswa
-          // wrong  = opsi salah yang malah dicentang siswa
-          const missedKeys = trueKeys.filter(k => !selectedKeys.includes(k));
-          const wrongSelectedKeys = selectedKeys.filter(k => !trueKeys.includes(k));
-          const totalErrors = missedKeys.length + wrongSelectedKeys.length;
+          // missed = kunci benar yang tidak dipilih siswa
+          // wrong  = opsi salah yang malah dipilih siswa
+          const missed = trueKeys.filter(k => !selectedKeys.includes(k)).length;
+          const wrong = selectedKeys.filter(k => !trueKeys.includes(k)).length;
+          const totalErrors = missed + wrong;
 
-          // Helper pembacaan skor bertingkat guru
-          const getScoreValue = (val, fallback) => {
+          // Baca nilai dari fitur samakan skor massal guru
+          // Jika di database bernilai 0 / belum diisi, fallback otomatis:
+          // Salah 1 = 50% dari poin penuh
+          // Salah 2 = 0
+          // Salah 3 = 0
+          const readTier = (val, fallback) => {
             if (val !== undefined && val !== null && String(val).trim() !== '') {
-              const parsed = parseFloat(val);
-              return isNaN(parsed) ? fallback : parsed;
+              const p = parseFloat(val);
+              return isNaN(p) ? fallback : p;
             }
             return fallback;
           };
 
-          // Nilai bertingkat yang telah disetel oleh guru
-          const scoreErr1 = getScoreValue(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
-          const scoreErr2 = getScoreValue(q.pgk_score_err2, 0.0);
-          const scoreErr3 = getScoreValue(q.pgk_score_err3, 0.0);
+          const err1Score = readTier(q.pgk_score_err1, Number((qPoints * 0.5).toFixed(2)));
+          const err2Score = readTier(q.pgk_score_err2, 0.0);
+          const err3Score = readTier(q.pgk_score_err3, 0.0);
 
           if (selectedKeys.length === 0) {
-            // Siswa tidak menjawab sama sekali
             scoreEarned = 0;
             isCorrect = false;
           } else if (totalErrors === 0) {
@@ -565,16 +566,16 @@ const ExamRunnerModule = {
             isCorrect = true;
             correctCount++;
           } else if (totalErrors === 1) {
-            // SALAH 1 (kurang 1 atau lebih 1)
-            scoreEarned = scoreErr1;
+            // SALAH 1 OPSI
+            scoreEarned = err1Score;
             isCorrect = false;
           } else if (totalErrors === 2) {
-            // SALAH 2
-            scoreEarned = scoreErr2;
+            // SALAH 2 OPSI
+            scoreEarned = err2Score;
             isCorrect = false;
           } else if (totalErrors === 3) {
-            // SALAH 3
-            scoreEarned = scoreErr3;
+            // SALAH 3 OPSI
+            scoreEarned = err3Score;
             isCorrect = false;
           } else {
             // SALAH 4 ATAU LEBIH
@@ -595,7 +596,7 @@ const ExamRunnerModule = {
 
       const finalPercentage = maxPossibleScore > 0 ? Math.round((totalEarnedScore / maxPossibleScore) * 100) : 0;
 
-      // 1. Simpan Attempt ke Supabase
+      // 1. Simpan Attempt Siswa
       const { data: attemptData, error: attErr } = await client
         .from('exam_attempts')
         .insert({
@@ -614,7 +615,7 @@ const ExamRunnerModule = {
 
       if (attErr) throw attErr;
 
-      // 2. Simpan Detail Jawaban Siswa
+      // 2. Simpan Detail Butir Jawaban
       if (studentAnswersPayload.length > 0) {
         const answersData = studentAnswersPayload.map(a => ({
           attempt_id: attemptData.id,
@@ -626,7 +627,7 @@ const ExamRunnerModule = {
         await client.from('student_answers').insert(answersData);
       }
 
-      // 3. Kirim ke Webhook Google Spreadsheet
+      // 3. Webhook Spreadsheet
       if (this.session.exam.spreadsheet_url) {
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
@@ -673,7 +674,7 @@ const ExamRunnerModule = {
         }
       }
 
-      // 4. Masuk ke Halaman Selesai
+      // 4. Redirect ke Halaman Selesai
       const finishSummary = {
         student_name: this.session.student.full_name,
         student_number: this.session.student.student_number,
