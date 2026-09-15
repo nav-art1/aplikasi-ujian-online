@@ -686,6 +686,7 @@ const optionsContainer = document.getElementById("display-options-list");
           });
         } catch (e) {
           console.warn("Spreadsheet webhook notice:", e);
+          alert("Gagal kirim Spreadsheet karena: " + e.message);
         }
       }
 
