@@ -643,7 +643,12 @@ const optionsContainer = document.getElementById("display-options-list");
       }
 
       // 3. Rekap ke Google Spreadsheet
-      if (this.session.exam.spreadsheet_url) {
+      console.log("URL SPREADSHEET:", this.session?.exam?.spreadsheet_url);
+
+      if (!this.session?.exam?.spreadsheet_url) {
+        alert("URL Spreadsheet KOSONG di data ujian! Periksa tabel exams di Supabase.");
+      } else {
+        alert("Mulai mengirim ke Spreadsheet...");
         try {
           const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
           
@@ -684,9 +689,10 @@ const optionsContainer = document.getElementById("display-options-list");
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
           });
+          
+          alert("Data BERHASIL ditembakkan ke Google Script!");
         } catch (e) {
-          console.warn("Spreadsheet webhook notice:", e);
-          alert("Gagal kirim Spreadsheet karena: " + e.message);
+          alert("Gagal kirim Spreadsheet: " + e.message);
         }
       }
 
