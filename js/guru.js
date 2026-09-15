@@ -1930,7 +1930,15 @@ const GuruModule = {
 
   getAppsScriptTemplate() {
     return `function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(15000);
+
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "empty" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var raw = e.postData.contents;
     var data = JSON.parse(raw);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1950,13 +1958,13 @@ const GuruModule = {
     sheetNilai.appendRow([
       data.submitted_at || new Date().toLocaleString("id-ID"),
       data.attendance_number || "-",
-      data.student_name,
+      data.student_name || "-",
       data.student_number || "-",
-      data.class_name,
-      data.subject,
-      data.exam_title,
-      data.total_questions,
-      data.final_score,
+      data.class_name || "-",
+      data.subject || "-",
+      data.exam_title || "-",
+      data.total_questions || 0,
+      data.final_score !== undefined ? data.final_score : 0,
       data.total_points || 0,
       data.submission_type === 'forced_cheat' ? 'TERINDIKASI CURANG' : 'SELESAI MURNI',
       (data.violation_count || 0) + " kali"
@@ -1978,30 +1986,44 @@ const GuruModule = {
 
     var rowAnalisis = [
       data.attendance_number || "-",
-      data.student_name,
-      data.class_name,
-      data.final_score,
+      data.student_name || "-",
+      data.class_name || "-",
+      data.final_score !== undefined ? data.final_score : 0,
       data.submission_type === 'forced_cheat' ? 'CURANG' : 'MURNI'
     ];
 
     if (data.item_analysis && data.item_analysis.length > 0) {
       for (var j = 0; j < data.item_analysis.length; j++) {
         var item = data.item_analysis[j];
-        var keys = (item.selected_keys && item.selected_keys.length > 0) ? item.selected_keys.join(",") : "-";
+        
+        var keys = "-";
+        if (item.selected_keys) {
+          if (Array.isArray(item.selected_keys)) {
+            keys = item.selected_keys.length > 0 ? item.selected_keys.join(",") : "-";
+          } else {
+            keys = String(item.selected_keys).trim() || "-";
+          }
+        }
+
         var scoreVal = (item.score_earned !== undefined && item.score_earned !== null) ? item.score_earned : 0;
         rowAnalisis.push(keys + " (" + scoreVal + ")");
       }
     }
+    
     sheetAnalisis.appendRow(rowAnalisis);
 
     return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
       .setMimeType(ContentService.MimeType.JSON);
+
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }`;
   },
+  
 
   async loadHasilExamFilter() {
     const sel = document.getElementById("hasil-exam-filter");
