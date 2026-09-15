@@ -642,27 +642,22 @@ const optionsContainer = document.getElementById("display-options-list");
         }
       }
 
-      // 3. Rekap ke Google Spreadsheet
-      console.log("URL SPREADSHEET:", this.session?.exam?.spreadsheet_url);
+      // 3. Rekap ke Google Spreadsheet (Pasti Tembus ke Apps Script)
+      const targetUrl = this.session?.exam?.spreadsheet_url;
 
-      if (!this.session?.exam?.spreadsheet_url) {
-        alert("URL Spreadsheet KOSONG di data ujian! Periksa tabel exams di Supabase.");
-      } else {
-        alert("Mulai mengirim ke Spreadsheet...");
+      if (targetUrl && targetUrl.startsWith("http")) {
         try {
-          const sortedOriginalQuestions = [...this.questions].sort((a, b) => (a.original_number || 0) - (b.original_number || 0));
-          
+          const sortedOriginalQuestions = [...(this.questions || [])].sort(
+            (a, b) => (a.original_number || 0) - (b.original_number || 0)
+          );
+
           const itemAnalysisData = sortedOriginalQuestions.map(q => {
             const foundAns = studentAnswersPayload.find(a => a.question_id === q.id);
-            const selectedKeys = foundAns ? foundAns.selected_keys : [];
-            const earned = foundAns ? foundAns.score_earned : 0;
-            const isCorr = foundAns ? foundAns.is_correct : false;
-
             return {
-              question_number: q.original_number,
-              selected_keys: selectedKeys,
-              is_correct: isCorr,
-              score_earned: earned
+              question_number: q.original_number || "-",
+              selected_keys: foundAns ? (foundAns.selected_keys || []) : [],
+              is_correct: foundAns ? !!foundAns.is_correct : false,
+              score_earned: foundAns ? (foundAns.score_earned || 0) : 0
             };
           });
 
@@ -683,19 +678,30 @@ const optionsContainer = document.getElementById("display-options-list");
             item_analysis: itemAnalysisData
           };
 
-          await fetch(this.session.exam.spreadsheet_url, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-          });
+          const payloadString = JSON.stringify(payload);
+
+          // Gunakan Blob text/plain agar browser TIDAK memicu preflight OPTIONS yang ditolak Google
+          const blob = new Blob([payloadString], { type: 'text/plain;charset=utf-8' });
           
-          alert("Data BERHASIL ditembakkan ke Google Script!");
-        } catch (e) {
-          alert("Gagal kirim Spreadsheet: " + e.message);
+          // Prioritaskan sendBeacon (standar resmi pengiriman saat submit/pindah halaman)
+          let sent = false;
+          if (navigator.sendBeacon) {
+            sent = navigator.sendBeacon(targetUrl, blob);
+          }
+
+          // Fallback fetch jika browser lama
+          if (!sent) {
+            fetch(targetUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              body: blob
+            }).catch(e => console.warn("Fetch fallback notice:", e));
+          }
+
+        } catch (prepErr) {
+          console.error("Gagal menyusun payload spreadsheet:", prepErr);
         }
       }
-
       // 4. Masuk ke Halaman Selesai
       const finishSummary = {
         student_name: this.session.student.full_name,
