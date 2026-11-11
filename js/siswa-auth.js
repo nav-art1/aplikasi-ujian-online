@@ -128,11 +128,13 @@ const StudentAuthModule = {
       };
 
       sessionStorage.setItem("exam_session_data", JSON.stringify(sessionPayload));
-      this.showAlert(`Identitas Terverifikasi: [Absen ${studentData.attendance_number}] ${studentData.full_name}. Mengalihkan...`, "success");
+this.showAlert(`Identitas Terverifikasi: [Absen ${studentData.attendance_number}] ${studentData.full_name}. Mengalihkan...`, "success");
 
-      setTimeout(() => {
-        window.location.href = "konfirmasi.html";
-      }, 600);
+// Ubah durasi setTimeout dari 600 menjadi 1200ms (1.2 detik) 
+// agar penyimpanan session storage aman di HP / Chromebook
+setTimeout(() => {
+  window.location.href = "konfirmasi.html";
+}, 1200);
 
     } catch (err) {
       this.showAlert(`Gagal verifikasi: ${err.message}`, "error");
