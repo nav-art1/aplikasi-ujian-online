@@ -135,14 +135,12 @@
   <script src="js/siswa-auth.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const rawResult = sessionStorage.getItem("exam_finish_result");
+      const res = SessionStore.get("exam_finish_result");
 
-      if (!rawResult) {
+      if (!res) {
         window.location.href = "index.html";
         return;
       }
-
-      const res = JSON.parse(rawResult);
 
       document.getElementById("res-student-name").innerText = res.student_name || "-";
       document.getElementById("res-student-nisn").innerText = res.student_number || "-";
@@ -177,7 +175,7 @@
       }
 
       document.getElementById("btn-back-home").addEventListener("click", () => {
-        sessionStorage.removeItem("exam_finish_result");
+        SessionStore.remove("exam_finish_result");
         StudentAuthModule.clearSession();
       });
     });
