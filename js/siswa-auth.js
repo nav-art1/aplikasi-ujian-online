@@ -2,6 +2,33 @@
 // MODUL OTENTIKASI SISWA: LOGIN NOMOR ABSEN & FIX PARAMETER PENGACAKAN
 // ==========================================================================
 
+// ==========================================================================
+// PENYIMPANAN SESI: sessionStorage + localStorage (cadangan)
+// sessionStorage hilang bila halaman berikutnya dibuka di tab/konteks baru
+// (umum pada browser dalam aplikasi WhatsApp/Classroom, WebView, mode tamu
+// Chromebook). localStorage dipakai sebagai cadangan agar sesi tetap terbawa.
+// ==========================================================================
+const SessionStore = {
+  set(key, value) {
+    const json = JSON.stringify(value);
+    let ok = false;
+    try { sessionStorage.setItem(key, json); ok = true; } catch (e) {}
+    try { localStorage.setItem(key, json); ok = true; } catch (e) {}
+    return ok;
+  },
+  get(key) {
+    let raw = null;
+    try { raw = sessionStorage.getItem(key); } catch (e) {}
+    if (!raw) { try { raw = localStorage.getItem(key); } catch (e) {} }
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  },
+  remove(key) {
+    try { sessionStorage.removeItem(key); } catch (e) {}
+    try { localStorage.removeItem(key); } catch (e) {}
+  }
+};
+
 const StudentAuthModule = {
   init() {
     const form = document.getElementById("form-student-login");
@@ -43,18 +70,55 @@ const StudentAuthModule = {
     if (!client) {
       this.showAlert("Koneksi Supabase belum siap.", "error");
       btnSubmit.disabled = false;
+      btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
       return;
     }
 
     try {
-      // 1. Ambil data sesi ujian berdasarkan Token
-      const { data: examData, error: examError } = await client
+      const fail = (msg) => {
+        this.showAlert(msg, "error");
+        btnSubmit.disabled = false;
+        btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
+      };
+
+      // 1. Ambil data sesi ujian berdasarkan Token (pencocokan persis; token disimpan huruf besar)
+      const examSelect = 'id, title, subject, duration_minutes, token, is_active, class_id, randomize_questions, randomize_options, anti_cheat, max_violations, spreadsheet_url, classes(class_name)';
+
+      let { data: examRows, error: examError } = await client
         .from('exams')
-        .select('id, title, subject, duration_minutes, token, is_active, class_id, randomize_questions, randomize_options, anti_cheat, max_violations, spreadsheet_url, classes(class_name)')
-        .ilike('token', token)
-        .maybeSingle();
+        .select(examSelect)
+        .eq('token', token)
+        .limit(5);
 
       if (examError) throw examError;
+
+      if (!examRows || examRows.length === 0) {
+        // Cadangan untuk token lama yang tersimpan huruf kecil/campuran.
+        // Karakter \, % dan _ di-escape agar dibaca apa adanya, bukan wildcard.
+        const literalToken = token.replace(/[\\%_]/g, '\\$&');
+        const fallback = await client
+          .from('exams')
+          .select(examSelect)
+          .ilike('token', literalToken)
+          .limit(5);
+        if (fallback.error) throw fallback.error;
+        examRows = fallback.data || [];
+      }
+
+      let examData = null;
+      if (examRows.length === 1) {
+        examData = examRows[0];
+      } else if (examRows.length > 1) {
+        const activeExams = examRows.filter(e => e.is_active);
+        if (activeExams.length === 1) {
+          examData = activeExams[0];
+        } else if (activeExams.length === 0) {
+          examData = examRows[0]; // semuanya ditutup, tampilkan pesan "ditutup"
+        } else {
+          fail(`Token "${token}" dipakai oleh lebih dari satu ujian yang aktif. Hubungi guru pengawas.`);
+          return;
+        }
+      }
 
       if (!examData) {
         this.showAlert(`Token "${token}" tidak ditemukan. Pastikan token sesuai.`, "error");
@@ -80,9 +144,18 @@ const StudentAuthModule = {
         studentQuery = studentQuery.eq('class_id', examData.class_id);
       }
 
-      const { data: studentData, error: studentError } = await studentQuery.maybeSingle();
+      const { data: studentRows, error: studentError } = await studentQuery.limit(5);
 
       if (studentError) throw studentError;
+
+      if (studentRows && studentRows.length > 1) {
+        fail(examData.class_id
+          ? `Nomor absen ${attendanceNumber} terdaftar ganda di kelas ini. Hubungi guru pengawas.`
+          : `Ujian ini belum diatur untuk kelas tertentu, sehingga nomor absen ${attendanceNumber} cocok dengan beberapa siswa. Hubungi guru pengawas.`);
+        return;
+      }
+
+      const studentData = (studentRows && studentRows.length === 1) ? studentRows[0] : null;
 
       if (!studentData) {
         const className = examData.classes ? examData.classes.class_name : 'Kelas Terkait';
@@ -127,14 +200,18 @@ const StudentAuthModule = {
         login_timestamp: new Date().toISOString()
       };
 
-      sessionStorage.setItem("exam_session_data", JSON.stringify(sessionPayload));
-this.showAlert(`Identitas Terverifikasi: [Absen ${studentData.attendance_number}] ${studentData.full_name}. Mengalihkan...`, "success");
+      if (!SessionStore.set("exam_session_data", sessionPayload)) {
+        this.showAlert("Browser Anda memblokir penyimpanan data (mungkin mode privat/tamu). Buka link ujian di Chrome/Safari biasa, bukan di dalam aplikasi lain.", "error");
+        btnSubmit.disabled = false;
+        btnSubmit.innerText = "Masuk Ruang Ujian \u2192";
+        return;
+      }
 
-// Ubah durasi setTimeout dari 600 menjadi 1200ms (1.2 detik) 
-// agar penyimpanan session storage aman di HP / Chromebook
-setTimeout(() => {
-  window.location.href = "konfirmasi.html";
-}, 1200);
+      this.showAlert(`Identitas Terverifikasi: [Absen ${studentData.attendance_number}] ${studentData.full_name}. Mengalihkan...`, "success");
+
+      setTimeout(() => {
+        window.location.href = "konfirmasi.html";
+      }, 500);
 
     } catch (err) {
       this.showAlert(`Gagal verifikasi: ${err.message}`, "error");
@@ -152,13 +229,19 @@ setTimeout(() => {
   },
 
   getActiveSession() {
-    const raw = sessionStorage.getItem("exam_session_data");
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch { return null; }
+    const session = SessionStore.get("exam_session_data");
+    if (!session) return null;
+    // Sesi kedaluwarsa setelah 6 jam (mencegah sisa sesi siswa lain di perangkat bersama)
+    const age = Date.now() - new Date(session.login_timestamp).getTime();
+    if (!isNaN(age) && age > 6 * 60 * 60 * 1000) {
+      SessionStore.remove("exam_session_data");
+      return null;
+    }
+    return session;
   },
 
   clearSession() {
-    sessionStorage.removeItem("exam_session_data");
+    SessionStore.remove("exam_session_data");
     window.location.href = "index.html";
   }
 };
