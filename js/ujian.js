@@ -718,7 +718,7 @@ const optionsContainer = document.getElementById("display-options-list");
         submitted_at: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       };
 
-      sessionStorage.setItem("exam_finish_result", JSON.stringify(finishSummary));
+      SessionStore.set("exam_finish_result", finishSummary);
       sessionStorage.removeItem(`answers_${this.session.exam.id}_${this.session.student.id}`);
       
       setTimeout(() => {
