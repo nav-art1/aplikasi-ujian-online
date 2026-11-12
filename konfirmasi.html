@@ -128,7 +128,7 @@
       const session = StudentAuthModule.getActiveSession();
 
       if (!session || !session.student || !session.exam) {
-        alert("Sesi akses tidak ditemukan. Silakan masukkan NISN dan Token terlebih dahulu.");
+        alert("Sesi akses tidak ditemukan. Silakan masukkan Nomor Absen dan Token terlebih dahulu.");
         window.location.href = "index.html";
         return;
       }
